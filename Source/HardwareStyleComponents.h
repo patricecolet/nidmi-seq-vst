@@ -1,0 +1,192 @@
+#pragma once
+
+#include <array>
+#include <functional>
+#include <memory>
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+/// Modèle d'affichage de l'écran TFT (rempli par l'éditeur depuis le moteur).
+/// Le composant `PatternScreen` ne connaît pas le core : il dessine ce snapshot.
+/// L'écran TFT est à ONGLETS (cahier §10.1 rév. 2026-05) : une page visible à la fois.
+struct PatternScreenModel {
+    enum class Page { Pattern, PianoRoll, Harmony, Auto, Global, Song };
+    static constexpr int kNumPages = 6;
+
+    struct Row {
+        int           numSteps    = 16;     // N de la row (1..64)
+        int           channel     = 1;      // 1..16 pour affichage
+        int           harmonyMode = 1;      // 0=A 1=B1 2=B2 3=Chromatic
+        bool          muted       = false;
+        int           playhead    = -1;     // pas en cours, -1 si arrêté/hors champ
+        bool          enabled[64] = {};
+        unsigned char note[64]    = {};     // note MIDI par pas (affichage)
+    };
+
+    // Un paramètre listé sur la page GLOBAL (héritage des 8-params de l'OLED, désormais sur le TFT).
+    struct GlobalParam {
+        juce::String name;
+        juce::String value;
+    };
+
+    Page  page         = Page::Pattern;
+
+    // Barre de titre (commune à toutes les pages).
+    bool  playing      = false;
+    float bpm          = 120.0f;
+    int   tsNum        = 4;
+    int   tsDen        = 4;
+
+    // Vue PATTERN.
+    int   numRows      = 0;
+    int   selectedRow  = 0;
+    int   selectedStep = 0;
+    bool  recArmed     = false;
+    int   keyPageStart = -1;   // 1er pas de la fenêtre de 16 éditée par les touches (-1 = aucune)
+    int   keyPageCount = 1;    // nb total de pages de 16 pas (pour l'indicateur P2/4)
+    int   prBottomNote = -1;   // PIANO ROLL : note MIDI du bas de la fenêtre (défilement Oct± ; -1 = auto)
+    Row   rows[16];
+
+    // Page GLOBAL.
+    int         numGlobalParams = 0;
+    int         globalCursor    = 0;
+    GlobalParam global[16];
+
+    // Page HARMONIE (progression d'accords).
+    struct ChordSlotView {
+        int degree        = 1;   // 1..7
+        int quality       = 0;   // index ChordQuality
+        int extensions    = 0;   // bitfield
+        int bassOffset    = 0;   // -12..+12
+        int durationSlots = 1;
+    };
+    int           progLen       = 0;   // nb de slots utilisés
+    int           progCurrent   = -1;  // slot en cours de lecture
+    int           harmonyCursor = 0;   // slot édité
+    int           harmonyField  = 0;   // 0=degré 1=qualité 2=ext 3=bass 4=durée
+    ChordSlotView chord[32];
+
+    // Page AUTO (P-locks CC de la row sélectionnée).
+    int autoSlot     = 0;     // slot de P-lock actif (0..7)
+    int autoField    = 0;     // 0=Valeur (par pas) 1=CC#
+    int autoCc       = 74;    // numéro de CC du slot actif (affichage)
+    int autoSlotCc[8] = {-1, -1, -1, -1, -1, -1, -1, -1};  // CC# par slot (-1 = inactif)
+    int autoValue[64];        // valeur du slot actif par pas (-1 = pas de lock)
+};
+
+/// Écran TFT ~320×240 émulé, à pages.
+/// Page PATTERN : grille multi-row — chaque row répartit ses `numSteps` cellules sur la MÊME
+/// largeur (la mesure) → la polyrythmie est visible (N différents divergent puis réalignent au downbeat).
+/// Page GLOBAL : liste de paramètres projet, curseur surligné (Enc2 = curseur, Enc1 = valeur).
+/// Piloté par modèle ; les interactions remontent par callbacks (l'éditeur poste les commandes).
+class PatternScreen : public juce::Component {
+public:
+    PatternScreen();
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+    /// Remplace le snapshot affiché et repaint.
+    void setModel(const PatternScreenModel& m);
+
+    std::function<void(int row)>                 onRowSelected;
+    std::function<void(int row, int step)>       onStepToggled;
+    std::function<void(int tabIndex)>            onTabSelected;
+    std::function<void(int row, int step, int note)> onNoteSet;  // PIANO ROLL : pose une hauteur
+    std::function<void(int slotIdx)>             onHarmonySlot;   // HARMONIE : sélection de slot
+    std::function<void(int field)>               onHarmonyField;  // HARMONIE : champ édité
+    std::function<void(int slotIdx)>             onAutoSlot;      // AUTO : slot de P-lock actif
+    std::function<void(int field)>               onAutoField;     // AUTO : champ (Valeur/CC#)
+    std::function<void(int step, int value)>     onAutoValueSet;  // AUTO : valeur d'un pas (clic lane)
+
+    static const char* chordQualityShort(int quality);
+
+    /// Libellés courts des onglets (index = valeur de Page).
+    static const char* pageLabel(int pageIndex);
+
+private:
+    void paintTabBar(juce::Graphics& g);
+    void paintPatternPage(juce::Graphics& g);
+    void paintPianoRollPage(juce::Graphics& g);
+    void paintHarmonyPage(juce::Graphics& g);
+    void paintAutoPage(juce::Graphics& g);
+    void paintGlobalPage(juce::Graphics& g);
+    void paintStubPage(juce::Graphics& g, const juce::String& title, const juce::String& subtitle);
+    void mouseDown(const juce::MouseEvent& e) override;
+    void recomputeLayout();
+    int  tabAtX(float x) const;
+
+    PatternScreenModel model_;
+
+    // Métriques calculées dans recomputeLayout(), réutilisées par paint() et le hit-test.
+    juce::Rectangle<float> tabBarArea_;
+    juce::Rectangle<float> headerArea_;
+    juce::Rectangle<float> bodyArea_;
+    float rowH_      = 0.0f;
+    int   firstVisibleRow_ = 0;   // viewport vertical : 1re row affichée (défile avec la sélection)
+    int   visibleRows_     = 1;   // nb de rows affichables à hauteur lisible
+    float gutterW_   = 30.0f;   // libellé "R1" à gauche
+    float infoW_     = 96.0f;   // infos N/canal/mode à droite
+};
+
+/// Look : pads carrés type « blanches » / « dièses » / transport.
+class HardwareButtonLook : public juce::LookAndFeel_V4 {
+public:
+    enum class Kind { WhiteKey, BlackKey, Transport };
+
+    void setKind(Kind k) { kind_ = k; }
+    void drawButtonBackground(juce::Graphics& g, juce::Button& b, const juce::Colour& backgroundColour,
+                              bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    void drawButtonText(juce::Graphics& g, juce::TextButton& button, bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown) override;
+
+private:
+    Kind kind_ = Kind::WhiteKey;
+};
+
+/// 16 pads blancs (pas) + 11 pads dièses (#) entre les blanches, disposition type piano (carrés).
+/// Les blanches exposent press/release distincts (gestes long-press, HOLD-TO-PITCH).
+class PianoKeysPanel : public juce::Component {
+public:
+    PianoKeysPanel();
+
+    void resized() override;
+
+    void setWhiteKeyClick(int stepIndex, std::function<void()> fn);
+    /// Press/release séparés sur les blanches : permet la détection long-press côté éditeur.
+    /// Si setWhiteKeyDown/Up est défini, setWhiteKeyClick n'est pas appelé pour cette touche.
+    void setWhiteKeyDown(int stepIndex, std::function<void()> fn);
+    void setWhiteKeyUp(int stepIndex, std::function<void()> fn);
+    void setBlackKeyClick(int funcIndex, std::function<void()> fn);
+
+    /// Libellé affiché sur une touche noire (nom de fonction, 1–2 lignes possibles).
+    void setBlackKeyLabel(int funcIndex, const juce::String& name);
+    /// Libellé surimprimé sur la touche blanche (note name pendant HOLD-TO-PITCH). Vide = caché.
+    void setWhiteKeyLabel(int stepIndex, const juce::String& name);
+
+    juce::TextButton& whiteKey(int i) { return *whiteKeys_[static_cast<size_t>(i)]; }
+    juce::TextButton& blackKey(int i) { return *blackKeys_[static_cast<size_t>(i)]; }
+
+    /// Souligne visuellement la touche blanche correspondant au pas en cours.
+    /// `step` ∈ [0, kNumWhite-1] = surbrillance ; -1 = aucun playhead.
+    void setPlayheadStep(int step);
+    /// Surbrillance d'une noire (utilisée pendant l'overlay PITCH si l'altération est choisie).
+    void setBlackKeyHighlight(int blackIdx);
+
+private:
+    static constexpr int kNumWhite = 16;
+    static constexpr int kNumBlack = 11;
+
+    std::array<std::unique_ptr<juce::TextButton>, kNumWhite>  whiteKeys_;
+    std::array<std::unique_ptr<juce::TextButton>, kNumBlack> blackKeys_;
+    std::array<HardwareButtonLook, kNumWhite>                 whiteLooks_;
+    std::array<HardwareButtonLook, kNumBlack>                 blackLooks_;
+    std::array<std::function<void()>, kNumWhite>              whiteDown_;
+    std::array<std::function<void()>, kNumWhite>              whiteUp_;
+    int                                                       playheadStep_  = -1;
+    int                                                       blackHighlight_ = -1;
+
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    int  whiteKeyIndexFromComponent(const juce::Component* c) const;
+};

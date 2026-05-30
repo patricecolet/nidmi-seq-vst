@@ -1,0 +1,8 @@
+# Build output (JUCE FetchContent + artefacts, ~900 Mo)
+/build/
+
+# macOS
+.DS_Store
+
+# Réglages locaux Claude Code (personnels)
+.claude/settings.local.json

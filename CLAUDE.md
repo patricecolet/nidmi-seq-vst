@@ -1,0 +1,187 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+JUCE audio plugin (VST3 / AU / Standalone) named **NiDMI Seq** — a MIDI sequencer that wraps the DSP/logic library `nidmi-sequencer-core`. The plugin is the thin presentation + host-integration layer; the sequencer engine (`SequencerEngine`, `SequencerClockDriver`, `SequencerCommandApi`, `SeqEvent`) lives in the sibling repo.
+
+## Repository layout requirement
+
+CMake uses a **relative** `add_subdirectory` to locate the core. The sibling repo **must** exist at `../nidmi-sequencer-core` relative to this dir:
+
+```
+repo/
+  nidmi-seq-vst/          ← this repo
+  nidmi-sequencer-core/   ← required sibling
+```
+
+If missing, configure will fail. Adjust `CMakeLists.txt` only if the user explicitly relocates the core.
+
+## Build commands
+
+All commands run from the `nidmi-seq-vst` repo root.
+
+```bash
+# Configure (Release). First run downloads JUCE 8.0.6 via FetchContent — needs network.
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+# Build everything (AU + VST3 + Standalone)
+cmake --build build --parallel
+
+# Build just one format
+cmake --build build --target NidmiSeq_Standalone --parallel
+cmake --build build --target NidmiSeq_VST3 --parallel
+cmake --build build --target NidmiSeq_AU --parallel
+
+# Dev convenience target: plugin + AudioPluginHost (when option is ON)
+cmake --build build --target nidmi_seq_dev_session --parallel
+
+# Skip AudioPluginHost to speed up configure/build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DNIDMI_SEQ_BUILD_AUDIO_PLUGIN_HOST=OFF
+```
+
+Xcode generator requires `--config Release|Debug` on the build step as well.
+
+### Running the core test suite
+
+The core library (`nidmi-sequencer-core`) has a Catch2 test suite (85+ tests covering polyrythm, harmony, macros, chain VM, etc.). Tests are off by default when core is used as a subdirectory of this VST build, but can be built standalone from the core repo:
+
+```bash
+cd ../nidmi-sequencer-core
+cmake -S . -B build-tests -DNIDMI_SEQ_BUILD_TESTS=ON
+cmake --build build-tests --target nidmi_seq_core_tests --parallel
+cd build-tests && ctest --output-on-failure
+```
+
+The VST project itself has no test suite.
+
+## Artefact locations
+
+`COPY_PLUGIN_AFTER_BUILD TRUE` installs **VST3 + AU only** into `~/Library/Audio/Plug-Ins/…`. The Standalone `.app` is *not* copied — it only lives in the build tree:
+
+```
+build/NidmiSeq_artefacts/<Config>/Standalone/NiDMI Seq.app   # Standalone (note the space)
+build/NidmiSeq_artefacts/<Config>/VST3/NiDMI Seq.vst3
+build/NidmiSeq_artefacts/<Config>/AU/NiDMI Seq.component
+build/nidmi_AudioPluginHost/AudioPluginHost_artefacts/<Config>/AudioPluginHost.app
+```
+
+When invoking the Standalone, quote the path: `open "build/NidmiSeq_artefacts/Release/Standalone/NiDMI Seq.app"`. macOS may launch a stale copy from another build dir if you rely on Spotlight — always use an absolute/explicit path after rebuilds.
+
+## The three differentiating pillars
+
+NiDMI Seq is deliberately designed around three non-negotiable axes. All design decisions must preserve these:
+
+### 1. Bar-relative homogeneous grid, per row
+Not "step = fraction of a quarter note", but "the bar is divided into N equal steps". **Each row has its own N** (`PatternRow.numSteps`, 1–64). All rows realign on the first tick of each bar (V1). Polyrhythm emerges naturally: a row at N=16 and a row at N=11 diverge through the bar and reconverge at the next downbeat.
+
+### 2. First-class harmony with chord progressions
+`ChordProgression` (up to 32 slots) on each pattern, each slot = degree (I–VII) + quality (maj/min/dim/aug/7/maj7/m7/m7b5/dim7/minMaj7/sus2/sus4) + extensions (9/11/13 + alterations) + bassOffset + durationSlots. Rows resolve notes through **4 modes** (`RowHarmonyMode`) :
+- **A**: scale degree (absolute in mother scale).
+- **B1**: scale degree rerouted via current chord's root.
+- **B2**: chord-tones (R/3/5/7/9/11/13) of the current chord.
+- **Chromatic**: raw MIDI.
+
+### 3. Hardware-first ergonomics
+OLED 256×64, 2 encoders (Enc1 = value / Enc2 = cursor), 16 white keys (steps) + 11 black (functions) + Shift. The VST is a prototype for ESP32-S3 hardware. See `CAHIER_DES_CHARGES_V1.md` for the full spec.
+
+## Architecture
+
+### Layering
+
+```
+JUCE host  ──►  NidmiSeqAudioProcessor  ──►  SequencerEngine (core)
+                        ▲    │                   ▲
+                        │    │ drains SeqEvents  │
+                UI / APVTS   ▼                   │
+           NidmiSeqAudioProcessorEditor          │
+                        │                        │
+                        │ commands (lock-free)   │
+                        └──► CommandFifo ────────┘ drained on audio thread
+```
+
+The processor owns the engine and is the *only* code that mutates it. The editor and any other non-audio path must go through `CommandFifo` / `VstSequencerController::postCommand`.
+
+### Key components (Source/)
+
+- **`PluginProcessor`** — `juce::AudioProcessor` subclass. Owns `SequencerEngine`, `SequencerClockDriver`, `CommandFifo`, `HostTimeMapper`, `MidiClockTransport`, `VstSequencerController`, and the `AudioProcessorValueTreeState` (APVTS). Its `processBlock` is the hub: it resolves the active time source, drains commands, syncs APVTS → engine, ticks the clock, and emits generated notes into the outgoing `MidiBuffer`.
+
+- **`VstSequencerController`** — thin facade the UI (or state loader) calls to enqueue `SequencerCommand`s or apply a loaded `ValueTree` pattern. Never touches the engine directly.
+
+- **`CommandFifo`** — lock-free SPSC queue (JUCE `AbstractFifo`, capacity 128) carrying `SequencerCommand`s from non-audio threads to the audio thread. Drained once per `processBlock`.
+
+- **`HostTimeMapper`** — when the plugin runs inside a DAW and `followHost` is on, snapshots the host `AudioPlayHead` (PPQ, play state, BPM) and converts to the engine's microsecond time base.
+
+- **`MidiClockTransport`** — alternative time source: interprets incoming MIDI Start/Continue/Stop + Timing Clock (24 ppqn), estimates BPM from clock intervals via EMA, and yields transport events aligned to sample positions. Used when `useMidiClock` is enabled (typically in Standalone).
+
+- **`PatternValueTree`** — serialization bridge between `SequencerEngine` state and `juce::ValueTree` (used in `getStateInformation` / `setStateInformation`). Plugin state XML has two children: the APVTS `"PARAMETERS"` tree and the `PatternValueTree` tree.
+
+- **`PluginEditor` + `HardwareStyleComponents`** — deliberately minimal hardware-style UI: OLED display, transport buttons, two encoders (param select / value), and a 16-step + 11-sharp piano-keys pad. Most settings live in APVTS and are automatable; richer UI is explicitly deferred.
+
+### Core engine model — bar-relative sampling
+
+The engine uses **`engine.tick(nowUs)`** (not step-by-step advance). Algorithm:
+
+```
+barElapsed = nowUs - barStartUs
+if barElapsed >= barDurationUs:
+    barStartUs += barDurationUs
+    reset all row states
+    advance progression, emit PatternLooped
+for each row r:
+    step = (barElapsed * row.numSteps) / barDurationUs
+    if step != rowState[r].lastStepIdx:
+        triggerRowStep(r, step, nowUs)
+```
+
+Consequences:
+- Stateless row transitions (only `lastStepIdx` per row).
+- No drift — each step position is re-computed from the bar anchor.
+- `setRowSteps(r, N)` mid-playback just updates the formula ; realignment happens at next bar.
+- **`advanceMainStep` kept as alias for `tick`** (backward compat for callers that don't know about bar-relative).
+
+The `SequencerClockDriver` sub-iterates within a DAW block at ≤0.5 ms resolution to never miss a row transition, regardless of block size.
+
+### Time source selection in `processBlock`
+
+Three mutually exclusive modes (resolved per block):
+
+1. **MIDI clock** (`useMidiClock`): time advances from Timing Clock ticks; transport follows Start/Continue/Stop.
+2. **Host transport** (`followHost` && not Standalone && not MIDI clock): time + BPM come from the DAW playhead; Play/Stop edges are forwarded to the engine.
+3. **Internal / manual**: time advances from an internal `int64_t` counter accumulated per block; Play/Stop come from manual UI commands.
+
+Switching modes resets transport edges, the internal time accumulator, the clock driver, and MIDI clock state.
+
+### Key core types (StepTypes.h)
+
+- **`PatternRow`** — per-row `numSteps`, `channel`, `kind` (Note/CC), `ccNumber`, `harmonyMode` (A/B1/B2/Chromatic), `muted`, `steps[kMaxSteps]`.
+- **`StepData`** — `note`, `velocity`, `gate`, `enabled`, `subPatIdx`, `accent`, `swingEnable`, **`ccLocks[8]`** (P-locks: 8 CC slots per step, emitted before NoteOn).
+- **`SubPattern`** — up to 16 sub-steps, own `numSteps`/`duration`, own harmony/timing override. Triggered by a main step; subdivision locked in to the triggering row's N.
+- **`ChordSlot` / `ChordProgression`** — up to 32 slots per pattern ; see pillar 2.
+- **`ProjectSettings`** — `masterBpm`, `masterRootPc`, `masterScaleId`, `macros[8]`. Shared at project level (V1 single-pattern uses it for master tonality + macros).
+- **`Macro`** — value 0..127 + 8 `MacroDestination` (channel/ccNumber/depth/bias). `setMacroValue` cascades: emits CC on every active destination.
+- **`ChainVM` / `ChainProgram`** — 12 opcodes (PlayPattern, RepeatBegin/End, Segno, DalSegno(AlCoda), Coda, ToCoda, DaCapo(AlCoda), Fine, End). 64 slots, 8-deep repeat stack. Not yet wired to the engine (V1.5 when multi-pattern lands).
+
+### APVTS parameters (identifiers used in `PluginProcessor.cpp`)
+
+`followHost`, `useHostBpm`, `useMidiClock`, `bpm`, `loop`, `numSteps` (1–64), `numRows` (1–16), `tsNum` (1–16), `tsDen` (choice `{1,2,4,8,16}`), **`masterRoot`** (choice of 12 pitch classes), **`masterScale`** (choice of 12 scale names). Changes are diffed against `lastXxx_` members and converted to `SequencerCommand`s.
+
+## When adding source files
+
+`CMakeLists.txt` lists sources explicitly in `target_sources(NidmiSeq PRIVATE …)`. Add new `.cpp` files there; headers under `Source/` are picked up via the include directory.
+
+## Gotchas
+
+- Don't remove `C` from `project(... LANGUAGES C CXX)` — JUCE needs it.
+- The product name contains a space (`"NiDMI Seq"`). Always quote paths in shell commands.
+- macOS may silently open a stale copy of the Standalone app from a previous build directory if invoked without an explicit path; use `open "<absolute path>/NiDMI Seq.app"` after rebuilds.
+- The audio thread must never take locks or allocate — go through `CommandFifo` for any engine mutation from the UI.
+- `setSteps(N)` (legacy) sets every row to N. For polyrhythmic patterns, use `setRowSteps(row, N)` per row.
+- When writing tests that call `tick(nowUs)` multiple times, **nowUs must be monotonic**. Driver resets its accumulator if it detects a time jump backwards.
+- Only **one** subpattern plays at a time globally in V1 (engine has a single `RunningSubPattern`). Multi-row parallel subpatterns require V2 refactor.
+- `ChainVM` (song mode) is implemented but **not yet wired** to the engine ; multi-pattern runtime integration is deferred to V1.5.
+
+## Reference documents
+
+- **`CAHIER_DES_CHARGES_V1.md`** — complete V1 specification (design rationale, data model, ergonomic grammar, ESP32-S3 target, roadmap V1/V1.5/V2).
