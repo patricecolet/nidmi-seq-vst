@@ -428,7 +428,7 @@ Le **sens** des encodeurs dépend de la Vue active (cf. §10.1) :
 |---|---|---|
 | **PATTERN** | **pas** (curseur) | **N (tuplet) de la row** → re-subdivision live (push Enc2 : N → canal → mode harmo → mute) ; la **Row** est sur Enc4 |
 | **PIANO ROLL** | pas (case du tuplet) | champ du pas : **Note / Vélo / Gate** (push Enc2 cycle le champ) |
-| **HARMONIE** | slot de progression | degré / qualité (push : degré → qualité → extensions → bass) |
+| **HARMONIE** | slot de progression | **Degré** (Shift+Enc1 = Bass) ; **Enc3 = Qualité** (Shift = Durée) ; **Enc4 = Extensions**. Épuré : pas de sélecteur de champ |
 | **AUTO** | pas | valeur du P-lock CC |
 | **GLOBAL** | paramètre projet | valeur du paramètre |
 
@@ -476,7 +476,7 @@ Clavier doit détecter jusqu'à **16 touches simultanées** (saisie rapide, acco
 5. **GLOBAL** — BPM, signature, tonalité maître, sync, macros, config.
 6. **SONG** — édition du chain / arrangement (V1.5).
 
-Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué) accessible depuis un pas. Une seule Vue active à la fois. Bascule via le bouton `Vue` / `Shift+Vue`.
+Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué). **Implémenté (rév. 2026-05)** : sur PATTERN, pas sélectionné + **noire « Sub »** crée (si besoin) et **entre** dans le sub ; **fil d'Ariane** `R3 ▸ P5 ▸ SUB` en barre de titre ; **noire « Back »** remonte. Dans le sub : blanches = sous-pas (toggle), **Enc2 = sous-pas**, **Enc1 = N du sub** (tuplet imbriqué). Le contenu du sub est **visible niché dans la cellule du pas hôte** (mini-grille). A nécessité un ajout moteur minimal : commande **`SetSubPatternSteps`** (changer le N d'un sub déjà alloué). Profondeur V1 = 1 niveau (un seul sub joué à la fois). Une seule Vue active à la fois.
 
 ---
 

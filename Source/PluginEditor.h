@@ -90,12 +90,21 @@ private:
     int stepPage_     = 0;
     int stepPageCount() const;   // nb de pages de 16 pas de la row sélectionnée
 
+    // Subpatterns (tuplets imbriqués) : édition « drill-in » re-ciblant la Vue PATTERN.
+    bool inSub_       = false;
+    int  subHostRow_  = 0;
+    int  subHostStep_ = 0;
+    int  subStep_     = 0;        // curseur de sous-pas
+    int  activeSubIdx() const;   // index du sub édité (host step), -1 si aucun
+    void enterOrCreateSub();     // crée le sub si besoin puis entre
+    void exitSub();
+
     void setStepField(int step, int field, int value);   // applique Note/Vélo/Gate au pas (SetStep)
 
-    // Page HARMONIE : slot édité + champ édité (0=degré 1=qualité 2=ext 3=bass 4=durée).
+    // Vue HARMONIE : slot édité. Attributs sur encodeurs dédiés (épuré) :
+    // Enc1=Degré (Shift=Bass), Enc3=Qualité (Shift=Durée), Enc4=Extensions, Enc2=Slot.
     int harmonyCursor_ = 0;
-    int harmonyField_  = 0;
-    void postChordSlotEdit(int newFieldValue);
+    void setChordField(int field, int value);   // field 0=deg 1=qual 2=ext 3=bass 4=dur
 
     // Page AUTO : slot de P-lock actif, champ (0=Valeur 1=CC#), CC# par défaut pour nouvelles écritures.
     int  autoSlot_       = 0;

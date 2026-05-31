@@ -119,29 +119,20 @@ juce::String extensionsShort(int bits) {
     return parts.isEmpty() ? juce::String() : ("+" + parts.joinIntoString(","));
 }
 
-const char* harmonyFieldName(int field) {
-    static const char* kF[5] = {"Degre", "Qualite", "Ext", "Bass", "Duree"};
-    return kF[juce::jlimit(0, 4, field)];
-}
-constexpr int kHarmonyNumFields = 5;
-
 struct HarmLayout {
-    juce::Rectangle<float> slotBand, fieldBand, detail;
-    float slotW = 10.0f, fieldW = 10.0f;
+    juce::Rectangle<float> slotBand, detail;
+    float slotW = 10.0f;
     int   slotsToShow = 1;
 };
 
 HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle<float> body) {
     HarmLayout L;
     auto b      = body;
-    L.slotBand  = b.removeFromTop(juce::jmin(64.0f, b.getHeight() * 0.45f));
-    b.removeFromTop(6.0f);
-    L.fieldBand = b.removeFromTop(24.0f);
-    b.removeFromTop(6.0f);
+    L.slotBand  = b.removeFromTop(juce::jmin(90.0f, b.getHeight() * 0.6f));
+    b.removeFromTop(8.0f);
     L.detail    = b.removeFromTop(22.0f);
     L.slotsToShow = juce::jlimit(1, 32, juce::jmax(m.progLen, m.harmonyCursor + 1));
     L.slotW  = L.slotBand.getWidth() / static_cast<float>(L.slotsToShow);
-    L.fieldW = L.fieldBand.getWidth() / static_cast<float>(kHarmonyNumFields);
     return L;
 }
 
@@ -274,7 +265,11 @@ void PatternScreen::paint(juce::Graphics& g) {
             model_.playing ? juce::String(juce::CharPointer_UTF8("\xe2\x96\xb6"))   // ▶
                            : juce::String(juce::CharPointer_UTF8("\xe2\x96\xa0"));  // ■
         juce::String crumb;
-        if (model_.page == PatternScreenModel::Page::Pattern
+        if (model_.inSub) {
+            const juce::String arrow(juce::CharPointer_UTF8(" \xe2\x96\xb8 "));   // ▸
+            crumb = "R" + juce::String(model_.subHostRow + 1) + arrow
+                  + "P" + juce::String(model_.subHostStep + 1) + arrow + "SUB";
+        } else if (model_.page == PatternScreenModel::Page::Pattern
             || model_.page == PatternScreenModel::Page::PianoRoll
             || model_.page == PatternScreenModel::Page::Auto) {
             crumb = "R" + juce::String(model_.selectedRow + 1) + "/" + juce::String(juce::jmax(1, model_.numRows));
@@ -323,6 +318,27 @@ void PatternScreen::paintStubPage(juce::Graphics& g, const juce::String& title,
 void PatternScreen::paintPatternPage(juce::Graphics& g) {
     if (model_.numRows <= 0)
         return;
+
+    // Édition d'un subpattern (drill-in) : strip des N sous-pas du sub (tuplet imbriqué).
+    if (model_.inSub && model_.subEditIdx >= 0 && model_.subEditIdx < 16) {
+        const auto& sv   = model_.subs[static_cast<size_t>(model_.subEditIdx)];
+        const int   sn   = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
+        auto        area = bodyArea_.reduced(4.0f);
+        const float cw   = area.getWidth() / static_cast<float>(sn);
+        for (int k = 0; k < sn; ++k) {
+            juce::Rectangle<float> cell(area.getX() + static_cast<float>(k) * cw, area.getY(), cw, area.getHeight());
+            const auto inner = cell.reduced(2.0f);
+            g.setColour(sv.enabled[static_cast<size_t>(k)] ? kCellOn : kCellOff);
+            g.fillRoundedRectangle(inner, 3.0f);
+            g.setColour(kCellGrid);
+            g.drawRoundedRectangle(inner.reduced(0.5f), 3.0f, 0.6f);
+            if (k == model_.subStep) {
+                g.setColour(kHeaderText);
+                g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.8f);
+            }
+        }
+        return;
+    }
 
     const float stripX = bodyArea_.getX() + gutterW_;
     const float stripW = juce::jmax(10.0f, bodyArea_.getWidth() - gutterW_ - infoW_);
@@ -390,7 +406,21 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     g.setColour(kCellGrid);
                     g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 0.6f);
                 }
-                if (showNote && on) {
+                // Subpattern niché : la cellule affiche les sous-pas du sub (tuplet imbriqué visible).
+                const int subI = row.subIdx[static_cast<size_t>(s)];
+                if (subI >= 0 && subI < 16 && model_.subs[static_cast<size_t>(subI)].numSteps > 0) {
+                    const auto& sv  = model_.subs[static_cast<size_t>(subI)];
+                    const int   sn  = juce::jlimit(1, 16, sv.numSteps);
+                    const float mw  = inner.getWidth() / static_cast<float>(sn);
+                    for (int k = 0; k < sn; ++k) {
+                        juce::Rectangle<float> mc(inner.getX() + static_cast<float>(k) * mw,
+                                                  inner.getY(), mw, inner.getHeight());
+                        g.setColour(sv.enabled[static_cast<size_t>(k)] ? kScreenBg : kCellOn.withAlpha(0.25f));
+                        g.fillRect(mc.reduced(0.6f, 1.0f));
+                    }
+                    g.setColour(kPlayhead);   // liseré ambre = « ce pas a un sub »
+                    g.drawRoundedRectangle(inner.reduced(0.4f), 2.0f, 1.2f);
+                } else if (showNote && on) {
                     g.setColour(kScreenBg);
                     g.setFont(juce::Font(juce::FontOptions().withHeight(juce::jmin(11.0f, rowH_ - 6.0f))));
                     g.drawText(midiNoteShort(row.note[static_cast<size_t>(s)]), inner,
@@ -572,19 +602,6 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         }
     }
 
-    // Sélecteur de champ (Enc1 édite ce champ ; push Enc2 = cycle sur hardware).
-    for (int f = 0; f < kHarmonyNumFields; ++f) {
-        juce::Rectangle<float> chip(L.fieldBand.getX() + static_cast<float>(f) * L.fieldW,
-                                    L.fieldBand.getY(), L.fieldW, L.fieldBand.getHeight());
-        const auto inner = chip.reduced(2.0f, 1.0f);
-        const bool on    = (f == model_.harmonyField);
-        g.setColour(on ? kHeaderText : kCellOff);
-        g.fillRoundedRectangle(inner, 3.0f);
-        g.setColour(on ? kScreenBg : kRowLabel);
-        g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle(on ? "Bold" : "")));
-        g.drawText(harmonyFieldName(f), inner, juce::Justification::centred);
-    }
-
     // Ligne de détail du slot sélectionné.
     juce::String detail;
     if (model_.harmonyCursor < model_.progLen) {
@@ -721,7 +738,7 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // HARMONIE : clic = sélection de slot (bande haute) ou de champ édité (bande basse).
+    // HARMONIE : clic = sélection de slot (bande de slots).
     if (model_.page == PatternScreenModel::Page::Harmony) {
         const HarmLayout L = computeHarmLayout(model_, bodyArea_);
         if (L.slotBand.contains(x, y)) {
@@ -729,11 +746,6 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
             i = juce::jlimit(0, L.slotsToShow - 1, i);
             if (onHarmonySlot)
                 onHarmonySlot(i);
-        } else if (L.fieldBand.contains(x, y)) {
-            int f = static_cast<int>((x - L.fieldBand.getX()) / L.fieldW);
-            f = juce::jlimit(0, kHarmonyNumFields - 1, f);
-            if (onHarmonyField)
-                onHarmonyField(f);
         }
         return;
     }
@@ -780,8 +792,8 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (model_.page != PatternScreenModel::Page::Pattern)
-        return;  // autres pages : édition par encodeurs (cf. cahier §10.2), pas à la souris.
+    if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub)
+        return;  // autres pages / mode sub : édition par encodeurs+touches, pas à la souris (V1).
     if (model_.numRows <= 0 || rowH_ <= 0.0f)
         return;
     if (!bodyArea_.contains(x, y))

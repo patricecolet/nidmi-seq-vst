@@ -23,6 +23,13 @@ struct PatternScreenModel {
         unsigned char note[64]    = {};     // note MIDI par pas (affichage)
         unsigned char velocity[64] = {};    // vélocité par pas (0..127)
         unsigned char gate[64]    = {};     // gate par pas (1..100 %)
+        signed char   subIdx[64]  = {};     // index du subpattern déclenché par ce pas (-1 = aucun)
+    };
+
+    // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché dans la cellule du pas.
+    struct SubView {
+        int  numSteps    = 0;               // N du sub (0 = slot libre)
+        bool enabled[16] = {};
     };
 
     // Un paramètre listé sur la page GLOBAL (héritage des 8-params de l'OLED, désormais sur le TFT).
@@ -52,6 +59,14 @@ struct PatternScreenModel {
     int   stepZoom     = 1;    // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
     Row   rows[16];
 
+    // Subpatterns (tuplets imbriqués).
+    SubView subs[16];
+    bool    inSub       = false;   // édition d'un sub en cours (re-cible la Vue PATTERN)
+    int     subEditIdx  = -1;      // sub en cours d'édition
+    int     subStep     = 0;       // curseur de sous-pas
+    int     subHostRow  = 0;       // fil d'Ariane : row…
+    int     subHostStep = 0;       // …et pas qui héberge le sub
+
     // Page GLOBAL.
     int         numGlobalParams = 0;
     int         globalCursor    = 0;
@@ -68,7 +83,6 @@ struct PatternScreenModel {
     int           progLen       = 0;   // nb de slots utilisés
     int           progCurrent   = -1;  // slot en cours de lecture
     int           harmonyCursor = 0;   // slot édité
-    int           harmonyField  = 0;   // 0=degré 1=qualité 2=ext 3=bass 4=durée
     ChordSlotView chord[32];
 
     // Page AUTO (P-locks CC de la row sélectionnée).
@@ -100,7 +114,6 @@ public:
     std::function<void(int row, int step, int note)> onNoteSet;       // PIANO ROLL : pose une hauteur
     std::function<void(int step, int value)>         onRollLaneValue; // PIANO ROLL : vélo via la lane
     std::function<void(int slotIdx)>             onHarmonySlot;   // HARMONIE : sélection de slot
-    std::function<void(int field)>               onHarmonyField;  // HARMONIE : champ édité
     std::function<void(int slotIdx)>             onAutoSlot;      // AUTO : slot de P-lock actif
     std::function<void(int field)>               onAutoField;     // AUTO : champ (Valeur/CC#)
     std::function<void(int step, int value)>     onAutoValueSet;  // AUTO : valeur d'un pas (clic lane)
