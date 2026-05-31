@@ -96,8 +96,11 @@ private:
     int  subHostStep_ = 0;
     int  subStep_     = 0;        // curseur de sous-pas
     int  activeSubIdx() const;   // index du sub édité (host step), -1 si aucun
+    int  subHostNote() const;    // note du pas hôte (ancre du mode relatif)
     void enterOrCreateSub();     // crée le sub si besoin puis entre
     void exitSub();
+    void postSubStepPitch(int subStepIndex, int absolutePitch);  // pose une hauteur (gère abs/relatif)
+    void toggleSubMode();        // bascule le sub courant relatif <-> absolu
 
     void setStepField(int step, int field, int value);   // applique Note/Vélo/Gate au pas (SetStep)
 

@@ -267,8 +267,11 @@ void PatternScreen::paint(juce::Graphics& g) {
         juce::String crumb;
         if (model_.inSub) {
             const juce::String arrow(juce::CharPointer_UTF8(" \xe2\x96\xb8 "));   // ▸
+            const bool rel = (model_.subEditIdx >= 0 && model_.subEditIdx < 16)
+                                 && model_.subs[static_cast<size_t>(model_.subEditIdx)].relative;
             crumb = "R" + juce::String(model_.subHostRow + 1) + arrow
-                  + "P" + juce::String(model_.subHostStep + 1) + arrow + "SUB";
+                  + "P" + juce::String(model_.subHostStep + 1) + arrow
+                  + "SUB " + (rel ? "rel" : "abs");
         } else if (model_.page == PatternScreenModel::Page::Pattern
             || model_.page == PatternScreenModel::Page::PianoRoll
             || model_.page == PatternScreenModel::Page::Auto) {
@@ -475,7 +478,83 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                    juce::Justification::centred);
 }
 
+void PatternScreen::paintSubRoll(juce::Graphics& g) {
+    if (model_.subEditIdx < 0 || model_.subEditIdx >= 16) {
+        paintStubPage(g, "SUB", "—");
+        return;
+    }
+    const auto& sv = model_.subs[static_cast<size_t>(model_.subEditIdx)];
+    const int   sn = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
+    auto        plot = bodyArea_.withTrimmedLeft(26.0f).reduced(2.0f);
+    if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f)
+        return;
+
+    const float laneH   = juce::jlimit(7.0f, 16.0f, plot.getHeight() / 24.0f);
+    const int   visible = juce::jmax(1, static_cast<int>(plot.getHeight() / laneH));
+    auto displayPitch = [&](int k) {
+        return sv.relative ? juce::jlimit(0, 127, model_.subHostNote + (static_cast<int>(sv.note[static_cast<size_t>(k)]) - 64))
+                           : static_cast<int>(sv.note[static_cast<size_t>(k)]);
+    };
+    int center = sv.relative ? model_.subHostNote : 60;
+    if (!sv.relative) {
+        int sum = 0, cnt = 0;
+        for (int k = 0; k < sn; ++k) if (sv.enabled[static_cast<size_t>(k)]) { sum += displayPitch(k); ++cnt; }
+        if (cnt) center = sum / cnt;
+    }
+    int low = juce::jlimit(0, juce::jmax(0, 127 - (visible - 1)), center - visible / 2);
+    const int   topNote = low + visible - 1;
+    const float cellW   = plot.getWidth() / static_cast<float>(sn);
+
+    // Lanes + libellés Do.
+    for (int i = 0; i < visible; ++i) {
+        const int   note = topNote - i;
+        const float y    = plot.getY() + static_cast<float>(i) * laneH;
+        if ((note % 12) == 0) {
+            g.setColour(kCellGrid);
+            g.fillRect(juce::Rectangle<float>(plot.getX(), y, plot.getWidth(), laneH));
+            g.setColour(kRowLabel);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
+            g.drawText(midiNoteShort(note), juce::Rectangle<float>(bodyArea_.getX(), y, 24.0f, laneH),
+                       juce::Justification::centredLeft);
+        }
+        g.setColour(kScreenBorder);
+        g.drawLine(plot.getX(), y, plot.getRight(), y, 0.4f);
+    }
+    // Ligne d'ancrage (mode relatif) = la note du pas hôte.
+    if (sv.relative) {
+        const int lane = topNote - model_.subHostNote;
+        if (lane >= 0 && lane < visible) {
+            const float y = plot.getY() + static_cast<float>(lane) * laneH + laneH * 0.5f;
+            g.setColour(kPlayhead);
+            g.drawLine(plot.getX(), y, plot.getRight(), y, 1.4f);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
+            g.drawText("ancre " + midiNoteShort(model_.subHostNote),
+                       juce::Rectangle<float>(plot.getX() + 2.0f, y - laneH, 70.0f, laneH),
+                       juce::Justification::centredLeft);
+        }
+    }
+    // Colonnes (sous-pas) + curseur + blocs de notes.
+    for (int k = 0; k < sn; ++k) {
+        const float x = plot.getX() + static_cast<float>(k) * cellW;
+        if (k == model_.subStep) {
+            g.setColour(kSelRowBg);
+            g.fillRect(juce::Rectangle<float>(x, plot.getY(), cellW, plot.getHeight()));
+        }
+        g.setColour(kScreenBorder);
+        g.drawLine(x, plot.getY(), x, plot.getBottom(), 0.4f);
+        if (sv.enabled[static_cast<size_t>(k)]) {
+            const int lane = topNote - displayPitch(k);
+            if (lane >= 0 && lane < visible) {
+                juce::Rectangle<float> blk(x, plot.getY() + static_cast<float>(lane) * laneH, cellW, laneH);
+                g.setColour(kCellOn);
+                g.fillRoundedRectangle(blk.reduced(1.0f), 2.0f);
+            }
+        }
+    }
+}
+
 void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
+    if (model_.inSub) { paintSubRoll(g); return; }   // re-cible le piano-roll sur le sub
     const RollFrame F = computeRollFrame(bodyArea_);
     const PrLayout  L = computePrLayout(model_, F.grid);
     if (!L.valid) {

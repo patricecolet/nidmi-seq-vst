@@ -26,11 +26,14 @@ struct PatternScreenModel {
         signed char   subIdx[64]  = {};     // index du subpattern déclenché par ce pas (-1 = aucun)
     };
 
-    // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché dans la cellule du pas.
+    // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché + l'édition.
     struct SubView {
-        int  numSteps    = 0;               // N du sub (0 = slot libre)
-        bool enabled[16] = {};
+        int           numSteps    = 0;      // N du sub (0 = slot libre)
+        bool          enabled[16] = {};
+        unsigned char note[16]    = {};     // note brute (absolue, ou offset centré sur 64 si relatif)
+        bool          relative    = false;  // mode : sous-pas relatifs à la note hôte (ancre)
     };
+    static constexpr int kSubRelCenter = 64;   // miroir de kSubRelativeCenter (core)
 
     // Un paramètre listé sur la page GLOBAL (héritage des 8-params de l'OLED, désormais sur le TFT).
     struct GlobalParam {
@@ -61,11 +64,12 @@ struct PatternScreenModel {
 
     // Subpatterns (tuplets imbriqués).
     SubView subs[16];
-    bool    inSub       = false;   // édition d'un sub en cours (re-cible la Vue PATTERN)
+    bool    inSub       = false;   // édition d'un sub en cours (re-cible les Vues)
     int     subEditIdx  = -1;      // sub en cours d'édition
     int     subStep     = 0;       // curseur de sous-pas
     int     subHostRow  = 0;       // fil d'Ariane : row…
     int     subHostStep = 0;       // …et pas qui héberge le sub
+    int     subHostNote = 60;      // note du pas hôte (ancre du piano-roll relatif)
 
     // Page GLOBAL.
     int         numGlobalParams = 0;
@@ -127,6 +131,7 @@ private:
     void paintTabBar(juce::Graphics& g);
     void paintPatternPage(juce::Graphics& g);
     void paintPianoRollPage(juce::Graphics& g);
+    void paintSubRoll(juce::Graphics& g);   // piano-roll du sub (ligne d'ancrage si relatif)
     void paintHarmonyPage(juce::Graphics& g);
     void paintAutoPage(juce::Graphics& g);
     void paintGlobalPage(juce::Graphics& g);
