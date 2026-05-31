@@ -65,6 +65,22 @@ private:
     juce::Slider valueEncoder_;
     juce::Label  valueEncoderLabel_;
 
+    /// Encodeur 3 (ajout hardware) : vélocité du pas sélectionné (toute Vue).
+    juce::Slider veloEncoder_;
+    juce::Label  veloEncoderLabel_;
+    /// Encodeur 4 (ajout hardware) : zoom — vertical (rows) ; Shift = horizontal (pas).
+    juce::Slider zoomEncoder_;
+    juce::Label  zoomEncoderLabel_;
+    double       lastZoomEnc_ = 0.0;   // encodeur Zoom traité en relatif (direction)
+
+    int rowZoom_     = 0;   // PATTERN : nb de rows visibles (0 = auto selon hauteur)
+    int stepZoom_    = 1;   // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
+    int rollOctaves_ = 2;   // PIANO ROLL : nb d'octaves visibles (zoom vertical des hauteurs)
+
+    void onVeloEncoderChanged();
+    void onZoomEncoderChanged();
+    void configureVeloEncoder();   // cale Enc3 sur Vélo, ou Gate si Shift (push émulé)
+
     int oledParamIndex_ = 0;
 
     int selectedRow_  = 0;
@@ -73,6 +89,8 @@ private:
     // « Page » = fenêtre de 16 pas adressée par les touches (Vues PATTERN/AUTO) quand N>16.
     int stepPage_     = 0;
     int stepPageCount() const;   // nb de pages de 16 pas de la row sélectionnée
+
+    void setStepField(int step, int field, int value);   // applique Note/Vélo/Gate au pas (SetStep)
 
     // Page HARMONIE : slot édité + champ édité (0=degré 1=qualité 2=ext 3=bass 4=durée).
     int harmonyCursor_ = 0;

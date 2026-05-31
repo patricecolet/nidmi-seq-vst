@@ -134,14 +134,30 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     navEncoder_.onValueChange = [this] { onNavEncoderChanged(); };
     setupEncoder(valueEncoder_);
     valueEncoder_.onValueChange = [this] { onValueEncoderChanged(); };
+
+    setupEncoder(veloEncoder_);
+    veloEncoder_.setRange(0.0, 127.0, 1.0);
+    veloEncoder_.onDragStart   = [this] { configureVeloEncoder(); };  // cale Vélo/Gate selon Shift
+    veloEncoder_.onValueChange = [this] { onVeloEncoderChanged(); };
+
+    setupEncoder(zoomEncoder_);
+    zoomEncoder_.setRange(0.0, 1000.0, 1.0);   // traité en relatif (accumulation)
+    zoomEncoder_.setMouseDragSensitivity(1200); // moins twitchy
+    zoomEncoder_.setValue(500.0, juce::dontSendNotification);
+    lastZoomEnc_ = 500.0;
+    zoomEncoder_.onValueChange = [this] { onZoomEncoderChanged(); };
+
     applyEncoderConfigForState();
 
-    navEncoderLabel_.setText("Curseur", juce::dontSendNotification);
-    navEncoderLabel_.setJustificationType(juce::Justification::centred);
-    navEncoderLabel_.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
-    valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-    valueEncoderLabel_.setJustificationType(juce::Justification::centred);
-    valueEncoderLabel_.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+    auto labelStyle = [](juce::Label& l, const juce::String& t) {
+        l.setText(t, juce::dontSendNotification);
+        l.setJustificationType(juce::Justification::centred);
+        l.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+    };
+    labelStyle(navEncoderLabel_, "Curseur");
+    labelStyle(valueEncoderLabel_, "Valeur");
+    labelStyle(veloEncoderLabel_, "Vélo");
+    labelStyle(zoomEncoderLabel_, "Zoom");
 
     // Cahier §10.3 : les touches sont le miroir de l'onglet actif → handlers dispatchés par page.
     for (int i = 0; i < 16; ++i)
@@ -178,6 +194,10 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     screen_.onAutoValueSet = [this](int step, int value) {
         selectedStep_ = step;
         postAutoValueAt(step, value);
+    };
+    screen_.onRollLaneValue = [this](int step, int value) {
+        selectedStep_ = step;
+        setStepField(step, 1, value);   // la lane édite la vélocité
     };
     screen_.onNoteSet = [this](int row, int step, int note) {
         const auto& pat = proc_.engine().pattern();
@@ -219,6 +239,10 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(navEncoder_);
     addAndMakeVisible(valueEncoderLabel_);
     addAndMakeVisible(valueEncoder_);
+    addAndMakeVisible(veloEncoderLabel_);
+    addAndMakeVisible(veloEncoder_);
+    addAndMakeVisible(zoomEncoderLabel_);
+    addAndMakeVisible(zoomEncoder_);
     addAndMakeVisible(playBtn_);
     addAndMakeVisible(stopBtn_);
     addAndMakeVisible(recBtn_);
@@ -241,6 +265,10 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     navEncoder_.toFront(false);
     valueEncoderLabel_.toFront(false);
     valueEncoder_.toFront(false);
+    veloEncoderLabel_.toFront(false);
+    veloEncoder_.toFront(false);
+    zoomEncoderLabel_.toFront(false);
+    zoomEncoder_.toFront(false);
     playBtn_.toFront(false);
     stopBtn_.toFront(false);
     recBtn_.toFront(false);
@@ -297,22 +325,22 @@ void NidmiSeqAudioProcessorEditor::resized() {
         const int blockH = juce::jmax(160, r.getHeight() - 220);
         auto      block  = r.removeFromTop(blockH);
 
-        // Cahier §10.2 : Enc1 (gauche) = valeur, Enc2 (droite) = curseur.
+        // 4 encodeurs (cahier §10.2 / §11.3) : gauche = Valeur + Vélo, droite = Curseur + Zoom.
+        auto placeKnob = [](juce::Rectangle<int> col, juce::Label& lab, juce::Slider& knob) {
+            lab.setBounds(col.removeFromTop(15));
+            auto k = col.reduced(2, 2);
+            const int d = juce::jmin(k.getWidth(), k.getHeight());
+            knob.setBounds(k.withSizeKeepingCentre(d, d));
+        };
+        const int halfH = block.getHeight() / 2;
+
         auto leftCol = block.removeFromLeft(sideW);
-        valueEncoderLabel_.setBounds(leftCol.removeFromTop(15));
-        {
-            auto knob = leftCol.reduced(2, 4).removeFromTop(120);
-            const int d = juce::jmin(knob.getWidth(), knob.getHeight());
-            valueEncoder_.setBounds(knob.withSizeKeepingCentre(d, d));
-        }
+        placeKnob(leftCol.removeFromTop(halfH), valueEncoderLabel_, valueEncoder_);
+        placeKnob(leftCol, veloEncoderLabel_, veloEncoder_);
 
         auto rightCol = block.removeFromRight(sideW);
-        navEncoderLabel_.setBounds(rightCol.removeFromTop(15));
-        {
-            auto knob = rightCol.reduced(2, 4).removeFromTop(120);
-            const int d = juce::jmin(knob.getWidth(), knob.getHeight());
-            navEncoder_.setBounds(knob.withSizeKeepingCentre(d, d));
-        }
+        placeKnob(rightCol.removeFromTop(halfH), navEncoderLabel_, navEncoder_);
+        placeKnob(rightCol, zoomEncoderLabel_, zoomEncoder_);
 
         screen_.setBounds(block.reduced(6, 2));
     }
@@ -403,17 +431,12 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
             syncValueEncoderFromParam();
         }
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
-        // PATTERN : l'encodeur curseur sélectionne la row.
+        // PATTERN : Enc2 (Curseur) = pas (cohérent avec ROLL/AUTO). La row est sur Enc4.
         const auto& pat = proc_.engine().pattern();
         const int   nr  = juce::jmax(1, static_cast<int>(pat.numRows));
-        const int   ni  = juce::jlimit(0, nr - 1, (int) std::lround(navEncoder_.getValue()));
-        if (ni != selectedRow_) {
-            selectedRow_ = ni;
-            // Recharge le N (tuplet) de la nouvelle row dans l'encodeur valeur.
-            const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(ni)].numSteps));
-            valueEncoder_.setRange(1.0, 64.0, 1.0);
-            valueEncoder_.setValue(static_cast<double>(n), juce::dontSendNotification);
-        }
+        const int   sr  = juce::jlimit(0, nr - 1, selectedRow_);
+        const int   n   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
+        selectedStep_   = juce::jlimit(0, n - 1, (int) std::lround(navEncoder_.getValue()));
     } else if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
         // PIANO ROLL : l'encodeur curseur déplace le pas.
         const auto& pat = proc_.engine().pattern();
@@ -423,9 +446,7 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
         const int   ss  = juce::jlimit(0, n - 1, (int) std::lround(navEncoder_.getValue()));
         if (ss != selectedStep_) {
             selectedStep_ = ss;
-            const int note = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)].note;
-            valueEncoder_.setRange(0.0, 127.0, 1.0);
-            valueEncoder_.setValue(static_cast<double>(note), juce::dontSendNotification);
+            applyEncoderConfigForState();  // recharge Enc1 selon le champ actif (Note/Vélo/Gate)
         }
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         // HARMONIE : l'encodeur curseur sélectionne le slot (jusqu'à len = slot d'ajout).
@@ -475,25 +496,13 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
-        // PIANO ROLL : Enc1 règle la hauteur du pas sélectionné (+ active le pas).
+        // PIANO ROLL : Enc1 = Note du pas sous le curseur (vélo = Enc3, gate = Shift+Enc3).
         const auto& pat = proc_.engine().pattern();
         const int   nr  = juce::jmax(1, static_cast<int>(pat.numRows));
         const int   sr  = juce::jlimit(0, nr - 1, selectedRow_);
         const int   n   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
         const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
-        const auto& sd  = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)];
-        const int   note = juce::jlimit(0, 127, (int) std::lround(valueEncoder_.getValue()));
-        if (note == static_cast<int>(sd.note) && sd.enabled)
-            return;
-        SequencerCommand c;
-        c.id = SequencerCommandId::SetStep;
-        c.a  = static_cast<uint8_t>(sr);
-        c.b  = static_cast<uint8_t>(ss);
-        c.c  = static_cast<uint8_t>(note);
-        c.d  = sd.velocity;
-        c.e  = sd.gate;
-        proc_.controller().postCommand(c);
-        buildScreenModel();
+        setStepField(ss, 0, (int) std::lround(valueEncoder_.getValue()));
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
@@ -546,6 +555,32 @@ void NidmiSeqAudioProcessorEditor::postChordSlotEdit(int newFieldValue) {
     c.d  = static_cast<uint8_t>(ext);
     c.e  = static_cast<uint8_t>(static_cast<int8_t>(bass));
     c.f  = static_cast<uint8_t>(dur);
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::setStepField(int step, int field, int value) {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return;
+    const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
+    if (step < 0 || step >= n)
+        return;
+    const auto& sd = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(step)];
+    int note = sd.note, vel = sd.velocity, gate = sd.gate;
+    switch (field) {
+        case 0:  note = juce::jlimit(0, 127, value); break;   // Note
+        case 1:  vel  = juce::jlimit(0, 127, value); break;   // Vélo
+        default: gate = juce::jlimit(1, 100, value); break;   // Gate (%)
+    }
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetStep;
+    c.a  = static_cast<uint8_t>(sr);
+    c.b  = static_cast<uint8_t>(step);
+    c.c  = static_cast<uint8_t>(note);
+    c.d  = static_cast<uint8_t>(vel);
+    c.e  = static_cast<uint8_t>(gate);
     proc_.controller().postCommand(c);
     buildScreenModel();
 }
@@ -625,11 +660,12 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         const int   sr  = juce::jlimit(0, nr - 1, selectedRow_);
         const int   n   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
         const juce::String div = divisionLabel(n, pat.numerator, pat.denominator);
-        navEncoderLabel_.setText("Row " + juce::String(sr + 1), juce::dontSendNotification);
+        const int ss = juce::jlimit(0, n - 1, selectedStep_);
+        navEncoderLabel_.setText("Pas " + juce::String(ss + 1), juce::dontSendNotification);  // Enc2 = Pas
         valueEncoderLabel_.setText("N " + juce::String(n) + (div.isEmpty() ? juce::String() : " " + div),
                                    juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, nr - 1)), 1.0);
-        navEncoder_.setValue(static_cast<double>(sr), juce::dontSendNotification);
+        navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, n - 1)), 1.0);
+        navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
         valueEncoder_.setRange(1.0, 64.0, 1.0);
         valueEncoder_.setValue(static_cast<double>(n), juce::dontSendNotification);
     } else if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
@@ -638,13 +674,14 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         const int   sr  = juce::jlimit(0, nr - 1, selectedRow_);
         const int   n   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
         const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
-        const int   note = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)].note;
+        const auto& sd  = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)];
         navEncoderLabel_.setText("Pas " + juce::String(ss + 1), juce::dontSendNotification);
-        valueEncoderLabel_.setText("Note " + noteNameFromMidi(note), juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, n - 1)), 1.0);
         navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
+        // Enc1 = Note (vélo sur Enc3, gate sur Shift+Enc3).
+        valueEncoderLabel_.setText("Note " + noteNameFromMidi(sd.note), juce::dontSendNotification);
         valueEncoder_.setRange(0.0, 127.0, 1.0);
-        valueEncoder_.setValue(static_cast<double>(note), juce::dontSendNotification);
+        valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   len  = juce::jlimit(0, 32, static_cast<int>(prog.len));
@@ -703,6 +740,67 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         navEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);   // —
         valueEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification); // —
     }
+}
+
+void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
+    // Cale Enc3 sur Vélo, ou Gate si Shift maintenu (émule le push de l'encodeur).
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return;
+    const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
+    const int ss = juce::jlimit(0, n - 1, selectedStep_);
+    const auto& sd = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)];
+    if (juce::ModifierKeys::getCurrentModifiers().isShiftDown()) {
+        veloEncoder_.setRange(1.0, 100.0, 1.0);
+        veloEncoder_.setValue(static_cast<double>(sd.gate), juce::dontSendNotification);
+        veloEncoderLabel_.setText("Gate " + juce::String(sd.gate), juce::dontSendNotification);
+    } else {
+        veloEncoder_.setRange(0.0, 127.0, 1.0);
+        veloEncoder_.setValue(static_cast<double>(sd.velocity), juce::dontSendNotification);
+        veloEncoderLabel_.setText("Vélo " + juce::String(sd.velocity), juce::dontSendNotification);
+    }
+}
+
+void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
+    // Tourne = Vélo ; Shift+tourne = Gate (push émulé). Seulement sur un pas actif.
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return;
+    const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
+    const int ss = juce::jlimit(0, n - 1, selectedStep_);
+    if (!pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)].enabled)
+        return;
+    const bool gate = juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+    setStepField(ss, gate ? 2 : 1, (int) std::lround(veloEncoder_.getValue()));
+}
+
+void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
+    // Encodeur relatif progressif. En ROLL = zoom octaves (cran ample) ; ailleurs = Row (plus réactif).
+    const bool   roll  = (screenPage_ == PatternScreenModel::Page::PianoRoll);
+    const double kStep = roll ? 60.0 : 30.0;
+    const double v     = zoomEncoder_.getValue();
+    const double delta = v - lastZoomEnc_;
+    if (std::abs(delta) < kStep) {
+        if (v < 40.0 || v > 960.0) {   // recentre près des bords (sans générer de cran)
+            zoomEncoder_.setValue(500.0, juce::dontSendNotification);
+            lastZoomEnc_ = 500.0;
+        }
+        return;
+    }
+    const int dir = (delta > 0) ? 1 : -1;
+    lastZoomEnc_  = v;
+    if (roll) {
+        // PIANO ROLL : zoom = octaves visibles, jusqu'à toute la plage MIDI (~11 octaves).
+        rollOctaves_ = juce::jlimit(1, 11, rollOctaves_ - dir);
+    } else {
+        // PATTERN/AUTO : Enc4 = sélection de Row (remplace le zoom).
+        const int nr = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numRows));
+        selectedRow_ = juce::jlimit(0, nr - 1, selectedRow_ + dir);
+        applyEncoderConfigForState();
+    }
+    buildScreenModel();
 }
 
 namespace {
@@ -767,6 +865,13 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
 
     if (!navEncoder_.isMouseButtonDown() && !valueEncoder_.isMouseButtonDown())
         applyEncoderConfigForState();
+    if (!veloEncoder_.isMouseButtonDown())
+        configureVeloEncoder();
+    zoomEncoderLabel_.setText(
+        screenPage_ == PatternScreenModel::Page::PianoRoll
+            ? "Zoom " + juce::String(rollOctaves_) + "oct"
+            : "Row " + juce::String(selectedRow_ + 1),
+        juce::dontSendNotification);
 
     buildScreenModel();
 }
@@ -793,6 +898,11 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     m.prBottomNote = (screenPage_ == PatternScreenModel::Page::PianoRoll)
                          ? juce::jlimit(0, 127, rollWhiteKeyMidi(0))
                          : -1;
+    m.prVisibleSemis = (screenPage_ == PatternScreenModel::Page::PianoRoll)
+                           ? juce::jlimit(1, 11, rollOctaves_) * 12
+                           : 0;
+    m.rowZoom     = rowZoom_;
+    m.stepZoom    = juce::jlimit(1, 8, stepZoom_);
     m.playing     = playing;
     m.tsNum       = pat.numerator;
     m.tsDen       = pat.denominator;
@@ -817,8 +927,11 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         dst.harmonyMode = static_cast<int>(row.harmonyMode);
         dst.muted       = row.muted;
         for (int s = 0; s < n; ++s) {
-            dst.enabled[static_cast<size_t>(s)] = row.steps[static_cast<size_t>(s)].enabled;
-            dst.note[static_cast<size_t>(s)]    = row.steps[static_cast<size_t>(s)].note;
+            const auto& sd = row.steps[static_cast<size_t>(s)];
+            dst.enabled[static_cast<size_t>(s)]  = sd.enabled;
+            dst.note[static_cast<size_t>(s)]     = sd.note;
+            dst.velocity[static_cast<size_t>(s)] = sd.velocity;
+            dst.gate[static_cast<size_t>(s)]     = sd.gate;
         }
         const uint8_t raw = proc_.engine().currentStepForRow(static_cast<uint8_t>(r));
         dst.playhead = (playing && raw != 0xFF && raw < n) ? static_cast<int>(raw) : -1;

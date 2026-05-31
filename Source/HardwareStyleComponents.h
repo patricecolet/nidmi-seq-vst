@@ -21,6 +21,8 @@ struct PatternScreenModel {
         int           playhead    = -1;     // pas en cours, -1 si arrêté/hors champ
         bool          enabled[64] = {};
         unsigned char note[64]    = {};     // note MIDI par pas (affichage)
+        unsigned char velocity[64] = {};    // vélocité par pas (0..127)
+        unsigned char gate[64]    = {};     // gate par pas (1..100 %)
     };
 
     // Un paramètre listé sur la page GLOBAL (héritage des 8-params de l'OLED, désormais sur le TFT).
@@ -44,7 +46,10 @@ struct PatternScreenModel {
     bool  recArmed     = false;
     int   keyPageStart = -1;   // 1er pas de la fenêtre de 16 éditée par les touches (-1 = aucune)
     int   keyPageCount = 1;    // nb total de pages de 16 pas (pour l'indicateur P2/4)
-    int   prBottomNote = -1;   // PIANO ROLL : note MIDI du bas de la fenêtre (défilement Oct± ; -1 = auto)
+    int   prBottomNote   = -1; // PIANO ROLL : note MIDI du bas de la fenêtre (défilement Oct± ; -1 = auto)
+    int   prVisibleSemis = 0;  // PIANO ROLL : nb de demi-tons (lanes) à afficher = octaves×12 (0 = auto)
+    int   rowZoom      = 0;    // PATTERN : nb de rows visibles (0 = auto)
+    int   stepZoom     = 1;    // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
     Row   rows[16];
 
     // Page GLOBAL.
@@ -92,7 +97,8 @@ public:
     std::function<void(int row)>                 onRowSelected;
     std::function<void(int row, int step)>       onStepToggled;
     std::function<void(int tabIndex)>            onTabSelected;
-    std::function<void(int row, int step, int note)> onNoteSet;  // PIANO ROLL : pose une hauteur
+    std::function<void(int row, int step, int note)> onNoteSet;       // PIANO ROLL : pose une hauteur
+    std::function<void(int step, int value)>         onRollLaneValue; // PIANO ROLL : vélo via la lane
     std::function<void(int slotIdx)>             onHarmonySlot;   // HARMONIE : sélection de slot
     std::function<void(int field)>               onHarmonyField;  // HARMONIE : champ édité
     std::function<void(int slotIdx)>             onAutoSlot;      // AUTO : slot de P-lock actif

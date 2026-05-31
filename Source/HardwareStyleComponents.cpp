@@ -69,8 +69,16 @@ PrLayout computePrLayout(const PatternScreenModel& m, juce::Rectangle<float> bod
     if (plot.getWidth() < 10.0f || plot.getHeight() < 10.0f)
         return L;
 
-    const float laneH   = juce::jlimit(7.0f, 16.0f, plot.getHeight() / 25.0f);
-    const int   visible = juce::jmax(1, static_cast<int>(plot.getHeight() / laneH));
+    // Nombre de lanes : zoom octaves (prVisibleSemis) sinon auto (~25 lanes, laneH lisible).
+    float laneH;
+    int   visible;
+    if (m.prVisibleSemis > 0) {
+        visible = juce::jlimit(6, 128, m.prVisibleSemis);   // octaves × 12 (jusqu'à toute la plage MIDI)
+        laneH   = plot.getHeight() / static_cast<float>(visible);
+    } else {
+        laneH   = juce::jlimit(7.0f, 16.0f, plot.getHeight() / 25.0f);
+        visible = juce::jmax(1, static_cast<int>(plot.getHeight() / laneH));
+    }
 
     // Bas de la fenêtre de hauteurs : suit le clavier (défilement Oct±) si fourni, sinon
     // centré sur la moyenne des notes actives (sinon C4 = 60).
@@ -167,6 +175,19 @@ AutoLayout computeAutoLayout(const PatternScreenModel& m, juce::Rectangle<float>
     L.cellW  = L.lane.getWidth() / static_cast<float>(L.n);
     return L;
 }
+
+// PIANO ROLL : découpe le corps en grille de notes / lane vélo (bas).
+struct RollFrame {
+    juce::Rectangle<float> grid, lane;
+};
+RollFrame computeRollFrame(juce::Rectangle<float> body) {
+    RollFrame f;
+    auto b = body;
+    f.lane = b.removeFromBottom(30.0f);
+    b.removeFromBottom(3.0f);
+    f.grid = b;
+    return f;
+}
 }  // namespace
 
 const char* PatternScreen::chordQualityShort(int quality) {
@@ -201,11 +222,12 @@ void PatternScreen::recomputeLayout() {
     headerArea_ = b.removeFromTop(16.0f);
     bodyArea_   = b.reduced(2.0f);
 
-    // Viewport vertical : autant de rows que la hauteur le permet à hauteur lisible (≥ 22 px),
-    // fenêtre centrée sur la row sélectionnée (défile avec elle). Émule la contrainte 320×240.
+    // Viewport vertical : nb de rows visibles = zoom utilisateur (rowZoom) sinon auto (≥ 22 px/row).
+    // Fenêtre centrée sur la row sélectionnée (défile avec elle). Émule la contrainte 320×240.
     constexpr float kMinRowH = 22.0f;
     const int nr = juce::jmax(1, model_.numRows);
-    visibleRows_ = juce::jlimit(1, nr, static_cast<int>(bodyArea_.getHeight() / kMinRowH));
+    const int autoVis = juce::jlimit(1, nr, static_cast<int>(bodyArea_.getHeight() / kMinRowH));
+    visibleRows_ = (model_.rowZoom > 0) ? juce::jlimit(1, nr, model_.rowZoom) : autoVis;
     rowH_        = bodyArea_.getHeight() / static_cast<float>(visibleRows_);
     const int sel = juce::jlimit(0, nr - 1, model_.selectedRow);
     firstVisibleRow_ = juce::jlimit(0, juce::jmax(0, nr - visibleRows_), sel - visibleRows_ / 2);
@@ -305,6 +327,22 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
     const float stripX = bodyArea_.getX() + gutterW_;
     const float stripW = juce::jmax(10.0f, bodyArea_.getWidth() - gutterW_ - infoW_);
 
+    // Zoom horizontal : fenêtre = 1/stepZoom de la mesure, centrée sur le pas sélectionné.
+    const int   zoom    = juce::jlimit(1, 8, model_.stepZoom);
+    const float winLen  = 1.0f / static_cast<float>(zoom);
+    float       winStart = 0.0f;
+    if (zoom > 1) {
+        const int   selRow = juce::jlimit(0, model_.numRows - 1, model_.selectedRow);
+        const int   selN   = juce::jlimit(1, 64, model_.rows[static_cast<size_t>(selRow)].numSteps);
+        const float selPos = (static_cast<float>(model_.selectedStep) + 0.5f) / static_cast<float>(selN);
+        winStart = juce::jlimit(0.0f, 1.0f - winLen, selPos - winLen * 0.5f);
+    }
+    auto barToX = [stripX, stripW, winStart, winLen](float frac) {
+        return stripX + (frac - winStart) / winLen * stripW;
+    };
+    const juce::Rectangle<int> stripClip(juce::roundToInt(stripX), juce::roundToInt(bodyArea_.getY()),
+                                         juce::roundToInt(stripW), juce::roundToInt(bodyArea_.getHeight()));
+
     const int rEnd = juce::jmin(model_.numRows, firstVisibleRow_ + visibleRows_);
     for (int r = firstVisibleRow_; r < rEnd; ++r) {
         const auto& row = model_.rows[static_cast<size_t>(r)];
@@ -324,33 +362,45 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                    juce::Rectangle<float>(bodyArea_.getX(), y, gutterW_, rowH_).reduced(2.0f),
                    juce::Justification::centredLeft);
 
-        // Strip de pas : N cellules de largeur égale sur la mesure.
-        const int   n     = juce::jlimit(1, 64, row.numSteps);
-        const float cellW = stripW / static_cast<float>(n);
-        const float cellPad = cellW > 10.0f ? 1.5f : 0.5f;
-        const bool  showNote = cellW >= 22.0f;
+        // Strip de pas : N cellules réparties sur la fenêtre-mesure (zoom horizontal), clippées au strip.
+        const int   n        = juce::jlimit(1, 64, row.numSteps);
+        const float cellWz   = (1.0f / static_cast<float>(n)) / winLen * stripW;
+        const float cellPad  = cellWz > 10.0f ? 1.5f : 0.5f;
+        const bool  showNote = cellWz >= 22.0f;
+        {
+            juce::Graphics::ScopedSaveState clip(g);
+            g.reduceClipRegion(stripClip);
+            for (int s = 0; s < n; ++s) {
+                const float cx = barToX(static_cast<float>(s) / static_cast<float>(n));
+                if (cx + cellWz <= stripX || cx >= stripX + stripW)
+                    continue;  // hors fenêtre
+                juce::Rectangle<float> cell(cx, y + 2.0f, cellWz, rowH_ - 4.0f);
+                const auto inner = cell.reduced(cellPad, cellPad);
+                const bool on    = row.enabled[static_cast<size_t>(s)];
+                const bool ph    = (s == row.playhead);
 
-        for (int s = 0; s < n; ++s) {
-            juce::Rectangle<float> cell(stripX + static_cast<float>(s) * cellW, y + 2.0f,
-                                        cellW, rowH_ - 4.0f);
-            const auto inner = cell.reduced(cellPad, cellPad);
-            const bool on    = row.enabled[static_cast<size_t>(s)];
-            const bool ph    = (s == row.playhead);
-
-            g.setColour(on ? (row.muted ? kCellOn.withAlpha(0.35f) : kCellOn) : kCellOff);
-            g.fillRoundedRectangle(inner, 2.0f);
-            if (ph) {
-                g.setColour(kPlayhead);
-                g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 1.5f);
-            } else {
-                g.setColour(kCellGrid);
-                g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 0.6f);
-            }
-            if (showNote && on) {
-                g.setColour(kScreenBg);
-                g.setFont(juce::Font(juce::FontOptions().withHeight(juce::jmin(11.0f, rowH_ - 6.0f))));
-                g.drawText(midiNoteShort(row.note[static_cast<size_t>(s)]), inner,
-                           juce::Justification::centred);
+                // Luminosité de la cellule active ∝ vélocité (feedback d'un coup d'œil).
+                const float velA = 0.45f + 0.55f * (static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
+                g.setColour(on ? (row.muted ? kCellOn.withAlpha(0.30f) : kCellOn.withAlpha(velA)) : kCellOff);
+                g.fillRoundedRectangle(inner, 2.0f);
+                if (ph) {
+                    g.setColour(kPlayhead);
+                    g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 1.5f);
+                } else {
+                    g.setColour(kCellGrid);
+                    g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 0.6f);
+                }
+                if (showNote && on) {
+                    g.setColour(kScreenBg);
+                    g.setFont(juce::Font(juce::FontOptions().withHeight(juce::jmin(11.0f, rowH_ - 6.0f))));
+                    g.drawText(midiNoteShort(row.note[static_cast<size_t>(s)]), inner,
+                               juce::Justification::centred);
+                }
+                // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré clair.
+                if (r == model_.selectedRow && s == model_.selectedStep) {
+                    g.setColour(kHeaderText);
+                    g.drawRoundedRectangle(inner.reduced(0.3f), 2.0f, 1.6f);
+                }
             }
         }
 
@@ -368,16 +418,18 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
     if (model_.keyPageStart >= 0 && model_.selectedRow >= 0 && model_.selectedRow < model_.numRows) {
         const auto& row   = model_.rows[static_cast<size_t>(model_.selectedRow)];
         const int   n     = juce::jlimit(1, 64, row.numSteps);
-        const float cellW = stripW / static_cast<float>(n);
         const int   start = juce::jlimit(0, n - 1, model_.keyPageStart);
         const int   end   = juce::jmin(n, start + 16);
+        const float bx0   = juce::jlimit(stripX, stripX + stripW, barToX(static_cast<float>(start) / n));
+        const float bx1   = juce::jlimit(stripX, stripX + stripW, barToX(static_cast<float>(end) / n));
         const float y     = bodyArea_.getY() + static_cast<float>(model_.selectedRow - firstVisibleRow_) * rowH_;
-        juce::Rectangle<float> box(stripX + static_cast<float>(start) * cellW, y + 1.0f,
-                                   static_cast<float>(end - start) * cellW, rowH_ - 2.0f);
-        g.setColour(kPlayhead.withAlpha(0.12f));
-        g.fillRoundedRectangle(box, 2.5f);
-        g.setColour(kPlayhead);
-        g.drawRoundedRectangle(box.reduced(0.5f), 2.5f, 1.8f);
+        if (bx1 - bx0 > 1.0f) {
+            juce::Rectangle<float> box(bx0, y + 1.0f, bx1 - bx0, rowH_ - 2.0f);
+            g.setColour(kPlayhead.withAlpha(0.12f));
+            g.fillRoundedRectangle(box, 2.5f);
+            g.setColour(kPlayhead);
+            g.drawRoundedRectangle(box.reduced(0.5f), 2.5f, 1.8f);
+        }
     }
 
     // Indicateurs de défilement vertical (rows hors champ au-dessus / en dessous).
@@ -394,7 +446,8 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
 }
 
 void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
-    const PrLayout L = computePrLayout(model_, bodyArea_);
+    const RollFrame F = computeRollFrame(bodyArea_);
+    const PrLayout  L = computePrLayout(model_, F.grid);
     if (!L.valid) {
         paintStubPage(g, "PIANO ROLL", "selectionne une row");
         return;
@@ -443,12 +496,40 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             continue;
         const float x = L.plot.getX() + static_cast<float>(s) * L.cellW;
         const float y = L.plot.getY() + static_cast<float>(lane) * L.laneH;
-        juce::Rectangle<float> block(x, y, L.cellW, L.laneH);
-        g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn);
-        g.fillRoundedRectangle(block.reduced(1.0f), 2.0f);
+        // Largeur ∝ gate (articulation), luminosité ∝ vélocité.
+        const float gateFrac = juce::jlimit(0.1f, 1.0f, static_cast<float>(row.gate[static_cast<size_t>(s)]) / 100.0f);
+        const float velA     = 0.45f + 0.55f * (static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
+        juce::Rectangle<float> block(x, y, juce::jmax(2.0f, L.cellW * gateFrac), L.laneH);
+        g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn.withAlpha(velA));
+        g.fillRoundedRectangle(block.reduced(1.0f, 1.0f), 2.0f);
         if (s == row.playhead) {
             g.setColour(kPlayhead);
-            g.drawRoundedRectangle(block.reduced(0.8f), 2.0f, 1.2f);
+            g.drawRoundedRectangle(block.reduced(0.8f, 0.8f), 2.0f, 1.2f);
+        }
+    }
+
+    // Lane vélo (bas) : histogramme de la vélocité par pas (visualisation + clic).
+    {
+        g.setColour(kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
+        g.drawText("Vélo",
+                   juce::Rectangle<float>(bodyArea_.getX(), F.lane.getY(), 24.0f, F.lane.getHeight()),
+                   juce::Justification::centredLeft);
+        g.setColour(kScreenBorder);
+        g.drawLine(L.plot.getX(), F.lane.getBottom(), L.plot.getRight(), F.lane.getBottom(), 0.6f);
+        for (int s = 0; s < L.n; ++s) {
+            const float x = L.plot.getX() + static_cast<float>(s) * L.cellW;
+            if (s == model_.selectedStep) {
+                g.setColour(kSelRowBg);
+                g.fillRect(juce::Rectangle<float>(x, F.lane.getY(), L.cellW, F.lane.getHeight()));
+            }
+            if (row.enabled[static_cast<size_t>(s)]) {
+                const float h = F.lane.getHeight()
+                              * juce::jlimit(0.0f, 1.0f, static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
+                g.setColour(s == row.playhead ? kPlayhead : kCellOn);
+                g.fillRoundedRectangle(juce::Rectangle<float>(x + 1.0f, F.lane.getBottom() - h,
+                                                              L.cellW - 2.0f, h), 1.0f);
+            }
         }
     }
 }
@@ -678,18 +759,24 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // PIANO ROLL : clic = pose une hauteur (saisie mélodique directe).
+    // PIANO ROLL : grille de notes (haut) + lane vélo (bas).
     if (model_.page == PatternScreenModel::Page::PianoRoll) {
-        const PrLayout L = computePrLayout(model_, bodyArea_);
-        if (!L.valid || !L.plot.contains(x, y))
+        const RollFrame F = computeRollFrame(bodyArea_);
+        const PrLayout  L = computePrLayout(model_, F.grid);
+        if (L.valid && L.plot.contains(x, y)) {              // clic grille = pose une hauteur
+            int s    = juce::jlimit(0, L.n - 1, static_cast<int>((x - L.plot.getX()) / L.cellW));
+            int lane = juce::jlimit(0, L.visibleLanes - 1, static_cast<int>((y - L.plot.getY()) / L.laneH));
+            const int note = juce::jlimit(0, 127, L.topNote - lane);
+            if (onNoteSet)
+                onNoteSet(juce::jlimit(0, model_.numRows - 1, model_.selectedRow), s, note);
             return;
-        int s    = static_cast<int>((x - L.plot.getX()) / L.cellW);
-        int lane = static_cast<int>((y - L.plot.getY()) / L.laneH);
-        s    = juce::jlimit(0, L.n - 1, s);
-        lane = juce::jlimit(0, L.visibleLanes - 1, lane);
-        const int note = juce::jlimit(0, 127, L.topNote - lane);
-        if (onNoteSet)
-            onNoteSet(juce::jlimit(0, model_.numRows - 1, model_.selectedRow), s, note);
+        }
+        if (F.lane.contains(x, y) && L.valid) {              // clic lane = vélocité du pas
+            const int   s    = juce::jlimit(0, L.n - 1, static_cast<int>((x - L.plot.getX()) / L.cellW));
+            const float frac = 1.0f - (y - F.lane.getY()) / juce::jmax(1.0f, F.lane.getHeight());
+            const int   v    = juce::jlimit(0, 127, static_cast<int>(frac * 127.0f + 0.5f));
+            if (onRollLaneValue) onRollLaneValue(s, v);
+        }
         return;
     }
 
@@ -710,9 +797,19 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
     if (x < stripX || x >= stripX + stripW)
         return;  // gouttière ou zone d'infos = sélection de row uniquement.
 
-    const int n = juce::jlimit(1, 64, model_.rows[static_cast<size_t>(r)].numSteps);
-    int s = static_cast<int>((x - stripX) / (stripW / static_cast<float>(n)));
-    s = juce::jlimit(0, n - 1, s);
+    // Inversion de la fenêtre-mesure (zoom horizontal), même calcul qu'au rendu.
+    const int   zoom    = juce::jlimit(1, 8, model_.stepZoom);
+    const float winLen  = 1.0f / static_cast<float>(zoom);
+    float       winStart = 0.0f;
+    if (zoom > 1) {
+        const int   selRow = juce::jlimit(0, model_.numRows - 1, model_.selectedRow);
+        const int   selN   = juce::jlimit(1, 64, model_.rows[static_cast<size_t>(selRow)].numSteps);
+        const float selPos = (static_cast<float>(model_.selectedStep) + 0.5f) / static_cast<float>(selN);
+        winStart = juce::jlimit(0.0f, 1.0f - winLen, selPos - winLen * 0.5f);
+    }
+    const int   n      = juce::jlimit(1, 64, model_.rows[static_cast<size_t>(r)].numSteps);
+    const float barPos = winStart + (x - stripX) / stripW * winLen;
+    int s = juce::jlimit(0, n - 1, static_cast<int>(barPos * static_cast<float>(n)));
     if (onStepToggled)
         onStepToggled(r, s);
 }

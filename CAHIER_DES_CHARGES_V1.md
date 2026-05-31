@@ -402,7 +402,7 @@ Termes fixés, sans collision (« mode » est **réservé** à son sens musical 
 
 L'écran est **le hub d'édition** : il doit porter toutes les conditions d'une édition de séquence facile. Il fonctionne en **Vues** (une seule affichée à la fois, barre de Vues en haut, bascule par le bouton `Vue` / `Shift+Vue`) :
 - **PATTERN** — grille multi-row : chaque row affiche ses `numSteps` (N) répartis sur la largeur de la mesure → la polyrythmie est visible (rows à N différents divergent puis réalignent au downbeat). Indique par row : N, canal, mode harmonique, mute, playhead. La row sélectionnée est mise en évidence (c'est elle que les 16 blanches éditent). **Navigation verticale** : l'écran est un viewport qui montre autant de rows que la hauteur le permet (≥ lisible) et **défile** pour garder la row sélectionnée visible (flèches ▲▼ si rows hors champ).
-- **PIANO ROLL** — édition mélodique de la row sélectionnée : Y = hauteur (degré / chord-tone / chromatique selon `RowHarmonyMode`), X = les N cases du tuplet. Piano-roll **tuplet-aware** (l'axe X suit le N de la row, pas un temps absolu).
+- **PIANO ROLL** — édition mélodique de la row sélectionnée : Y = hauteur (degré / chord-tone / chromatique selon `RowHarmonyMode`), X = les N cases du tuplet. Piano-roll **tuplet-aware** (l'axe X suit le N de la row, pas un temps absolu). Épuré (révision 2026-05) : pas de sélecteur de champ — Note=Enc1, Pas=Enc2, **Vélo=Enc3**, **Gate=Shift+Enc3**, Zoom octaves=Enc4. Chaque **bloc de note** encode **luminosité ∝ vélocité** et **largeur ∝ gate** ; **lane de vélocité** en bas (visualisation + clic). Sur PATTERN la luminosité des cellules ∝ vélocité.
 - **HARMONIE (PROG)** — slots de la progression d'accords en bande horizontale (degré + qualité + extensions), slot courant surligné.
 - **AUTO** — lane d'automation : valeurs des P-locks CC par pas pour la row/slot CC sélectionné (histogramme).
 - **GLOBAL** — params projet (BPM, signature, tonalité maître, sync, macros) ; conserve la grille de params à curseur (héritage du layout 8-params).
@@ -414,9 +414,11 @@ Barre de titre commune : contexte courant + transport (▶/■) + BPM + signatur
 
 ### 10.2 Encodeurs (contextuels — révision 2026-05)
 
-Règle constante, **2 encodeurs poussoirs suffisent** (faisabilité hardware bon marché) :
+**4 encodeurs poussoirs** (révision : +2 vs la V1 à 2 encodeurs ; un encodeur ≈ 1 $, reste bon marché) :
 - **Enc1 = valeur** (édite le champ sous le curseur).
 - **Enc2 = curseur** (navigue) ; **push Enc2 = change le champ édité** par Enc1.
+- **Enc3 = Vélo** (dédié) : vélocité du pas sélectionné, **dans n'importe quelle Vue** (luminosité PATTERN / lane ROLL suivent). **Shift+Enc3 = Gate** (émule le *push* de l'encodeur-poussoir → articulation : durée de la note en % du pas).
+- **Enc4** (contextuel à la Vue) : **PATTERN/AUTO** → **sélection de Row** (le viewport défile pour la garder visible) ; **PIANO ROLL** → **zoom = nombre d'octaves visibles** (1 à ~11, toute la plage MIDI).
 - **Shift + Enc1 = réglage fin** (step ÷10 pour valeurs continues).
 - Le curseur **ne saute pas de Vue** au bord ; changer de Vue = bouton `Vue` (Shift+Vue = sens inverse).
 
@@ -424,8 +426,8 @@ Le **sens** des encodeurs dépend de la Vue active (cf. §10.1) :
 
 | Vue | Enc2 (curseur) | Enc1 (valeur) — champ par défaut |
 |---|---|---|
-| **PATTERN** | sélection de row | **N (tuplet) de la row** → re-subdivision live (push Enc2 : N → canal → mode harmo → mute) |
-| **PIANO ROLL** | pas (case du tuplet) | hauteur du pas |
+| **PATTERN** | **pas** (curseur) | **N (tuplet) de la row** → re-subdivision live (push Enc2 : N → canal → mode harmo → mute) ; la **Row** est sur Enc4 |
+| **PIANO ROLL** | pas (case du tuplet) | champ du pas : **Note / Vélo / Gate** (push Enc2 cycle le champ) |
 | **HARMONIE** | slot de progression | degré / qualité (push : degré → qualité → extensions → bass) |
 | **AUTO** | pas | valeur du P-lock CC |
 | **GLOBAL** | paramètre projet | valeur du paramètre |
@@ -496,7 +498,7 @@ Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué) acces
 - USB-MIDI (via USB natif de l'S3).
 - TRS MIDI (type A ou B — à fixer).
 - 1 écran TFT graphique couleur **~320×240 (SPI)** — révision 2026-05, supersède l'OLED 256×64 mono (cf. §10.1). SPI haute fréquence pour un refresh fluide du playhead.
-- 27 touches (16 blanches + 11 noires), **5 boutons (Play · Stop · Rec · Vue · Export)**, 2 encodeurs poussoirs + Shift.
+- 27 touches (16 blanches + 11 noires), **5 boutons (Play · Stop · Rec · Vue · Export)**, **4 encodeurs poussoirs** (Valeur · Curseur · Vélo · Zoom) + Shift.
 
 ---
 
