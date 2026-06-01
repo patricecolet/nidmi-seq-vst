@@ -206,6 +206,63 @@ Critère de regroupement = **échelle de l'objet manipulé**, sauf Harmony qui e
 - **Édition** : ⇧+blanche cycle le mode d'une row (délié→A→B1→B2) ;
   nouveau slot = copie du dernier.
 
+### 5.1bis Trous d'éditabilité constatés à l'usage (2026-06)
+
+L'harmonie **fonctionne quand on l'active**, mais beaucoup de paramètres
+existent côté core SANS UI → on ne peut pas tester à fond. Inventaire :
+
+| Paramètre | Échelle | Éditable aujourd'hui ? |
+|---|---|---|
+| degré / qualité / ext / bass / durée d'un slot | progression | ✅ oui (Enc + touches) |
+| mode harmonique d'une row (A/B1/B2/Chr) | row | ✅ oui (⇧+blanche) |
+| harmonyEnabled (activation) | pattern | ⚠️ ⇧Enc4 (partagé avec numBars en PATTERN → confus) |
+| **tonalité : root / scale** | pattern/master | ❌ **non** (bloque le test) |
+| followMasterTonality | pattern | ❌ non |
+| followProgression | pattern | ❌ non (préservé au toggle, pas éditable) |
+| advanceProgOnSubPatternEnd | pattern | ❌ non |
+| supprimer un slot | progression | ❌ non (ajout seulement) |
+
+Décision : combler **la tonalité (root+scale)** en priorité (manque
+fonctionnel), le reste **avec la refonte** dans le cadre du §5.1ter. L'activation
+mérite un **accès dédié** (bouton/geste propre), à placer avec la refonte ergo —
+pas en bricolage jetable.
+
+### 5.1ter La vue HARMONY = home de TOUTE l'interaction harmonie↔notes *(VISION, structurant)*
+
+Le pattern ne stocke pas que des accords : il stocke **toute la configuration de
+l'interaction harmonie ↔ notes / accords / voicing**. La vue HARMONY est le home
+de cette configuration. Concevoir l'accès paramètre par paramètre (ex. la
+tonalité seule) serait incohérent : on conçoit l'ensemble, on implémente le
+sous-ensemble testable.
+
+**Concept central — le BUNDLE harmonique** (= « banque de modulation harmonique »,
+réutilisable entre patterns ; prolonge « Harmony = ressource transversale »).
+Il contient :
+1. **Tonalité** : root + scale (+ `followMasterTonality`).
+2. **Progression d'accords** : les slots (+ `followProgression`, `advanceProgOnSubEnd`).
+3. **Voicing** : ancrage / densité / disposition (vision, §5.2b).
+4. **Lane de modulations** : changements de clé dans le temps (vision, §5.2a).
+5. **Assignation des rows** : **un mode PAR DÉFAUT + des EXCEPTIONS** (pas par
+   numéro de row → reste réutilisable : un nouveau pattern hérite du défaut sans
+   config ; les exceptions = telle row déliée / en A…).
+
+**Organisation de la vue** (zones par ÉCHELLE, navigables au curseur ; cohérent
+avec vue≠grammaire §2.0) :
+- **CONTEXTE** (échelle pattern) : tonalité, flags de suivi, voicing, lane de
+  modulations, et l'**assignation défaut+exceptions** des rows. *(plus de zone
+  "ROWS" séparée : l'assignation est une config pattern, pas un réglage piste-par-piste.)*
+- **PROGRESSION** (échelle progression) : les accords (chips), édités comme aujourd'hui.
+
+**Principe « hérité = read-only »** (général) : un paramètre hérité (ex. tonalité
+quand `followMasterTonality` est actif) est en lecture seule au niveau pattern, et
+l'encodeur libéré sert le niveau courant (ex. choisir une note/un degré relatif à
+la gamme) plutôt que de rester inerte ou de modifier en douce le master.
+
+**Implémentation par étapes** : (1) tonalité root+scale éditable maintenant
+(débloque le test) ; (2) flags de suivi + activation dédiée + suppression de slot
+avec la refonte ergo ; (3) voicing + lane de modulations = refonte core (§5.3,
+plusieurs NoteOn simultanés / clé dans le temps).
+
 ### 5.2 VISION — ce qui manque ou reste schématique
 
 **a) Lane de tonalité / modulations** *(le cœur manquant)*
