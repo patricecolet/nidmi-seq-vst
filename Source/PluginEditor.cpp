@@ -18,15 +18,10 @@ constexpr const char* kOledTitles[]   = {"BPM",        "Pas/mesure", "Rangees", 
 static_assert(std::size(kOledParamIds) == std::size(kOledTitles));
 constexpr int kNumOledParams = static_cast<int>(std::size(kOledParamIds));
 
-// Page HARMONIE : édition des extensions par liste de bits unitaires (none/9/11/13/b9/#9/#11/b13).
+// Page HARMONIE : index 1..7 = un bit d'extension unitaire (9/11/13/b9/#9/#11/b13) ; 0 = none.
+// Conservé pour setChordField (champ Extensions par index, ré-utilisable hors clavier).
 constexpr uint8_t kHarmExtBits[8] = {0, 1u << 0, 1u << 1, 1u << 2, 1u << 3, 1u << 4, 1u << 5, 1u << 6};
-int harmExtToIndex(int bits) {
-    for (int i = 1; i < 8; ++i)
-        if (bits == kHarmExtBits[i]) return i;
-    return 0;  // none, ou combinaison non listée
-}
 const char* kRoman[7]         = {"I", "II", "III", "IV", "V", "VI", "VII"};
-const char* kHarmExtName[8]   = {"-", "9", "11", "13", "b9", "#9", "#11", "b13"};
 
 const char* kQualName[12]     = {"maj", "m", "dim", "aug", "7", "maj7",
                                  "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
@@ -127,6 +122,16 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         c.x  = !pat.rows[static_cast<size_t>(selectedRow_)].muted;
         proc_.controller().postCommand(c);
     };
+
+    // Brique PUSH générique : 4 petits boutons, un sous chaque encodeur (cf. convention
+    // pushBtn_[i] dans PluginEditor.h). Style transport, toggle géré manuellement
+    // (configurePushButtons pose label/état/led ; onPushButton route l'action).
+    for (int i = 0; i < 4; ++i) {
+        pushBtn_[i].setLookAndFeel(&transportLook_);
+        pushBtn_[i].setToggleable(true);
+        pushBtn_[i].setClickingTogglesState(false);
+        pushBtn_[i].onClick = [this, i] { onPushButton(i); };
+    }
 
     auto setupEncoder = [](juce::Slider& s) {
         s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
@@ -294,8 +299,11 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(exportBtn_);
     addAndMakeVisible(shiftBtn_);
     addAndMakeVisible(muteBtn_);
+    for (int i = 0; i < 4; ++i)
+        addAndMakeVisible(pushBtn_[i]);
 
     applyEncoderConfigForState();
+    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 
@@ -319,6 +327,8 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     exportBtn_.toFront(false);
     shiftBtn_.toFront(false);
     muteBtn_.toFront(false);
+    for (int i = 0; i < 4; ++i)
+        pushBtn_[i].toFront(false);
 
     startTimerHz(24);  // playhead lisible jusqu'a ~180 BPM avec 16 pas/mesure
 }
@@ -332,6 +342,8 @@ NidmiSeqAudioProcessorEditor::~NidmiSeqAudioProcessorEditor() {
     exportBtn_.setLookAndFeel(nullptr);
     shiftBtn_.setLookAndFeel(nullptr);
     muteBtn_.setLookAndFeel(nullptr);
+    for (int i = 0; i < 4; ++i)
+        pushBtn_[i].setLookAndFeel(nullptr);
 }
 
 void NidmiSeqAudioProcessorEditor::paint(juce::Graphics& g) {
@@ -367,8 +379,11 @@ void NidmiSeqAudioProcessorEditor::resized() {
         auto      block  = r.removeFromTop(blockH);
 
         // 4 encodeurs (cahier §10.2 / §11.3) : gauche = Valeur + Vélo, droite = Curseur + Zoom.
-        auto placeKnob = [](juce::Rectangle<int> col, juce::Label& lab, juce::Slider& knob) {
+        // Chaque colonne : label (15px) en haut, knob carré au milieu, bouton PUSH (~16px) en bas.
+        auto placeKnob = [](juce::Rectangle<int> col, juce::Label& lab, juce::Slider& knob,
+                            juce::TextButton& push) {
             lab.setBounds(col.removeFromTop(15));
+            push.setBounds(col.removeFromBottom(22).reduced(6, 2));   // bouton push plus haut/lisible
             auto k = col.reduced(2, 2);
             const int d = juce::jmin(k.getWidth(), k.getHeight());
             knob.setBounds(k.withSizeKeepingCentre(d, d));
@@ -376,12 +391,12 @@ void NidmiSeqAudioProcessorEditor::resized() {
         const int halfH = block.getHeight() / 2;
 
         auto leftCol = block.removeFromLeft(sideW);
-        placeKnob(leftCol.removeFromTop(halfH), valueEncoderLabel_, valueEncoder_);
-        placeKnob(leftCol, veloEncoderLabel_, veloEncoder_);
+        placeKnob(leftCol.removeFromTop(halfH), valueEncoderLabel_, valueEncoder_, pushBtn_[1]);
+        placeKnob(leftCol, veloEncoderLabel_, veloEncoder_, pushBtn_[2]);
 
         auto rightCol = block.removeFromRight(sideW);
-        placeKnob(rightCol.removeFromTop(halfH), navEncoderLabel_, navEncoder_);
-        placeKnob(rightCol, zoomEncoderLabel_, zoomEncoder_);
+        placeKnob(rightCol.removeFromTop(halfH), navEncoderLabel_, navEncoder_, pushBtn_[0]);
+        placeKnob(rightCol, zoomEncoderLabel_, zoomEncoder_, pushBtn_[3]);
 
         screen_.setBounds(block.reduced(6, 2));
     }
@@ -450,6 +465,7 @@ void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
     // On reste dans le sub en changeant de Vue (PATTERN = on/off, ROLL = hauteurs…).
     screenPage_ = static_cast<PatternScreenModel::Page>(pageIndex);
     applyEncoderConfigForState();
+    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
@@ -728,9 +744,8 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // Enc1 = Degré, ou Bass si Shift (push émulé).
-        const bool bass = shiftActive();
-        setChordField(bass ? 3 : 0, (int) std::lround(valueEncoder_.getValue()));
+        // Enc2 = Degré, ou Bass si push →Bass actif.
+        setChordField(harmValBass_ ? 3 : 0, (int) std::lround(valueEncoder_.getValue()));
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Auto) {
@@ -997,11 +1012,12 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         } else if (len > 0) {
             deg = prog.slots[static_cast<size_t>(len - 1)].degree;  // seed = degré du slot précédent
         }
-        // Enc2 = Slot (toujours). Enc1 = Degré (Shift = Bass). Le mode par row se cycle par ⇧+blanche N.
+        // Enc1 = Slot (curseur). Enc2 = Degré, ou Bass si push →Bass actif.
+        // Le mode par row se cycle par ⇧+blanche N.
         navEncoderLabel_.setText("Slot " + juce::String(cur + 1), juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, len)), 1.0);
         navEncoder_.setValue(static_cast<double>(cur), juce::dontSendNotification);
-        if (shiftActive()) {
+        if (harmValBass_) {
             valueEncoderLabel_.setText("Bass " + juce::String(bass), juce::dontSendNotification);
             valueEncoder_.setRange(-12.0, 12.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(bass), juce::dontSendNotification);
@@ -1042,6 +1058,69 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     }
 }
 
+void NidmiSeqAudioProcessorEditor::configurePushButtons() {
+    // Pose label + état toggle/led des 4 boutons PUSH selon la Vue. Par défaut : cachés.
+    // Pour ce lot, SEULE la Vue HARMONIE câble des fonctions de push (cf. onPushButton).
+    auto hide = [this](int i) { pushBtn_[i].setVisible(false); };
+    auto setToggle = [this](int i, const juce::String& txt, bool on) {
+        pushBtn_[i].setVisible(true);
+        pushBtn_[i].setButtonText(txt);
+        pushBtn_[i].setToggleState(on, juce::dontSendNotification);
+        if (on) pushBtn_[i].getProperties().set("led", true);
+        else    pushBtn_[i].getProperties().remove("led");
+        pushBtn_[i].repaint();
+    };
+    auto setAction = [this](int i, const juce::String& txt, bool enabled) {
+        pushBtn_[i].setVisible(true);
+        pushBtn_[i].setButtonText(txt);
+        pushBtn_[i].setToggleState(false, juce::dontSendNotification);
+        pushBtn_[i].getProperties().remove("led");   // action : pas d'état led persistant
+        pushBtn_[i].setEnabled(enabled);
+        pushBtn_[i].repaint();
+    };
+
+    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Harmony) {
+        const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
+        const bool realSlot = harmonyCursor_ < len;   // Suppr seulement sur un slot existant
+        setAction(0, "Suppr", realSlot);               // Enc1 : action immédiate
+        setToggle(1, "\xe2\x86\x92" "Bass",  harmValBass_);   // Enc2 : →Bass
+        setToggle(2, "\xe2\x86\x92" "Durée", harmVeloDur_);   // Enc3 : →Durée
+        setToggle(3, "\xe2\x86\x92" "Gamme", harmZoomScale_); // Enc4 : →Gamme
+        return;
+    }
+    // Toutes les autres Vues (et drill-in sub) : pushBtn cachés (incrément 2).
+    for (int i = 0; i < 4; ++i) hide(i);
+}
+
+void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
+    // Pour ce lot : seules les fonctions HARMONIE sont câblées.
+    if (inSub_ || screenPage_ != PatternScreenModel::Page::Harmony)
+        return;
+
+    switch (idx) {
+        case 0: {   // Enc1 PUSH = Suppr le slot courant (action immédiate, non toggle).
+            const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
+            if (harmonyCursor_ >= len)
+                return;   // curseur sur slot d'ajout : rien à supprimer
+            SequencerCommand c;
+            c.id = SequencerCommandId::DeleteChordSlot;
+            c.a  = static_cast<uint8_t>(harmonyCursor_);
+            proc_.controller().postCommand(c);
+            // Clamp du curseur sur la nouvelle longueur (len-1), bornée à >=0.
+            harmonyCursor_ = juce::jlimit(0, juce::jmax(0, len - 1), harmonyCursor_);
+            break;
+        }
+        case 1: harmValBass_   = !harmValBass_;   break;   // Enc2 : bascule →Bass
+        case 2: harmVeloDur_   = !harmVeloDur_;    break;   // Enc3 : bascule →Durée
+        case 3: harmZoomScale_ = !harmZoomScale_;  break;   // Enc4 : bascule →Gamme
+        default: return;
+    }
+    applyEncoderConfigForState();
+    configureVeloEncoder();
+    configurePushButtons();
+    buildScreenModel();
+}
+
 void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
     const bool shift = shiftActive();
 
@@ -1054,7 +1133,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
         return;
     }
 
-    // HARMONIE : Enc3 = Qualité (Shift = Durée) du slot édité.
+    // HARMONIE : Enc3 = Qualité, ou Durée si push →Durée actif.
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
@@ -1063,7 +1142,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
             qual = static_cast<int>(prog.slots[static_cast<size_t>(cur)].quality);
             dur  = prog.slots[static_cast<size_t>(cur)].durationSlots;
         }
-        if (shift) {
+        if (harmVeloDur_) {
             veloEncoder_.setRange(1.0, 16.0, 1.0);
             veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
             veloEncoderLabel_.setText("Durée " + juce::String(dur), juce::dontSendNotification);
@@ -1119,9 +1198,9 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         return;
     }
 
-    // HARMONIE : Enc3 = Qualité, Shift = Durée.
+    // HARMONIE : Enc3 = Qualité, ou Durée si push →Durée actif.
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        setChordField(shift ? 4 : 1, (int) std::lround(veloEncoder_.getValue()));
+        setChordField(harmVeloDur_ ? 4 : 1, (int) std::lround(veloEncoder_.getValue()));
         return;
     }
 
@@ -1167,11 +1246,49 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
             c.y  = ph.followProgression;                        // préserve suivi progression
             proc_.controller().postCommand(c);
         } else {
-            // HARMONIE : Enc4 = Extensions (–/9/11/13/b9/#9/#11/b13).
-            const auto& prog = proc_.engine().pattern().chordProgression;
-            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-            const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
-            setChordField(2, juce::jlimit(0, 7, harmExtToIndex(ext) + dir));
+            // HARMONIE : Enc4 = Tonique (push →Gamme = Gamme). Relatif, wrap modulo 12.
+            // Édite la SOURCE ACTIVE : master (si followMasterTonality) sinon le pattern.
+            const auto& ph    = proc_.engine().pattern().harmony;
+            const auto& ps    = proc_.engine().projectSettings();
+            const bool  toMas = ph.followMasterTonality;
+            const int   nScale = juce::jmax(1, static_cast<int>(scalebank::Count));
+            if (harmZoomScale_) {
+                const int curScale = toMas ? static_cast<int>(ps.masterScaleId)
+                                           : static_cast<int>(ph.scaleId);
+                const int newScale = ((curScale + dir) % nScale + nScale) % nScale;  // wrap
+                if (toMas) {
+                    SequencerCommand c;
+                    c.id = SequencerCommandId::SetProjectMasterScaleId;
+                    c.a  = static_cast<uint8_t>(newScale);
+                    proc_.controller().postCommand(c);
+                } else {
+                    SequencerCommand c;
+                    c.id = SequencerCommandId::SetPatternHarmony;
+                    c.x  = ph.harmonyEnabled;                       // préserve ON/OFF
+                    c.a  = static_cast<uint8_t>(newScale);          // gamme éditée
+                    c.b  = static_cast<uint8_t>(ph.rootPc);         // préserve tonique
+                    c.y  = ph.followProgression;                    // préserve suivi
+                    proc_.controller().postCommand(c);
+                }
+            } else {
+                const int curRoot = toMas ? static_cast<int>(ps.masterRootPc)
+                                          : static_cast<int>(ph.rootPc);
+                const int newRoot = ((curRoot + dir) % 12 + 12) % 12;  // wrap 12 demi-tons
+                if (toMas) {
+                    SequencerCommand c;
+                    c.id = SequencerCommandId::SetProjectMasterRootPc;
+                    c.a  = static_cast<uint8_t>(newRoot);
+                    proc_.controller().postCommand(c);
+                } else {
+                    SequencerCommand c;
+                    c.id = SequencerCommandId::SetPatternHarmony;
+                    c.x  = ph.harmonyEnabled;
+                    c.a  = static_cast<uint8_t>(ph.scaleId);        // préserve gamme
+                    c.b  = static_cast<uint8_t>(newRoot);           // tonique éditée
+                    c.y  = ph.followProgression;
+                    proc_.controller().postCommand(c);
+                }
+            }
         }
     } else if (screenPage_ == PatternScreenModel::Page::Pattern && shiftActive()) {
         // ⇧Enc4 (PATTERN) = nombre de MESURES du pattern (1..kMaxBars). Le core duplique
@@ -1286,6 +1403,7 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
         applyEncoderConfigForState();
     if (!veloEncoder_.isMouseButtonDown())
         configureVeloEncoder();
+    configurePushButtons();   // labels/état/led des boutons PUSH (Suppr suit le curseur slot)
     if (screenPage_ == PatternScreenModel::Page::PianoRoll)
         zoomEncoderLabel_.setText("Zoom " + juce::String(rollOctaves_) + "oct", juce::dontSendNotification);
     else if (screenPage_ == PatternScreenModel::Page::Harmony) {
@@ -1294,11 +1412,21 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
             const bool on = proc_.engine().pattern().harmony.harmonyEnabled;
             zoomEncoderLabel_.setText(juce::String("Harm ") + (on ? "ON" : "OFF"), juce::dontSendNotification);
         } else {
-            const auto& prog = proc_.engine().pattern().chordProgression;
-            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-            const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
-            zoomEncoderLabel_.setText("Ext " + juce::String(kHarmExtName[juce::jlimit(0, 7, harmExtToIndex(ext))]),
-                                      juce::dontSendNotification);
+            // Enc4 = Tonique (ou Gamme si push →Gamme actif), lue sur la source effective.
+            const auto& ph     = proc_.engine().pattern().harmony;
+            const auto& ps     = proc_.engine().projectSettings();
+            const bool  toMas  = ph.followMasterTonality;
+            if (harmZoomScale_) {
+                const int sc = toMas ? static_cast<int>(ps.masterScaleId) : static_cast<int>(ph.scaleId);
+                zoomEncoderLabel_.setText(juce::String("Gamme ") + scalebank::getScale(static_cast<uint8_t>(
+                    juce::jlimit(0, static_cast<int>(scalebank::Count) - 1, sc))).name,
+                    juce::dontSendNotification);
+            } else {
+                const int rp = toMas ? static_cast<int>(ps.masterRootPc) : static_cast<int>(ph.rootPc);
+                static const char* kPc[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+                zoomEncoderLabel_.setText(juce::String("Tonique ") + kPc[juce::jlimit(0, 11, rp)],
+                                          juce::dontSendNotification);
+            }
         }
     } else if (screenPage_ == PatternScreenModel::Page::Pattern && shiftActive()) {
         // ⇧Enc4 (PATTERN) = nombre de mesures du pattern.
@@ -1522,10 +1650,22 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
         return;
     }
 
-    // LED d'état rel/abs sur la noire 9 : ON si le sub pertinent (drill-in : sub édité ;
-    // sinon : sub du pas sélectionné) est en mode relatif. Aucun sub pertinent → LED éteinte.
+    // LED d'état d'une noire (le helper n'en gère qu'une à la fois) :
+    //  - HARMONIE (hors sub) : 1ʳᵉ extension active du slot courant (noires 0..6).
+    //  - sinon : noire 9 rel/abs du sub pertinent (drill-in : sub édité ; sinon sub du pas sél.).
     // Rafraîchi à chaque tick du timer → reflète l'état même si modifié ailleurs.
-    {
+    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Harmony) {
+        static const uint8_t kBit[7] = {
+            kExt9, kExt11, kExt13, kExtFlat9, kExtSharp9, kExtSharp11, kExtFlat13};
+        const auto& prog = pat.chordProgression;
+        const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
+        const int   ext  = (cur < static_cast<int>(prog.len))
+                               ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
+        int litExt = -1;
+        for (int i = 0; i < 7; ++i)
+            if ((ext & kBit[i]) != 0) { litExt = i; break; }
+        piano_.setBlackKeyLed(litExt, litExt >= 0);
+    } else {
         const int subIdx = relevantSubIdx();
         const bool ledOn = (subIdx >= 0)
             && pat.subPatterns[static_cast<size_t>(subIdx)].relativeToHost;
@@ -1905,9 +2045,45 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             else if (index == 2) stepPage_ = juce::jmax(0, stepPage_ - 1);                 // Page-
             else if (index == 3) stepPage_ = juce::jmin(stepPageCount() - 1, stepPage_ + 1); // Page+ (adaptatif)
             break;
-        case PatternScreenModel::Page::Harmony:
-            setChordField(1, juce::jlimit(0, 11, index));   // noires = qualités
+        case PatternScreenModel::Page::Harmony: {
+            // Noires 0..6 = bascule d'un bit d'extension (9/11/13/b9/#9/#11/b13). 7..10 inactives.
+            // XOR du bit sur les extensions du slot courant ; on relit les autres champs et on
+            // réémet SetChordSlot (setChordField ne sait poser qu'un index unitaire, pas un masque).
+            if (index < 0 || index > 6)
+                break;
+            static const uint8_t kBlackExtBit[7] = {
+                kExt9, kExt11, kExt13, kExtFlat9, kExtSharp9, kExtSharp11, kExtFlat13};
+            const auto& prog = proc_.engine().pattern().chordProgression;
+            const int   len  = juce::jlimit(0, 32, static_cast<int>(prog.len));
+            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
+            // Slot d'ajout (cur >= len) : on crée d'abord le slot (seed via setChordField, qui
+            // copie le dernier slot), puis on rebascule l'extension sur le slot fraîchement créé.
+            int deg = 1, qual = 0, ext = 0, bass = 0, dur = 1;
+            if (cur < len) {
+                const auto& cs = prog.slots[static_cast<size_t>(cur)];
+                deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
+                bass = cs.bassOffset; dur = cs.durationSlots;
+            } else {
+                setChordField(0, (len > 0) ? prog.slots[static_cast<size_t>(len - 1)].degree : 1);
+                const auto& prog2 = proc_.engine().pattern().chordProgression;
+                if (cur < static_cast<int>(prog2.len)) {
+                    const auto& cs = prog2.slots[static_cast<size_t>(cur)];
+                    deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
+                    bass = cs.bassOffset; dur = cs.durationSlots;
+                }
+            }
+            ext ^= kBlackExtBit[index];   // toggle du bit
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetChordSlot;
+            c.a  = static_cast<uint8_t>(cur);
+            c.b  = static_cast<uint8_t>(deg);
+            c.c  = static_cast<uint8_t>(qual);
+            c.d  = static_cast<uint8_t>(ext);
+            c.e  = static_cast<uint8_t>(static_cast<int8_t>(bass));
+            c.f  = static_cast<uint8_t>(dur);
+            proc_.controller().postCommand(c);
             break;
+        }
         case PatternScreenModel::Page::Global:
         case PatternScreenModel::Page::Song:
         default:
@@ -1951,8 +2127,8 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             break;
         case PatternScreenModel::Page::Harmony: {
             static const char* kR[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
-            static const char* kQ[12] = {"maj", "m", "dim", "aug", "7", "maj7",
-                                         "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
+            // Noires 0..6 = extensions (toggle bitfield) ; 7..10 inactives.
+            static const char* kExtLbl[7] = {"9", "11", "13", "b9", "#9", "#11", "b13"};
             static const char* kMode[4] = {"A", "B1", "B2", "CHR"};
             if (shiftActive()) {
                 // ⇧ : les blanches 1..numRows = rows à cycler. Libellé "Rn:mode" (CHR = délié).
@@ -1970,7 +2146,9 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
                 for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);
                 for (int i = 7; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
             }
-            for (int i = 0; i < 11; ++i) piano_.setBlackKeyLabel(i, kQ[i]);
+            for (int i = 0; i < 7; ++i)  piano_.setBlackKeyLabel(i, kExtLbl[i]);
+            for (int i = 7; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+            // (la LED d'extension active est gérée par frame dans refreshPianoKeysFromEngine.)
             break;
         }
         case PatternScreenModel::Page::Auto:

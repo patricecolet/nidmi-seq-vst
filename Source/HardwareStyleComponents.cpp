@@ -955,7 +955,8 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         // Ligne A : tonalité effective.
         g.setColour(kHeaderText);
         g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
-        g.drawText("Key: " + pitchClassName(model_.harmonyRootPc) + " " + scaleNameShort(model_.harmonyScaleId),
+        g.drawText("Key: " + pitchClassName(model_.harmonyRootPc) + " " + scaleNameShort(model_.harmonyScaleId)
+                       + (model_.followMasterTonality ? juce::String(" (master)") : juce::String()),
                    info.removeFromTop(lineH), juce::Justification::centredLeft);
 
         // Ligne B : mode harmonique partagé + nombre de rows liées (mode != Chromatic).

@@ -52,6 +52,16 @@ private:
     juce::TextButton exportBtn_;
     juce::TextButton shiftBtn_;
     juce::TextButton muteBtn_;
+
+    // Brique PUSH générique : un petit bouton sous chaque encodeur.
+    // Convention d'indexation pushBtn_[i] <-> encodeur :
+    //   0 = Enc1 navEncoder_ (curseur)   3 = Enc4 zoomEncoder_ (zoom)
+    //   1 = Enc2 valueEncoder_ (valeur)  2 = Enc3 veloEncoder_  (vélo)
+    // (le même i sert pour les colonnes du resized() ci-dessous.)
+    juce::TextButton pushBtn_[4];
+    void configurePushButtons();   // labels + état toggle/led des 4 boutons selon la Vue/état
+    void onPushButton(int idx);    // route le clic du bouton vers l'action/bascule de l'encodeur
+
     std::unique_ptr<juce::FileChooser> fileChooser_;
 
     // Shift logiciel (bouton, toggle) OU touche Shift clavier OS : les deux activent
@@ -119,9 +129,17 @@ private:
 
     void setStepField(int step, int field, int value);   // applique Note/Vélo/Gate au pas (SetStep)
 
-    // Vue HARMONIE : slot édité. Attributs sur encodeurs dédiés (épuré) :
-    // Enc1=Degré (Shift=Bass), Enc3=Qualité (Shift=Durée), Enc4=Extensions, Enc2=Slot.
-    int harmonyCursor_ = 0;
+    // Vue HARMONIE : slot édité. Attributs sur encodeurs dédiés (modèle rotation/push) :
+    //   Enc1 (curseur) : rotation = Slot ; PUSH = Suppr (DeleteChordSlot).
+    //   Enc2 (valeur)  : rotation = Degré ; PUSH "→Bass" (toggle harmValBass_) = rotation Bass.
+    //   Enc3 (vélo)    : rotation = Qualité ; PUSH "→Durée" (toggle harmVeloDur_) = rotation Durée.
+    //   Enc4 (zoom)    : rotation = Tonique ; PUSH "→Gamme" (toggle harmZoomScale_) = rotation Gamme.
+    //                    ⇧Enc4 = bascule Harmonie ON/OFF.
+    // Noires = extensions (bitfield). Blanches 1..7 = degrés (⇧+blanche = cycle mode row).
+    int  harmonyCursor_ = 0;
+    bool harmValBass_   = false;   // Enc2 : rotation édite Bass au lieu du Degré
+    bool harmVeloDur_   = false;   // Enc3 : rotation édite Durée au lieu de la Qualité
+    bool harmZoomScale_ = false;   // Enc4 : rotation édite Gamme au lieu de la Tonique
     void setChordField(int field, int value);   // field 0=deg 1=qual 2=ext 3=bass 4=dur
     int  sharedHarmonyMode() const;             // mode commun aux rows liées (-1 = mixte) — affichage seul
 
