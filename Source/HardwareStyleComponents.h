@@ -24,6 +24,11 @@ struct PatternScreenModel {
         unsigned char velocity[64] = {};    // vélocité par pas (0..127)
         unsigned char gate[64]    = {};     // gate par pas (1..100 %)
         signed char   subIdx[64]  = {};     // index du subpattern déclenché par ce pas (-1 = aucun)
+        unsigned char playedNote[64] = {};  // note réellement émise après filtre harmonique (= note si row libre)
+        bool          snapped[64]    = {};  // true si playedNote != note (note stockée hors filtre, tirée par l'harmonie)
+        bool          harmonyBound   = false; // row soumise à l'harmonie (mode != Chromatic && harmonie active)
+        juce::String  divLabel;             // valeur musicale du pas (1/16, 1/8T, 5:tps…), vide si non réductible
+        int           stepMs        = 0;    // durée réelle d'un pas en ms (barDuration/numSteps), 0 = inconnu
     };
 
     // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché + l'édition.
@@ -32,6 +37,7 @@ struct PatternScreenModel {
         bool          enabled[16] = {};
         unsigned char note[16]    = {};     // note brute (absolue, ou offset centré sur 64 si relatif)
         bool          relative    = false;  // mode : sous-pas relatifs à la note hôte (ancre)
+        int           duration    = 1;      // span : nombre de pas hôtes couverts (1..64)
     };
     static constexpr int kSubRelCenter = 64;   // miroir de kSubRelativeCenter (core)
 
@@ -83,11 +89,20 @@ struct PatternScreenModel {
         int extensions    = 0;   // bitfield
         int bassOffset    = 0;   // -12..+12
         int durationSlots = 1;
+        int rootPc        = 0;   // pitch-class (0..11) de la racine réelle (calculée core-side)
     };
     int           progLen       = 0;   // nb de slots utilisés
     int           progCurrent   = -1;  // slot en cours de lecture
     int           harmonyCursor = 0;   // slot édité
     ChordSlotView chord[32];
+
+    // Tonalité effective + suivi (la vue HARMONIE hérite/affiche l'état réel du pattern).
+    int  harmonyRootPc          = 0;   // pitch-class de la tonique effective
+    int  harmonyScaleId         = 0;   // id de gamme effectif (index ScaleBank)
+    bool harmonyEnabled         = true;
+    bool followProgression      = true;
+    bool followMasterTonality   = true;
+    int  harmonySharedMode      = 1;   // mode harmonique partagé par toutes les rows (-1 = mixte)
 
     // Page AUTO (P-locks CC de la row sélectionnée).
     int autoSlot     = 0;     // slot de P-lock actif (0..7)

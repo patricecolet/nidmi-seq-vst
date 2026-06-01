@@ -4,6 +4,7 @@
 #include "MidiExporter.h"
 
 #include <nidmi_seq/ScaleBank.h>
+#include <nidmi_seq/HarmonyEngine.h>
 
 #include <cmath>
 
@@ -26,6 +27,7 @@ int harmExtToIndex(int bits) {
 }
 const char* kRoman[7]         = {"I", "II", "III", "IV", "V", "VI", "VII"};
 const char* kHarmExtName[8]   = {"-", "9", "11", "13", "b9", "#9", "#11", "b13"};
+
 const char* kQualName[12]     = {"maj", "m", "dim", "aug", "7", "maj7",
                                  "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
 
@@ -94,16 +96,21 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     exportBtn_.setButtonText("Export");
     exportBtn_.onClick = [this] { launchExportFlow(); };
 
-    // Octave du clavier ROLL (actifs seulement sur l'onglet PIANO ROLL, cf. updateKeysForPage()).
-    octMinusBtn_.setLookAndFeel(&transportLook_);
-    octMinusBtn_.setButtonText("Oct-");
-    octMinusBtn_.setEnabled(false);
-    octMinusBtn_.onClick = [this] { shiftKeyboardOctave(-1); };
-
-    octPlusBtn_.setLookAndFeel(&transportLook_);
-    octPlusBtn_.setButtonText("Oct+");
-    octPlusBtn_.setEnabled(false);
-    octPlusBtn_.onClick = [this] { shiftKeyboardOctave(+1); };
+    // Shift logiciel (toggle) : active les secondes fonctions des touches/encodeurs de la Vue.
+    // (Rendu ON/LED identique à muteBtn_.) L'octave du clavier ROLL passe par les noires 0/1.
+    shiftBtn_.setLookAndFeel(&transportLook_);
+    shiftBtn_.setButtonText("Shift");
+    shiftBtn_.setToggleable(true);
+    shiftBtn_.setClickingTogglesState(false);
+    shiftBtn_.onClick = [this] {
+        shiftHeld_ = !shiftHeld_;
+        shiftBtn_.setToggleState(shiftHeld_, juce::dontSendNotification);
+        lastShiftActive_ = shiftActive();
+        applyEncoderConfigForState();
+        configureVeloEncoder();
+        updateKeysForPage();
+        buildScreenModel();
+    };
 
     // Mute toggle pour la row sélectionnée. État sync'd depuis l'engine en timerCallback.
     muteBtn_.setLookAndFeel(&transportLook_);
@@ -131,6 +138,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     };
 
     setupEncoder(navEncoder_);
+    navEncoder_.onDragStart    = [this] { applyEncoderConfigForState(); };  // cale le rôle selon la Vue/Shift
     navEncoder_.onValueChange = [this] { onNavEncoderChanged(); };
     setupEncoder(valueEncoder_);
     valueEncoder_.onDragStart   = [this] { applyEncoderConfigForState(); };  // cale (ex. HARMONIE Shift=Bass)
@@ -244,8 +252,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(recBtn_);
     addAndMakeVisible(vueBtn_);
     addAndMakeVisible(exportBtn_);
-    addAndMakeVisible(octMinusBtn_);
-    addAndMakeVisible(octPlusBtn_);
+    addAndMakeVisible(shiftBtn_);
     addAndMakeVisible(muteBtn_);
 
     applyEncoderConfigForState();
@@ -270,8 +277,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     recBtn_.toFront(false);
     vueBtn_.toFront(false);
     exportBtn_.toFront(false);
-    octMinusBtn_.toFront(false);
-    octPlusBtn_.toFront(false);
+    shiftBtn_.toFront(false);
     muteBtn_.toFront(false);
 
     startTimerHz(24);  // playhead lisible jusqu'a ~180 BPM avec 16 pas/mesure
@@ -284,8 +290,7 @@ NidmiSeqAudioProcessorEditor::~NidmiSeqAudioProcessorEditor() {
     recBtn_.setLookAndFeel(nullptr);
     vueBtn_.setLookAndFeel(nullptr);
     exportBtn_.setLookAndFeel(nullptr);
-    octMinusBtn_.setLookAndFeel(nullptr);
-    octPlusBtn_.setLookAndFeel(nullptr);
+    shiftBtn_.setLookAndFeel(nullptr);
     muteBtn_.setLookAndFeel(nullptr);
 }
 
@@ -341,18 +346,16 @@ void NidmiSeqAudioProcessorEditor::resized() {
         screen_.setBounds(block.reduced(6, 2));
     }
 
-    // Rangée « contrôles row + pitch » : Mute (row sélectionnée) + Oct-/Oct+ (overlay PITCH). 32 px.
+    // Rangée « contrôles » : Mute (row sélectionnée) + Shift (secondes fonctions). 32 px.
     {
         auto      row = r.removeFromTop(32);
         const int bw  = 70;
         const int gap = 6;
-        const int totalW = bw * 3 + gap * 2;
+        const int totalW = bw * 2 + gap;
         row.removeFromLeft(juce::jmax(0, (row.getWidth() - totalW) / 2));
         muteBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
         row.removeFromLeft(gap);
-        octMinusBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
-        row.removeFromLeft(gap);
-        octPlusBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
+        shiftBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
     }
 
     piano_.setBounds(r);
@@ -551,7 +554,8 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
             applyEncoderConfigForState();  // recharge Enc1 selon le champ actif (Note/Vélo/Gate)
         }
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // HARMONIE : l'encodeur curseur sélectionne le slot (jusqu'à len = slot d'ajout).
+        // HARMONIE : Enc2 = Slot (jusqu'à len = slot d'ajout) — sans branche Shift.
+        // Le cycle de mode par row se fait désormais par ⇧+blanche N.
         const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
         const int cur = juce::jlimit(0, juce::jmin(31, len), (int) std::lround(navEncoder_.getValue()));
         if (cur != harmonyCursor_) {
@@ -587,6 +591,18 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
             const int   v  = (int) std::lround(valueEncoder_.getValue());
             // Relatif : Enc1 = intervalle → on convertit en hauteur absolue pour postSubStepPitch.
             postSubStepPitch(ss, sp.relativeToHost ? (subHostNote() + v) : v);
+        } else if (shiftActive()) {
+            // ⇧Enc1 = span : durée du sub (nombre de pas hôtes couverts).
+            const auto& pat  = proc_.engine().pattern();
+            const int   hr   = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
+            const int   maxD = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
+            const int   d    = juce::jlimit(1, maxD, (int) std::lround(valueEncoder_.getValue()));
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetSubPatternDuration;
+            c.a  = static_cast<uint8_t>(subIdx);
+            c.b  = static_cast<uint8_t>(d);
+            proc_.controller().postCommand(c);
+            buildScreenModel();
         } else {
             // Enc1 = N du sub (tuplet imbriqué).
             const int n = juce::jlimit(1, 16, (int) std::lround(valueEncoder_.getValue()));
@@ -631,7 +647,7 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
     }
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
         // Enc1 = Degré, ou Bass si Shift (push émulé).
-        const bool bass = juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+        const bool bass = shiftActive();
         setChordField(bass ? 3 : 0, (int) std::lround(valueEncoder_.getValue()));
         return;
     }
@@ -657,7 +673,13 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
         const auto& cs = prog.slots[static_cast<size_t>(cur)];
         deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
         bass = cs.bassOffset; dur = cs.durationSlots;
+    } else if (len > 0) {
+        // Ajout : copie complète du dernier slot édité (degré + qualité + ext + bass + durée).
+        const auto& cs = prog.slots[static_cast<size_t>(len - 1)];
+        deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
+        bass = cs.bassOffset; dur = cs.durationSlots;
     }
+    // (sinon : I major par défaut, deg=1 qual=0 ext=0 bass=0 dur=1 ci-dessus)
     switch (field) {
         case 0: deg  = juce::jlimit(1, 7, value); break;             // Degré
         case 1: qual = juce::jlimit(0, 11, value); break;            // Qualité
@@ -683,6 +705,23 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
     c.f  = static_cast<uint8_t>(dur);
     proc_.controller().postCommand(c);
     buildScreenModel();
+}
+
+int NidmiSeqAudioProcessorEditor::sharedHarmonyMode() const {
+    // Ne considère QUE les rows liées (mode != Chromatic). Si toutes les rows liées
+    // partagent le même mode → ce mode ; si elles divergent → -1 (mixte) ; s'il n'y
+    // a aucune row liée → défaut B1 (1).
+    const auto& pat = proc_.engine().pattern();
+    const int   nr  = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
+    int shared = -2;   // -2 = aucune row liée vue encore
+    for (int r = 0; r < nr; ++r) {
+        const int rm = static_cast<int>(pat.rows[static_cast<size_t>(r)].harmonyMode);
+        if (rm == static_cast<int>(RowHarmonyMode::Chromatic))
+            continue;                            // row déliée → ignorée
+        if (shared == -2)        shared = rm;
+        else if (shared != rm) { return -1; }    // rows liées divergentes → mixte
+    }
+    return (shared == -2) ? 1 : shared;          // défaut B1 si aucune row liée
 }
 
 void NidmiSeqAudioProcessorEditor::setStepField(int step, int field, int value) {
@@ -796,6 +835,15 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
                 valueEncoder_.setRange(0.0, 127.0, 1.0);
                 valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
             }
+        } else if (shiftActive() && subIdx >= 0) {
+            // ⇧Enc1 = span : durée du sub en nombre de pas hôtes couverts.
+            const auto& pat   = proc_.engine().pattern();
+            const int   hr    = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
+            const int   maxD  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
+            const int   dur   = juce::jlimit(1, maxD, static_cast<int>(sp.duration));
+            valueEncoderLabel_.setText("Sub Dur " + juce::String(dur) + " pas", juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, static_cast<double>(juce::jmax(1, maxD)), 1.0);
+            valueEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
         } else {
             valueEncoderLabel_.setText("Sub N " + juce::String(sn), juce::dontSendNotification);
             valueEncoder_.setRange(1.0, 16.0, 1.0);
@@ -845,12 +893,14 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         if (cur < len) {
             const auto& cs = prog.slots[static_cast<size_t>(cur)];
             deg = cs.degree; bass = cs.bassOffset;
+        } else if (len > 0) {
+            deg = prog.slots[static_cast<size_t>(len - 1)].degree;  // seed = degré du slot précédent
         }
-        // Enc2 = Slot ; Enc1 = Degré (Shift = Bass). Qualité=Enc3, Extensions=Enc4.
+        // Enc2 = Slot (toujours). Enc1 = Degré (Shift = Bass). Le mode par row se cycle par ⇧+blanche N.
         navEncoderLabel_.setText("Slot " + juce::String(cur + 1), juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, len)), 1.0);
         navEncoder_.setValue(static_cast<double>(cur), juce::dontSendNotification);
-        if (juce::ModifierKeys::getCurrentModifiers().isShiftDown()) {
+        if (shiftActive()) {
             valueEncoderLabel_.setText("Bass " + juce::String(bass), juce::dontSendNotification);
             valueEncoder_.setRange(-12.0, 12.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(bass), juce::dontSendNotification);
@@ -892,7 +942,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
 }
 
 void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
-    const bool shift = juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+    const bool shift = shiftActive();
 
     // Dans un sub : Enc3 = Ancre (la note du pas hôte) → déplace l'ancre / transpose le sub.
     if (inSub_) {
@@ -933,7 +983,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
     const int n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
     const int ss = juce::jlimit(0, n - 1, selectedStep_);
     const auto& sd = pat.rows[static_cast<size_t>(sr)].steps[static_cast<size_t>(ss)];
-    if (juce::ModifierKeys::getCurrentModifiers().isShiftDown()) {
+    if (shift) {
         veloEncoder_.setRange(1.0, 100.0, 1.0);
         veloEncoder_.setValue(static_cast<double>(sd.gate), juce::dontSendNotification);
         veloEncoderLabel_.setText("Gate " + juce::String(sd.gate), juce::dontSendNotification);
@@ -945,7 +995,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
 }
 
 void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
-    const bool shift = juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+    const bool shift = shiftActive();
 
     // Dans un sub : Enc3 = Ancre = la note du pas hôte (le sub transpose avec elle).
     if (inSub_) {
@@ -1004,11 +1054,23 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
         // PIANO ROLL : zoom = octaves visibles, jusqu'à toute la plage MIDI (~11 octaves).
         rollOctaves_ = juce::jlimit(1, 11, rollOctaves_ - dir);
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // HARMONIE : Enc4 = Extensions (–/9/11/13/b9/#9/#11/b13).
-        const auto& prog = proc_.engine().pattern().chordProgression;
-        const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
-        setChordField(2, juce::jlimit(0, 7, harmExtToIndex(ext) + dir));
+        if (shiftActive()) {
+            // ⇧Enc4 = bascule Harmonie ON/OFF (un seul toggle par cran de direction).
+            const auto& ph = proc_.engine().pattern().harmony;
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetPatternHarmony;
+            c.x  = !ph.harmonyEnabled;                          // toggle
+            c.a  = static_cast<uint8_t>(ph.scaleId);            // préserve gamme
+            c.b  = static_cast<uint8_t>(ph.rootPc);             // préserve tonique
+            c.y  = ph.followProgression;                        // préserve suivi progression
+            proc_.controller().postCommand(c);
+        } else {
+            // HARMONIE : Enc4 = Extensions (–/9/11/13/b9/#9/#11/b13).
+            const auto& prog = proc_.engine().pattern().chordProgression;
+            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
+            const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
+            setChordField(2, juce::jlimit(0, 7, harmExtToIndex(ext) + dir));
+        }
     } else {
         // PATTERN/AUTO : Enc4 = sélection de Row (remplace le zoom).
         const int nr = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numRows));
@@ -1061,17 +1123,35 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     recBtn_.setEnabled(true);
     recBtn_.setButtonText(recArmed_ ? "REC●" : "Rec");
     vueBtn_.setEnabled(true);
+    shiftBtn_.setEnabled(true);
+    shiftBtn_.setToggleState(shiftHeld_, juce::dontSendNotification);
 
-    // Oct-/Oct+ ne servent que sur l'onglet PIANO ROLL (octave du clavier).
-    const bool roll = (screenPage_ == PatternScreenModel::Page::PianoRoll);
-    octMinusBtn_.setEnabled(roll);
-    octPlusBtn_.setEnabled(roll);
+    // Suivi du Shift clavier OS : quand l'état effectif (bouton OU touche) change entre deux
+    // frames, on rafraîchit labels/surbrillances/encodeurs pour refléter les secondes fonctions.
+    const bool shiftNow = shiftActive();
+    if (shiftNow != lastShiftActive_) {
+        lastShiftActive_ = shiftNow;
+        applyEncoderConfigForState();
+        configureVeloEncoder();
+        updateKeysForPage();
+    }
 
     const auto& pat = proc_.engine().pattern();
     if (selectedRow_ >= pat.numRows)
         selectedRow_ = juce::jmax(0, static_cast<int>(pat.numRows) - 1);
     if (selectedStep_ >= pat.numSteps)
         selectedStep_ = juce::jmax(0, static_cast<int>(pat.numSteps) - 1);
+
+    // HARMONIE : le curseur de slot hérite de l'état réel de la progression
+    // (miroir du re-clampage de selectedRow_/selectedStep_ ci-dessus). Après un
+    // chargement de projet / switch de pattern qui raccourcit la progression, on
+    // évite qu'il pointe au-delà du dernier slot. La position « len » reste valide
+    // (= slot d'ajout), donc on borne à len et non len-1.
+    {
+        const int progLen = juce::jlimit(0, 32, static_cast<int>(pat.chordProgression.len));
+        if (harmonyCursor_ > progLen)
+            harmonyCursor_ = progLen;
+    }
 
     const bool muted = selectedRow_ < pat.numRows
                        && pat.rows[static_cast<size_t>(selectedRow_)].muted;
@@ -1085,11 +1165,17 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     if (screenPage_ == PatternScreenModel::Page::PianoRoll)
         zoomEncoderLabel_.setText("Zoom " + juce::String(rollOctaves_) + "oct", juce::dontSendNotification);
     else if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        const auto& prog = proc_.engine().pattern().chordProgression;
-        const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
-        zoomEncoderLabel_.setText("Ext " + juce::String(kHarmExtName[juce::jlimit(0, 7, harmExtToIndex(ext))]),
-                                  juce::dontSendNotification);
+        if (shiftActive()) {
+            // ⇧Enc4 = bascule Harmonie ON/OFF.
+            const bool on = proc_.engine().pattern().harmony.harmonyEnabled;
+            zoomEncoderLabel_.setText(juce::String("Harm ") + (on ? "ON" : "OFF"), juce::dontSendNotification);
+        } else {
+            const auto& prog = proc_.engine().pattern().chordProgression;
+            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
+            const int   ext  = (cur < static_cast<int>(prog.len)) ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
+            zoomEncoderLabel_.setText("Ext " + juce::String(kHarmExtName[juce::jlimit(0, 7, harmExtToIndex(ext))]),
+                                      juce::dontSendNotification);
+        }
     } else
         zoomEncoderLabel_.setText("Row " + juce::String(selectedRow_ + 1), juce::dontSendNotification);
 
@@ -1138,6 +1224,26 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.global[static_cast<size_t>(i)].value = formatParamValue(proc_.apvts(), oledParamId(i));
     }
 
+    // Filtre harmonique : tonalité effective (même logique que la section HARMONIE plus bas,
+    // calculée ici en amont car la boucle rows en a besoin pour résoudre la note jouée).
+    // effectiveHarmony() est privé côté core → on recompose root/scale manuellement.
+    const auto& psHarm   = proc_.engine().projectSettings();
+    const auto& phHarm   = pat.harmony;
+    const int   effRootB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterRootPc)
+                                                       : static_cast<int>(phHarm.rootPc);
+    const int   effScaleB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterScaleId)
+                                                        : static_cast<int>(phHarm.scaleId);
+    const bool  harmActive = phHarm.harmonyEnabled;
+    const bool  progActive = phHarm.followProgression && pat.chordProgression.len > 0;
+    const ChordSlot currentChord = pat.chordProgression.current();
+
+    // Durée d'un mesure en µs : mêmes formules que le core (barDurationUs_).
+    // numerator/denominator = taille de mesure (indépendante de numSteps = divisions).
+    const double bpmEff       = (m.bpm > 0.0) ? static_cast<double>(m.bpm) : 120.0;
+    const double usPerQuarter = 60'000'000.0 / bpmEff;
+    const double barUs        = static_cast<double>(pat.numerator) * 4.0 * usPerQuarter
+                                / static_cast<double>(juce::jmax<int>(1, pat.denominator));
+
     for (int r = 0; r < m.numRows; ++r) {
         const auto& row = pat.rows[static_cast<size_t>(r)];
         auto&       dst = m.rows[static_cast<size_t>(r)];
@@ -1146,6 +1252,14 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         dst.channel     = static_cast<int>(row.channel) + 1;
         dst.harmonyMode = static_cast<int>(row.harmonyMode);
         dst.muted       = row.muted;
+        // Libellé musical (1/16, 1/8T, 5:tps…) + durée réelle d'un pas en ms.
+        // Calculs côté éditeur → PatternScreen reste agnostique du core.
+        dst.divLabel    = divisionLabel(n, pat.numerator, pat.denominator);
+        const double stepUs = barUs / static_cast<double>(juce::jmax(1, n));
+        dst.stepMs      = static_cast<int>(stepUs / 1000.0 + 0.5);
+        // Row soumise à l'harmonie : harmonie active globale ET mode != Chromatic.
+        const bool bound = harmActive && row.harmonyMode != RowHarmonyMode::Chromatic;
+        dst.harmonyBound = bound;
         for (int s = 0; s < n; ++s) {
             const auto& sd = row.steps[static_cast<size_t>(s)];
             dst.enabled[static_cast<size_t>(s)]  = sd.enabled;
@@ -1155,6 +1269,16 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             dst.subIdx[static_cast<size_t>(s)]   = (sd.subPatIdx == kNoSubPattern)
                                                        ? static_cast<signed char>(-1)
                                                        : static_cast<signed char>(sd.subPatIdx);
+            if (bound) {
+                const uint8_t pn = harmony::resolveDegreeToMidi(
+                    sd.note, row.harmonyMode, currentChord, progActive,
+                    static_cast<uint8_t>(effScaleB), static_cast<uint8_t>(effRootB));
+                dst.playedNote[static_cast<size_t>(s)] = pn;
+                dst.snapped[static_cast<size_t>(s)]    = (pn != sd.note);
+            } else {
+                dst.playedNote[static_cast<size_t>(s)] = sd.note;
+                dst.snapped[static_cast<size_t>(s)]    = false;
+            }
         }
         const uint8_t raw = proc_.engine().currentStepForRow(static_cast<uint8_t>(r));
         dst.playhead = (playing && raw != 0xFF && raw < n) ? static_cast<int>(raw) : -1;
@@ -1167,6 +1291,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         auto&       sv = m.subs[static_cast<size_t>(i)];
         sv.numSteps = sn;
         sv.relative = sp.relativeToHost;
+        sv.duration = juce::jlimit(1, 64, static_cast<int>(sp.duration));
         for (int s = 0; s < sn; ++s) {
             sv.enabled[static_cast<size_t>(s)] = sp.steps[static_cast<size_t>(s)].enabled;
             sv.note[static_cast<size_t>(s)]    = sp.steps[static_cast<size_t>(s)].note;
@@ -1195,6 +1320,25 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     m.progLen       = juce::jlimit(0, 32, static_cast<int>(prog.len));
     m.progCurrent   = (playing && prog.len > 0) ? static_cast<int>(prog.idx) : -1;
     m.harmonyCursor = juce::jlimit(0, 31, harmonyCursor_);
+
+    // Tonalité effective : effectiveHarmony() est privé côté core → recalcul ici.
+    // followMasterTonality → root/scale = master ; sinon réglages du pattern.
+    const auto& ps     = proc_.engine().projectSettings();
+    const auto& ph     = pat.harmony;
+    const int effRoot  = ph.followMasterTonality ? static_cast<int>(ps.masterRootPc)
+                                                 : static_cast<int>(ph.rootPc);
+    const int effScale = ph.followMasterTonality ? static_cast<int>(ps.masterScaleId)
+                                                 : static_cast<int>(ph.scaleId);
+    m.harmonyRootPc        = juce::jlimit(0, 11, effRoot);
+    m.harmonyScaleId       = juce::jlimit(0, 11, effScale);
+    m.harmonyEnabled       = ph.harmonyEnabled;
+    m.followProgression    = ph.followProgression;
+    m.followMasterTonality = ph.followMasterTonality;
+
+    // Mode harmonique partagé des rows LIÉES (helper unique : exclut Chromatic, -1 = mixte,
+    // B1 par défaut s'il n'y a aucune row liée). Le bandeau "Rows" dérive de rows[r].harmonyMode.
+    m.harmonySharedMode = sharedHarmonyMode();
+
     for (int i = 0; i < m.progLen; ++i) {
         const auto& cs = prog.slots[static_cast<size_t>(i)];
         auto&       cv = m.chord[static_cast<size_t>(i)];
@@ -1203,6 +1347,10 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         cv.extensions    = cs.extensions;
         cv.bassOffset    = cs.bassOffset;
         cv.durationSlots = cs.durationSlots;
+        cv.rootPc        = static_cast<int>(
+            harmony::degreePitchClass(static_cast<uint8_t>(cs.degree),
+                                      static_cast<uint8_t>(effScale),
+                                      static_cast<uint8_t>(effRoot)));
     }
 
     // Page AUTO : P-locks CC de la row sélectionnée, slot actif.
@@ -1316,10 +1464,20 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
 
         case PatternScreenModel::Page::Harmony: {
             clearWhites();
-            int deg = -1;
-            if (harmonyCursor_ < static_cast<int>(pat.chordProgression.len))
-                deg = pat.chordProgression.slots[static_cast<size_t>(juce::jlimit(0, 31, harmonyCursor_))].degree;
-            piano_.setPlayheadStep((deg >= 1 && deg <= 7) ? deg - 1 : -1);
+            if (shiftActive()) {
+                // ⇧ : surligne les blanches des rows LIÉES (mode != Chromatic) ; pas de degré.
+                const int nr = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
+                for (int i = 0; i < nr && i < 16; ++i)
+                    piano_.whiteKey(i).setToggleState(
+                        pat.rows[static_cast<size_t>(i)].harmonyMode != RowHarmonyMode::Chromatic,
+                        juce::dontSendNotification);
+                piano_.setPlayheadStep(-1);
+            } else {
+                int deg = -1;
+                if (harmonyCursor_ < static_cast<int>(pat.chordProgression.len))
+                    deg = pat.chordProgression.slots[static_cast<size_t>(juce::jlimit(0, 31, harmonyCursor_))].degree;
+                piano_.setPlayheadStep((deg >= 1 && deg <= 7) ? deg - 1 : -1);
+            }
             break;
         }
 
@@ -1482,6 +1640,27 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
             break;
         }
         case PatternScreenModel::Page::Harmony: {
+            // ⇧ + blanche N : cycle l'état harmonique de la row N (les blanches ↔ rows 0..15).
+            // Ordre : Chromatic(délié) → A → B1 → B2 → Chromatic.
+            if (shiftActive()) {
+                const int hr = index;   // blanche index ↔ row index
+                if (hr >= static_cast<int>(pat.numRows)) return;   // pas de row N
+                const int rm = static_cast<int>(pat.rows[static_cast<size_t>(hr)].harmonyMode);
+                int newMode;
+                switch (rm) {
+                    case static_cast<int>(RowHarmonyMode::Chromatic): newMode = 0; break;  // → A
+                    case 0: newMode = 1; break;                                            // A → B1
+                    case 1: newMode = 2; break;                                            // B1 → B2
+                    default: newMode = static_cast<int>(RowHarmonyMode::Chromatic); break; // B2 → Chromatic
+                }
+                SequencerCommand c;
+                c.id = SequencerCommandId::SetRowHarmonyMode;
+                c.a  = static_cast<uint8_t>(hr);
+                c.b  = static_cast<uint8_t>(newMode);
+                proc_.controller().postCommand(c);
+                buildScreenModel();
+                return;
+            }
             if (index >= 7) return;          // blanches 1..7 = degrés
             setChordField(0, index + 1);     // pose le degré du slot
             if (recArmed_)                   // REC = step-record d'accords : avance au slot suivant
@@ -1557,8 +1736,23 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             static const char* kR[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
             static const char* kQ[12] = {"maj", "m", "dim", "aug", "7", "maj7",
                                          "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
-            for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);
-            for (int i = 7; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
+            static const char* kMode[4] = {"A", "B1", "B2", "CHR"};
+            if (shiftActive()) {
+                // ⇧ : les blanches 1..numRows = rows à cycler. Libellé "Rn:mode" (CHR = délié).
+                const auto& pat = proc_.engine().pattern();
+                const int   nr  = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
+                for (int i = 0; i < 16; ++i) {
+                    if (i < nr) {
+                        const int m = juce::jlimit(0, 3, static_cast<int>(pat.rows[static_cast<size_t>(i)].harmonyMode));
+                        piano_.setWhiteKeyLabel(i, "R" + juce::String(i + 1) + ":" + kMode[m]);
+                    } else {
+                        piano_.setWhiteKeyLabel(i, {});   // au-delà de numRows : neutre
+                    }
+                }
+            } else {
+                for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);
+                for (int i = 7; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
+            }
             for (int i = 0; i < 11; ++i) piano_.setBlackKeyLabel(i, kQ[i]);
             break;
         }

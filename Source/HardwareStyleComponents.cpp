@@ -46,6 +46,14 @@ const juce::Colour kPlayhead     {0xfff7a13a};
 const juce::Colour kSelRowBg     {0x2240e090};
 const juce::Colour kMutedText    {0xff8a5a5a};
 
+/// Teinte par pitch-class (0..11) : 12 couleurs distinctes, saturées mais non criardes,
+/// lisibles sur le fond sombre TFT. Les cellules tombant sur la MÊME note jouée partagent
+/// donc la même teinte → la « zone chromatique » du filtre harmonique se lit d'un coup d'œil.
+juce::Colour pitchClassColour(int pc) {
+    const int p = ((pc % 12) + 12) % 12;
+    return juce::Colour::fromHSV(static_cast<float>(p) / 12.0f, 0.55f, 0.9f, 1.0f);
+}
+
 // Géométrie de la page PIANO ROLL, partagée par le rendu et le hit-test (cohérence garantie).
 struct PrLayout {
     bool                   valid        = false;
@@ -109,6 +117,23 @@ const char* romanNumeral(int degree) {
     return kR[juce::jlimit(0, 6, degree - 1)];
 }
 
+// Noms de gamme lisibles (miroir des 12 gammes du ScaleBank ; PAS d'include du core ici).
+const char* kScaleNames[12] = {
+    "major", "natural minor", "harmonic minor", "melodic minor",
+    "dorian", "phrygian", "lydian", "mixolydian",
+    "pent major", "pent minor", "blues", "chromatic"};
+
+const char* scaleNameShort(int scaleId) {
+    return kScaleNames[juce::jlimit(0, 11, scaleId)];
+}
+
+// Nom d'une note à partir de sa pitch-class (0..11), sans octave.
+juce::String pitchClassName(int pc) {
+    static const char* kN[12] = {"C", "C#", "D", "D#", "E", "F",
+                                 "F#", "G", "G#", "A", "A#", "B"};
+    return juce::String(kN[((pc % 12) + 12) % 12]);
+}
+
 juce::String extensionsShort(int bits) {
     struct { int bit; const char* name; } kE[] = {
         {1 << 0, "9"}, {1 << 1, "11"}, {1 << 2, "13"},
@@ -120,7 +145,7 @@ juce::String extensionsShort(int bits) {
 }
 
 struct HarmLayout {
-    juce::Rectangle<float> slotBand, detail;
+    juce::Rectangle<float> info, slotBand, rowsBand, detail, hint;  // info / slots / Rows / détail / hint
     float slotW = 10.0f;
     int   slotsToShow = 1;
 };
@@ -128,9 +153,18 @@ struct HarmLayout {
 HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle<float> body) {
     HarmLayout L;
     auto b      = body;
-    L.slotBand  = b.removeFromTop(juce::jmin(90.0f, b.getHeight() * 0.6f));
-    b.removeFromTop(8.0f);
-    L.detail    = b.removeFromTop(22.0f);
+    // En-tête : 3 lignes d'info (Key / Harmonie / Suivi) réservées au-dessus des slots.
+    L.info      = b.removeFromTop(juce::jmin(48.0f, b.getHeight() * 0.34f));
+    b.removeFromTop(4.0f);
+    // Bas : hint (ligne fine) puis détail du slot, réservés AVANT la bande de slots.
+    L.hint      = b.removeFromBottom(14.0f);
+    b.removeFromBottom(2.0f);
+    L.detail    = b.removeFromBottom(20.0f);
+    b.removeFromBottom(4.0f);
+    // Bande "Rows" (marqueurs lié/délié) juste sous les slots.
+    L.rowsBand  = b.removeFromBottom(16.0f);
+    b.removeFromBottom(4.0f);
+    L.slotBand  = b;   // le reste = bande de slots d'accords
     L.slotsToShow = juce::jlimit(1, 32, juce::jmax(m.progLen, m.harmonyCursor + 1));
     L.slotW  = L.slotBand.getWidth() / static_cast<float>(L.slotsToShow);
     return L;
@@ -267,11 +301,13 @@ void PatternScreen::paint(juce::Graphics& g) {
         juce::String crumb;
         if (model_.inSub) {
             const juce::String arrow(juce::CharPointer_UTF8(" \xe2\x96\xb8 "));   // ▸
-            const bool rel = (model_.subEditIdx >= 0 && model_.subEditIdx < 16)
-                                 && model_.subs[static_cast<size_t>(model_.subEditIdx)].relative;
+            const bool valid = (model_.subEditIdx >= 0 && model_.subEditIdx < 16);
+            const bool rel   = valid && model_.subs[static_cast<size_t>(model_.subEditIdx)].relative;
+            const int  dur   = valid ? model_.subs[static_cast<size_t>(model_.subEditIdx)].duration : 1;
             crumb = "R" + juce::String(model_.subHostRow + 1) + arrow
                   + "P" + juce::String(model_.subHostStep + 1) + arrow
-                  + "SUB " + (rel ? "rel" : "abs");
+                  + "SUB " + (rel ? "rel" : "abs")
+                  + (dur > 1 ? (" x" + juce::String(dur)) : juce::String());
         } else if (model_.page == PatternScreenModel::Page::Pattern
             || model_.page == PatternScreenModel::Page::PianoRoll
             || model_.page == PatternScreenModel::Page::Auto) {
@@ -290,7 +326,7 @@ void PatternScreen::paint(juce::Graphics& g) {
         g.setColour(kRowLabel);
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
         g.drawText(crumb, header.removeFromLeft(120.0f), juce::Justification::centredLeft);
-        juce::String right = glyph + "  " + juce::String(model_.bpm, 1) + " BPM   "
+        juce::String right = glyph + "  " + juce::String(model_.bpm, 1) + " BPM   Mesure "
                              + juce::String(model_.tsNum) + "/" + juce::String(model_.tsDen);
         g.drawText(right, header, juce::Justification::centredRight);
     }
@@ -400,7 +436,14 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
 
                 // Luminosité de la cellule active ∝ vélocité (feedback d'un coup d'œil).
                 const float velA = 0.45f + 0.55f * (static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
-                g.setColour(on ? (row.muted ? kCellOn.withAlpha(0.30f) : kCellOn.withAlpha(velA)) : kCellOff);
+                if (on && !row.muted && row.harmonyBound) {
+                    // Row soumise à l'harmonie : teinte ∝ pitch-class de la note JOUÉE (après filtre)
+                    // → les cellules d'une même « zone chromatique » partagent la même couleur.
+                    g.setColour(pitchClassColour(row.playedNote[static_cast<size_t>(s)] % 12)
+                                    .withMultipliedBrightness(velA));
+                } else {
+                    g.setColour(on ? (row.muted ? kCellOn.withAlpha(0.30f) : kCellOn.withAlpha(velA)) : kCellOff);
+                }
                 g.fillRoundedRectangle(inner, 2.0f);
                 if (ph) {
                     g.setColour(kPlayhead);
@@ -414,20 +457,40 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                 if (subI >= 0 && subI < 16 && model_.subs[static_cast<size_t>(subI)].numSteps > 0) {
                     const auto& sv  = model_.subs[static_cast<size_t>(subI)];
                     const int   sn  = juce::jlimit(1, 16, sv.numSteps);
-                    const float mw  = inner.getWidth() / static_cast<float>(sn);
+                    // Span : le sub s'étale sur sv.duration pas hôtes à partir de ce pas,
+                    // clampé au nombre de pas restants de la row (pas de débordement).
+                    const int   span = juce::jlimit(1, juce::jmax(1, n - s),
+                                                    juce::jmax(1, sv.duration));
+                    // Largeur réelle couverte = span cellules-hôtes (espace zoomé).
+                    const float spanW = cellWz * static_cast<float>(span) - 2.0f * cellPad;
+                    juce::Rectangle<float> spanInner(inner.getX(), inner.getY(),
+                                                     juce::jmax(inner.getWidth(), spanW), inner.getHeight());
+                    const float mw  = spanInner.getWidth() / static_cast<float>(sn);
                     for (int k = 0; k < sn; ++k) {
-                        juce::Rectangle<float> mc(inner.getX() + static_cast<float>(k) * mw,
-                                                  inner.getY(), mw, inner.getHeight());
+                        juce::Rectangle<float> mc(spanInner.getX() + static_cast<float>(k) * mw,
+                                                  spanInner.getY(), mw, spanInner.getHeight());
                         g.setColour(sv.enabled[static_cast<size_t>(k)] ? kScreenBg : kCellOn.withAlpha(0.25f));
                         g.fillRect(mc.reduced(0.6f, 1.0f));
                     }
-                    g.setColour(kPlayhead);   // liseré ambre = « ce pas a un sub »
-                    g.drawRoundedRectangle(inner.reduced(0.4f), 2.0f, 1.2f);
+                    g.setColour(kPlayhead);   // liseré ambre = « ce pas a un sub » (englobe le span)
+                    g.drawRoundedRectangle(spanInner.reduced(0.4f), 2.0f, 1.2f);
                 } else if (showNote && on) {
                     g.setColour(kScreenBg);
                     g.setFont(juce::Font(juce::FontOptions().withHeight(juce::jmin(11.0f, rowH_ - 6.0f))));
-                    g.drawText(midiNoteShort(row.note[static_cast<size_t>(s)]), inner,
+                    // Note RÉSOLUE (ce qui sonne) : sur une row liée, c'est la note tirée par le filtre.
+                    g.drawText(midiNoteShort(row.playedNote[static_cast<size_t>(s)]), inner,
                                juce::Justification::centred);
+                }
+                // Marqueur « snappé » : la note stockée était hors filtre (tirée vers une note autorisée).
+                // Petit triangle discret au coin supérieur gauche ; omis si la cellule est trop étroite.
+                if (on && row.snapped[static_cast<size_t>(s)] && cellWz >= 10.0f) {
+                    juce::Path tri;
+                    const float tx = inner.getX() + 1.0f;
+                    const float ty = inner.getY() + 1.0f;
+                    const float ts = juce::jmin(4.0f, inner.getWidth() * 0.4f);
+                    tri.addTriangle(tx, ty, tx + ts, ty, tx, ty + ts);
+                    g.setColour(kPlayhead.withAlpha(0.85f));
+                    g.fillPath(tri);
                 }
                 // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré clair.
                 if (r == model_.selectedRow && s == model_.selectedStep) {
@@ -437,12 +500,20 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
             }
         }
 
-        // Infos row (droite) : N, canal, mode harmonique, mute.
-        juce::String info = "N" + juce::String(n) + " c" + juce::String(row.channel) + " "
-                            + harmonyModeShort(row.harmonyMode);
+        // Infos row (droite) : N · valeur musicale · durée d'un pas (ms)  canal mode [mute].
+        // N = divisions de la mesure ; la signature (Mesure x/y, en-tête) en est indépendante.
+        juce::String info = "N" + juce::String(n);
+        if (row.divLabel.isNotEmpty())
+            info += juce::String::fromUTF8(" \xc2\xb7 ") + row.divLabel;   // « · »
+        if (row.stepMs > 0)
+            info += juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(row.stepMs) + "ms";
+        info += "  c" + juce::String(row.channel) + " " + harmonyModeShort(row.harmonyMode);
+        if (row.muted)
+            info += " M";
         g.setColour(row.muted ? kMutedText : kRowLabel);
-        g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
-        g.drawText(row.muted ? (info + " M") : info,
+        // Police réduite quand l'info est enrichie (zone infoW_ étroite ~96px).
+        g.setFont(juce::Font(juce::FontOptions().withHeight(row.divLabel.isNotEmpty() ? 9.5f : 11.0f)));
+        g.drawText(info,
                    juce::Rectangle<float>(stripX + stripW + 4.0f, y, infoW_ - 4.0f, rowH_),
                    juce::Justification::centredLeft);
     }
@@ -646,7 +717,50 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
 void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     const HarmLayout L = computeHarmLayout(model_, bodyArea_);
 
-    // Bande de slots d'accords : chiffrage romain + qualité, extensions/bass dessous.
+    // En-tête : la vue hérite et affiche la tonalité + le suivi réels du pattern.
+    const juce::String check(juce::CharPointer_UTF8("\xe2\x9c\x93"));  // ✓
+    const juce::String dash (juce::CharPointer_UTF8("\xe2\x80\x94"));  // —
+    const juce::String arrow(juce::CharPointer_UTF8(" \xe2\x96\xb8 "));// ▸
+    {
+        auto info = L.info;
+        const float lineH = info.getHeight() / 3.0f;
+
+        // Ligne A : tonalité effective.
+        g.setColour(kHeaderText);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
+        g.drawText("Key: " + pitchClassName(model_.harmonyRootPc) + " " + scaleNameShort(model_.harmonyScaleId),
+                   info.removeFromTop(lineH), juce::Justification::centredLeft);
+
+        // Ligne B : mode harmonique partagé + nombre de rows liées (mode != Chromatic).
+        g.setColour(kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+        juce::String modeLine;
+        if (!model_.harmonyEnabled) {
+            modeLine = "Harmonie: OFF (notes brutes)";
+        } else {
+            int linked = 0;
+            const int nr = juce::jlimit(0, 16, model_.numRows);
+            for (int r = 0; r < nr; ++r)
+                if (model_.rows[static_cast<size_t>(r)].harmonyMode != 3)   // 3 = Chromatic
+                    ++linked;
+            const juce::String modeName = (model_.harmonySharedMode < 0)
+                                              ? juce::String("mixte")
+                                              : juce::String(harmonyModeShort(model_.harmonySharedMode));
+            juce::String suffix;
+            if (linked == 0)          suffix = "aucune row liee";
+            else if (linked == nr)    suffix = "toutes les rows";
+            else                      suffix = juce::String(linked) + "/" + juce::String(nr) + " rows liees";
+            modeLine = "Harmonie: " + modeName + arrow + suffix;
+        }
+        g.drawText(modeLine, info.removeFromTop(lineH), juce::Justification::centredLeft);
+
+        // Ligne C : suivi progression / tonalité.
+        g.drawText("Suivi: progression " + (model_.followProgression ? check : dash)
+                       + "   tonalite " + (model_.followMasterTonality ? check : dash),
+                   info, juce::Justification::centredLeft);
+    }
+
+    // Bande de slots d'accords (chips) : romain+qualité en haut, nom d'accord réel en bas.
     for (int i = 0; i < L.slotsToShow; ++i) {
         juce::Rectangle<float> chip(L.slotBand.getX() + static_cast<float>(i) * L.slotW,
                                     L.slotBand.getY(), L.slotW, L.slotBand.getHeight());
@@ -661,19 +775,19 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         g.drawRoundedRectangle(inner.reduced(0.8f), 3.0f, cur ? 1.5f : 0.6f);
 
         if (used) {
-            const auto&  c     = model_.chord[static_cast<size_t>(i)];
-            juce::String label = juce::String(romanNumeral(c.degree)) + chordQualityShort(c.quality);
-            auto         top   = inner;
-            auto         lower = top.removeFromBottom(inner.getHeight() * 0.38f);
+            const auto&  c         = model_.chord[static_cast<size_t>(i)];
+            // Haut : chiffrage romain + qualité ; bas : nom d'accord réel (note + qualité).
+            juce::String roman     = juce::String(romanNumeral(c.degree)) + chordQualityShort(c.quality);
+            juce::String chordName = pitchClassName(c.rootPc) + chordQualityShort(c.quality);
+
+            auto top   = inner;
+            auto lower = top.removeFromBottom(inner.getHeight() * 0.42f);
             g.setColour(sel ? kHeaderText : kRowLabel);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(16.0f).withStyle("Bold")));
-            g.drawText(label, top, juce::Justification::centred);
-            juce::String sub = extensionsShort(c.extensions);
-            if (c.bassOffset != 0)
-                sub += (sub.isEmpty() ? juce::String() : juce::String(" ")) + "/" + juce::String(c.bassOffset);
-            g.setColour(kRowLabel);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
-            g.drawText(sub, lower, juce::Justification::centred);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(15.0f).withStyle("Bold")));
+            g.drawText(roman, top, juce::Justification::centred);
+            g.setColour(sel ? kCellOn : kRowLabel);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
+            g.drawText(chordName, lower, juce::Justification::centred);
         } else {
             g.setColour(kCellGrid);
             g.setFont(juce::Font(juce::FontOptions().withHeight(18.0f)));
@@ -681,13 +795,14 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         }
     }
 
-    // Ligne de détail du slot sélectionné.
+    // Ligne de détail du slot sélectionné : inclut le nom d'accord réel.
     juce::String detail;
     if (model_.harmonyCursor < model_.progLen) {
-        const auto&  c  = model_.chord[static_cast<size_t>(model_.harmonyCursor)];
-        const juce::String ext = extensionsShort(c.extensions);
+        const auto&  c    = model_.chord[static_cast<size_t>(model_.harmonyCursor)];
+        const juce::String ext  = extensionsShort(c.extensions);
+        const juce::String name = pitchClassName(c.rootPc) + chordQualityShort(c.quality);
         detail = "Slot " + juce::String(model_.harmonyCursor + 1) + "/" + juce::String(model_.progLen)
-               + "   " + romanNumeral(c.degree) + " " + chordQualityShort(c.quality)
+               + "   " + romanNumeral(c.degree) + chordQualityShort(c.quality) + " " + name
                + "   ext " + (ext.isEmpty() ? juce::String("-") : ext)
                + "   bass " + juce::String(c.bassOffset) + "   duree " + juce::String(c.durationSlots);
     } else {
@@ -696,6 +811,31 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     g.setColour(kRowLabel);
     g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
     g.drawText(detail, L.detail, juce::Justification::centredLeft);
+
+    // Bande "Rows" : chaque row affiche son propre mode (A/B1/B2) ou ○ si Chromatic (délié).
+    {
+        const juce::String ring (juce::CharPointer_UTF8("\xe2\x97\x8b"));  // ○ creux = délié
+        const int nr   = juce::jlimit(0, 16, model_.numRows);
+        const int cap  = juce::jmin(nr, 12);   // abrège au-delà de ~12 pour tenir en largeur
+        juce::String rowsLine = "Rows ";
+        for (int r = 0; r < cap; ++r) {
+            const int m = model_.rows[static_cast<size_t>(r)].harmonyMode;  // 0=A 1=B1 2=B2 3=Chromatic
+            const juce::String tag = (m == 3) ? ring : juce::String(harmonyModeShort(m));
+            rowsLine += "R" + juce::String(r + 1) + ":" + tag + "  ";
+        }
+        if (cap < nr) rowsLine += juce::String(juce::CharPointer_UTF8("\xe2\x80\xa6"));   // …
+        g.setColour(kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
+        g.drawText(rowsLine, L.rowsBand, juce::Justification::centredLeft);
+    }
+
+    // Hint bas (ligne fine dédiée) : raccourcis Shift de la Vue HARMONIE.
+    g.setColour(kCellGrid);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
+    g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7"))
+                   + "+blanche N : cycle mode row N (CHR/A/B1/B2)   "
+                   + juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7")) + "Enc4 : Harmonie ON/OFF",
+               L.hint, juce::Justification::centredLeft);
 }
 
 void PatternScreen::paintAutoPage(juce::Graphics& g) {

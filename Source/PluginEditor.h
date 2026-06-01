@@ -50,10 +50,18 @@ private:
     juce::TextButton recBtn_;
     juce::TextButton vueBtn_;
     juce::TextButton exportBtn_;
-    juce::TextButton octMinusBtn_;
-    juce::TextButton octPlusBtn_;
+    juce::TextButton shiftBtn_;
     juce::TextButton muteBtn_;
     std::unique_ptr<juce::FileChooser> fileChooser_;
+
+    // Shift logiciel (bouton, toggle) OU touche Shift clavier OS : les deux activent
+    // les secondes fonctions (cf. shiftActive()). updateKeysForPage() est rappelée dès
+    // que l'état change (onClick du bouton + suivi clavier en timerCallback).
+    bool shiftHeld_       = false;   // bouton Shift maintenu (toggle)
+    bool lastShiftActive_ = false;   // suivi inter-frames pour le Shift clavier OS
+    bool shiftActive() const {
+        return shiftHeld_ || juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+    }
 
     void launchExportFlow();
     void shiftKeyboardOctave(int delta);
@@ -108,6 +116,7 @@ private:
     // Enc1=Degré (Shift=Bass), Enc3=Qualité (Shift=Durée), Enc4=Extensions, Enc2=Slot.
     int harmonyCursor_ = 0;
     void setChordField(int field, int value);   // field 0=deg 1=qual 2=ext 3=bass 4=dur
+    int  sharedHarmonyMode() const;             // mode commun aux rows liées (-1 = mixte) — affichage seul
 
     // Page AUTO : slot de P-lock actif, champ (0=Valeur 1=CC#), CC# par défaut pour nouvelles écritures.
     int  autoSlot_       = 0;
