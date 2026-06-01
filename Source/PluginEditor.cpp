@@ -244,6 +244,37 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         c.f  = static_cast<uint8_t>(editBar_);
         proc_.controller().postCommand(c);
     };
+    // DRILL-IN (strip de sous-pas) : clic souris = sélectionne + toggle le sous-pas
+    // (miroir de onWhiteKey en mode sub PATTERN).
+    screen_.onSubStepToggled = [this](int subStep) {
+        if (!inSub_) return;
+        const int subIdx = activeSubIdx();
+        if (subIdx < 0) return;
+        const auto& pat = proc_.engine().pattern();
+        const int   sn  = juce::jlimit(1, 16, static_cast<int>(pat.subPatterns[static_cast<size_t>(subIdx)].numSteps));
+        if (subStep < 0 || subStep >= sn) return;
+        subStep_ = subStep;
+        SequencerCommand c;
+        c.id = SequencerCommandId::ToggleSubStep;
+        c.a  = static_cast<uint8_t>(subIdx);
+        c.b  = static_cast<uint8_t>(subStep);
+        proc_.controller().postCommand(c);
+        applyEncoderConfigForState();
+        buildScreenModel();
+    };
+    // DRILL-IN (sub-roll) : clic souris = pose une hauteur absolue sur le sous-pas
+    // (miroir de onWhiteKey en mode sub ROLL ; postSubStepPitch gère relatif/absolu).
+    screen_.onSubNoteSet = [this](int subStep, int note) {
+        if (!inSub_) return;
+        const int subIdx = activeSubIdx();
+        if (subIdx < 0) return;
+        const auto& pat = proc_.engine().pattern();
+        const int   sn  = juce::jlimit(1, 16, static_cast<int>(pat.subPatterns[static_cast<size_t>(subIdx)].numSteps));
+        if (subStep < 0 || subStep >= sn) return;
+        subStep_ = subStep;
+        postSubStepPitch(subStep, juce::jlimit(0, 127, note));
+        applyEncoderConfigForState();
+    };
 
     // Ordre d’empilement : arrière-plan → premier plan (transport au-dessus).
     addAndMakeVisible(piano_);

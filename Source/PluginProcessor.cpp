@@ -78,7 +78,6 @@ void NidmiSeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     sampleRate_        = sampleRate;
     internalTimeUs_    = 0;
     wasHostPlaying_    = false;
-    prevEngineState_   = SequencerEngine::State::STOPPED;
     lastFollowHost_    = true;
     lastUseHostBpm_    = true;
     lastUseMidiClock_  = false;
@@ -274,7 +273,6 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         internalTimeUs_  = 0;
         globalSamples_     = 0;
         lastMidiTickUs_  = 0;
-        prevEngineState_ = engine_.state();
         midiClock_.reset();
         clock_.reset(0);
     }
@@ -347,12 +345,12 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         internalTimeUs_ += blockUs;
         tickTimeUs = internalTimeUs_;
     } else {
+        // Base de temps interne MONOTONE : ne jamais remettre internalTimeUs_ à 0
+        // sur une transition STOPPED->PLAYING. La commande Play est drainée plus bas
+        // à cmdTimeUs et ancre barStartUs_ = cmdTimeUs ; un reset ici rendrait
+        // barElapsed = nowUs - barStartUs_ négatif au bloc suivant (BUG : dernier pas figé un tour).
         cmdTimeUs = internalTimeUs_;
-        const auto st = engine_.state();
-        if (st == SequencerEngine::State::PLAYING && prevEngineState_ != SequencerEngine::State::PLAYING)
-            internalTimeUs_ = 0;
-        prevEngineState_ = st;
-        if (st == SequencerEngine::State::PLAYING)
+        if (engine_.state() == SequencerEngine::State::PLAYING)
             internalTimeUs_ += blockUs;
         tickTimeUs = internalTimeUs_;
     }

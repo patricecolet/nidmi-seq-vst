@@ -106,7 +106,6 @@ private:
 
     bool   wasHostPlaying_ = false;
     int64_t internalTimeUs_ = 0;
-    SequencerEngine::State prevEngineState_ = SequencerEngine::State::STOPPED;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NidmiSeqAudioProcessor)
 };

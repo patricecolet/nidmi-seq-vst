@@ -558,10 +558,13 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
 
                 // Luminosité de la cellule active ∝ vélocité (feedback d'un coup d'œil).
                 const float velA = 0.45f + 0.55f * (static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
+                // Atténuation visuelle d'un pas-hôte DÉSACTIVÉ qui porte un sub : sub + fond grisés
+                // pour qu'on distingue clairement « ce pas (et son sub) ne joue pas » d'un pas activé.
+                const float subAlpha = (hasSub && !on) ? 0.30f : 1.0f;
                 if (hasSub) {
                     // Sub : fond sombre ; les sous-pas verts se dessinent dessus (les écarts entre
-                    // eux laissent voir ce fond = séparateurs).
-                    g.setColour(kCellOff);
+                    // eux laissent voir ce fond = séparateurs). Désactivé = fond encore plus atténué.
+                    g.setColour(kCellOff.withMultipliedAlpha(subAlpha));
                 } else if (on && !row.muted && row.harmonyBound) {
                     // Row soumise à l'harmonie : teinte ∝ pitch-class de la note JOUÉE (après filtre)
                     // → les cellules d'une même « zone chromatique » partagent la même couleur.
@@ -589,7 +592,8 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     for (int k = 0; k < sn; ++k) {
                         juce::Rectangle<float> mc(fill.getX() + static_cast<float>(k) * mw,
                                                   fill.getY(), mw, fill.getHeight());
-                        g.setColour(sv.enabled[static_cast<size_t>(k)] ? kCellOn : kCellGrid);
+                        g.setColour((sv.enabled[static_cast<size_t>(k)] ? kCellOn : kCellGrid)
+                                        .withMultipliedAlpha(subAlpha));
                         g.fillRect(mc.reduced(0.8f, 1.5f));   // l'écart = séparateur (fond sombre derrière)
                     }
                 } else if (showNote && on) {
@@ -616,7 +620,7 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                 // pastille. Coin sup. droit de l'étendue du sub. Vert = REL, ambre = ABS.
                 if (hasSub) {
                     const bool rel = model_.subs[static_cast<size_t>(subI)].relative;
-                    const juce::Colour bg = (rel ? kCellOn : kPlayhead).withAlpha(0.92f);
+                    const juce::Colour bg = (rel ? kCellOn : kPlayhead).withAlpha(0.92f * subAlpha);
                     const float fw = fill.getWidth();
                     if (fw >= 22.0f) {
                         juce::Rectangle<float> badge(fill.getRight() - 21.0f, fill.getY() + 1.0f, 20.0f, 9.0f);
@@ -1177,6 +1181,56 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         const int t = tabAtX(x);
         if (t >= 0 && onTabSelected)
             onTabSelected(t);
+        return;
+    }
+
+    // DRILL-IN (édition d'un subpattern) : court-circuite le hit-test normal des pages.
+    // Le rendu a deux variantes : strip de sous-pas (PATTERN-sub) et sub-roll (ROLL-sub).
+    if (model_.inSub) {
+        if (model_.subEditIdx < 0 || model_.subEditIdx >= 16)
+            return;
+        const auto& sv = model_.subs[static_cast<size_t>(model_.subEditIdx)];
+        const int   sn = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
+
+        if (model_.page == PatternScreenModel::Page::PianoRoll) {
+            // SUB-ROLL : clic = pose la hauteur (lane) sur le sous-pas (colonne). Géométrie
+            // recalculée à l'identique de paintSubRoll (plot / cellW / laneH / topNote).
+            auto plot = bodyArea_.withTrimmedLeft(26.0f).reduced(2.0f);
+            if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f || !plot.contains(x, y))
+                return;
+            const float laneH   = juce::jlimit(7.0f, 16.0f, plot.getHeight() / 24.0f);
+            const int   visible = juce::jmax(1, static_cast<int>(plot.getHeight() / laneH));
+            auto displayPitch = [&](int k) {
+                return sv.relative ? juce::jlimit(0, 127, model_.subHostNote
+                                                    + (static_cast<int>(sv.note[static_cast<size_t>(k)]) - 64))
+                                   : static_cast<int>(sv.note[static_cast<size_t>(k)]);
+            };
+            int center = sv.relative ? model_.subHostNote : 60;
+            if (!sv.relative) {
+                int sum = 0, cnt = 0;
+                for (int k = 0; k < sn; ++k)
+                    if (sv.enabled[static_cast<size_t>(k)]) { sum += displayPitch(k); ++cnt; }
+                if (cnt) center = sum / cnt;
+            }
+            const int   low     = juce::jlimit(0, juce::jmax(0, 127 - (visible - 1)), center - visible / 2);
+            const int   topNote = low + visible - 1;
+            const float cellW   = plot.getWidth() / static_cast<float>(sn);
+            const int   k    = juce::jlimit(0, sn - 1, static_cast<int>((x - plot.getX()) / cellW));
+            const int   lane = juce::jlimit(0, visible - 1, static_cast<int>((y - plot.getY()) / laneH));
+            const int   note = juce::jlimit(0, 127, topNote - lane);
+            if (onSubNoteSet)
+                onSubNoteSet(k, note);
+        } else if (model_.page == PatternScreenModel::Page::Pattern) {
+            // STRIP : clic = sélectionne + toggle le sous-pas. Géométrie identique au rendu
+            // (area = bodyArea_.reduced(4) ; cw = largeur/sn).
+            auto area = bodyArea_.reduced(4.0f);
+            if (area.getWidth() <= 0.0f || !area.contains(x, y))
+                return;
+            const float cw = area.getWidth() / static_cast<float>(sn);
+            const int   k  = juce::jlimit(0, sn - 1, static_cast<int>((x - area.getX()) / cw));
+            if (onSubStepToggled)
+                onSubStepToggled(k);
+        }
         return;
     }
 

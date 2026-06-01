@@ -144,6 +144,8 @@ public:
     std::function<void(int field)>               onAutoField;     // AUTO : champ (Valeur/CC#)
     std::function<void(int step, int value)>     onAutoValueSet;  // AUTO : valeur d'un pas (clic lane)
     std::function<void(int bar)>                 onMeasureSelected; // PATTERN : clic sur le bandeau de mesures
+    std::function<void(int subStep)>             onSubStepToggled;  // DRILL-IN (strip) : sélectionne + toggle un sous-pas
+    std::function<void(int subStep, int note)>   onSubNoteSet;      // DRILL-IN (sub-roll) : pose une hauteur sur un sous-pas
 
     static const char* chordQualityShort(int quality);
 
