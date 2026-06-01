@@ -111,6 +111,7 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
                 st.setProperty("sub", sd.subPatIdx, nullptr);
                 st.setProperty("ac", sd.accent ? 1 : 0, nullptr);
                 st.setProperty("sw", sd.swingEnable ? 1 : 0, nullptr);
+                st.setProperty("span", sd.span, nullptr);   // note longue / sub étalé (1 = normal)
                 // P-locks CC : un enfant "CC" par slot actif.
                 for (uint8_t k = 0; k < kMaxCCLocksPerStep; ++k) {
                     if (sd.ccLocks[k].ccNumber == kNoCCLock) continue;
@@ -444,6 +445,16 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                     c.a  = r;
                     c.b  = s;
                     c.c  = subNew;
+                    c.f  = bar;
+                    SequencerCommandApi::dispatch(engine, c, nowUs);
+                }
+                // Span (note longue / sub étalé). Absent => 1 (rétrocompat ancien projet).
+                const int span = juce::jlimit(1, 64, static_cast<int>(st.getProperty("span", 1)));
+                if (span > 1) {
+                    c.id = SequencerCommandId::SetStepSpan;
+                    c.a  = r;
+                    c.b  = s;
+                    c.c  = static_cast<uint8_t>(span);
                     c.f  = bar;
                     SequencerCommandApi::dispatch(engine, c, nowUs);
                 }

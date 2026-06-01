@@ -24,6 +24,7 @@ struct PatternScreenModel {
         unsigned char velocity[64] = {};    // vélocité par pas (0..127)
         unsigned char gate[64]    = {};     // gate par pas (1..100 %)
         signed char   subIdx[64]  = {};     // index du subpattern déclenché par ce pas (-1 = aucun)
+        unsigned char span[64]    = {};     // nb de pas hôtes couverts par ce pas (1 = normal ; >1 = note longue / sub étalé)
         unsigned char playedNote[64] = {};  // note réellement émise après filtre harmonique (= note si row libre)
         bool          snapped[64]    = {};  // true si playedNote != note (note stockée hors filtre, tirée par l'harmonie)
         bool          harmonyBound   = false; // row soumise à l'harmonie (mode != Chromatic && harmonie active)

@@ -420,8 +420,8 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
             g.setColour(kCellGrid);
             g.drawRoundedRectangle(inner.reduced(0.5f), 3.0f, 0.6f);
             if (k == model_.subStep) {
-                g.setColour(kHeaderText);
-                g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.8f);
+                g.setColour(kSelStep);   // blanc vif : sous-pas sélectionné, distinct du vert des cellules
+                g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 2.2f);
             }
         }
         return;
@@ -504,6 +504,19 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
         const float cellWz   = (1.0f / static_cast<float>(n)) / winLen * stripW;
         const float cellPad  = cellWz > 10.0f ? 1.5f : 0.5f;
         const bool  showNote = cellWz >= 22.0f;
+        // Pas RECOUVERTS : pour chaque s, chercher un owner antérieur (enabled, owner+span(owner) > s).
+        // Même règle que le moteur (masquage stateless) : le pas couvert conserve son contenu mais
+        // ne déclenche pas → on ne le dessine pas comme cellule active (la note longue/sub de l'owner
+        // couvre visuellement la zone). Le pas sélectionné reste affiché (liseré) pour rester éditable.
+        bool covered[64] = {};
+        for (int s = 0; s < n; ++s) {
+            for (int o = s - 1; o >= 0; --o) {
+                if (!row.enabled[static_cast<size_t>(o)])
+                    continue;
+                const int osp = juce::jlimit(1, n - o, juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(o)])));
+                if (o + osp > s) { covered[s] = true; break; }
+            }
+        }
         {
             juce::Graphics::ScopedSaveState clip(g);
             g.reduceClipRegion(stripClip);
@@ -513,12 +526,43 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     continue;  // hors fenêtre
                 juce::Rectangle<float> cell(cx, y + 2.0f, cellWz, rowH_ - 4.0f);
                 const auto inner = cell.reduced(cellPad, cellPad);
+                const bool isSel = (r == model_.selectedRow && s == model_.selectedStep);
+                // Pas recouvert par un owner antérieur : masqué (pas de rendu actif), sauf s'il est
+                // sélectionné (on le rend pour l'éditer). Le liseré blanc de sélection est dessiné plus bas.
+                if (covered[static_cast<size_t>(s)] && !isSel)
+                    continue;
                 const bool on    = row.enabled[static_cast<size_t>(s)];
                 const bool ph    = (s == row.playhead);
+                // Span du pas (note longue / étalement sub) : largeur réelle couverte, clampée à n-s.
+                const int  span  = juce::jlimit(1, juce::jmax(1, n - s),
+                                                juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(s)])));
+
+                const int  subI   = row.subIdx[static_cast<size_t>(s)];
+                const bool hasSub = (subI >= 0 && subI < 16
+                                     && model_.subs[static_cast<size_t>(subI)].numSteps > 0);
+                // Étendue visuelle du slot (cellules-hôtes) : un sub s'étale sur le span du pas
+                // hôte (le core fait primer hostSpan ; fallback sv.duration), une note longue sur
+                // son span. Le SUB et la NOTE LONGUE occupent donc une SEULE cellule étirée — même
+                // apparence qu'à span=1, juste plus large (pas de carré + sub superposés).
+                const int  subSpan = hasSub
+                    ? ((span > 1) ? span
+                       : juce::jlimit(1, juce::jmax(1, n - s),
+                                      juce::jmax(1, static_cast<int>(model_.subs[static_cast<size_t>(subI)].duration))))
+                    : 1;
+                const bool longNote = (on && span > 1 && !hasSub);
+                const int  visSpan  = hasSub ? subSpan : (longNote ? span : 1);
+                const float fillW   = (visSpan > 1) ? (cellWz * static_cast<float>(visSpan) - 2.0f * cellPad)
+                                                    : inner.getWidth();
+                juce::Rectangle<float> fill(inner.getX(), inner.getY(),
+                                            juce::jmax(inner.getWidth(), fillW), inner.getHeight());
 
                 // Luminosité de la cellule active ∝ vélocité (feedback d'un coup d'œil).
                 const float velA = 0.45f + 0.55f * (static_cast<float>(row.velocity[static_cast<size_t>(s)]) / 127.0f);
-                if (on && !row.muted && row.harmonyBound) {
+                if (hasSub) {
+                    // Sub : fond sombre ; les sous-pas verts se dessinent dessus (les écarts entre
+                    // eux laissent voir ce fond = séparateurs).
+                    g.setColour(kCellOff);
+                } else if (on && !row.muted && row.harmonyBound) {
                     // Row soumise à l'harmonie : teinte ∝ pitch-class de la note JOUÉE (après filtre)
                     // → les cellules d'une même « zone chromatique » partagent la même couleur.
                     g.setColour(pitchClassColour(row.playedNote[static_cast<size_t>(s)] % 12)
@@ -526,41 +570,34 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                 } else {
                     g.setColour(on ? (row.muted ? kCellOn.withAlpha(0.30f) : kCellOn.withAlpha(velA)) : kCellOff);
                 }
-                g.fillRoundedRectangle(inner, 2.0f);
+                g.fillRoundedRectangle(fill, 2.0f);
+                // Bordure : ambre UNIQUEMENT pour le pas joué (playhead) ; sinon grille. Un sub se
+                // distingue déjà par son contenu (sous-pas), inutile de lui donner la couleur du playhead.
                 if (ph) {
                     g.setColour(kPlayhead);
-                    g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 1.5f);
+                    g.drawRoundedRectangle(fill.reduced(0.5f), 2.0f, 1.5f);
                 } else {
                     g.setColour(kCellGrid);
-                    g.drawRoundedRectangle(inner.reduced(0.5f), 2.0f, 0.6f);
+                    g.drawRoundedRectangle(fill.reduced(0.5f), 2.0f, 0.6f);
                 }
-                // Subpattern niché : la cellule affiche les sous-pas du sub (tuplet imbriqué visible).
-                const int subI = row.subIdx[static_cast<size_t>(s)];
-                if (subI >= 0 && subI < 16 && model_.subs[static_cast<size_t>(subI)].numSteps > 0) {
+                // Subpattern niché : sous-pas en sens NORMAL (actif = vert, inactif = sombre),
+                // avec séparateurs visibles (écart révélant le fond sombre).
+                if (hasSub) {
                     const auto& sv  = model_.subs[static_cast<size_t>(subI)];
                     const int   sn  = juce::jlimit(1, 16, sv.numSteps);
-                    // Span : le sub s'étale sur sv.duration pas hôtes à partir de ce pas,
-                    // clampé au nombre de pas restants de la row (pas de débordement).
-                    const int   span = juce::jlimit(1, juce::jmax(1, n - s),
-                                                    juce::jmax(1, sv.duration));
-                    // Largeur réelle couverte = span cellules-hôtes (espace zoomé).
-                    const float spanW = cellWz * static_cast<float>(span) - 2.0f * cellPad;
-                    juce::Rectangle<float> spanInner(inner.getX(), inner.getY(),
-                                                     juce::jmax(inner.getWidth(), spanW), inner.getHeight());
-                    const float mw  = spanInner.getWidth() / static_cast<float>(sn);
+                    const float mw  = fill.getWidth() / static_cast<float>(sn);
                     for (int k = 0; k < sn; ++k) {
-                        juce::Rectangle<float> mc(spanInner.getX() + static_cast<float>(k) * mw,
-                                                  spanInner.getY(), mw, spanInner.getHeight());
-                        g.setColour(sv.enabled[static_cast<size_t>(k)] ? kScreenBg : kCellOn.withAlpha(0.25f));
-                        g.fillRect(mc.reduced(0.6f, 1.0f));
+                        juce::Rectangle<float> mc(fill.getX() + static_cast<float>(k) * mw,
+                                                  fill.getY(), mw, fill.getHeight());
+                        g.setColour(sv.enabled[static_cast<size_t>(k)] ? kCellOn : kCellGrid);
+                        g.fillRect(mc.reduced(0.8f, 1.5f));   // l'écart = séparateur (fond sombre derrière)
                     }
-                    g.setColour(kPlayhead);   // liseré ambre = « ce pas a un sub » (englobe le span)
-                    g.drawRoundedRectangle(spanInner.reduced(0.4f), 2.0f, 1.2f);
                 } else if (showNote && on) {
                     g.setColour(kScreenBg);
                     g.setFont(juce::Font(juce::FontOptions().withHeight(juce::jmin(11.0f, rowH_ - 6.0f))));
                     // Note RÉSOLUE (ce qui sonne) : sur une row liée, c'est la note tirée par le filtre.
-                    g.drawText(midiNoteShort(row.playedNote[static_cast<size_t>(s)]), inner,
+                    // Centrée sur la cellule étendue `fill` (note longue) pour rester lisible.
+                    g.drawText(midiNoteShort(row.playedNote[static_cast<size_t>(s)]), fill,
                                juce::Justification::centred);
                 }
                 // Marqueur « snappé » : la note stockée était hors filtre (tirée vers une note autorisée).
@@ -576,9 +613,10 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                 }
                 // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré blanc vif
                 // (hors palette vert/ambre) pour bien distinguer le slot édité du playhead et du reste.
-                if (r == model_.selectedRow && s == model_.selectedStep) {
+                if (isSel) {
                     g.setColour(kSelStep);
-                    g.drawRoundedRectangle(inner.reduced(0.3f), 2.0f, 2.2f);
+                    // Le liseré englobe toute l'étendue du slot (note longue ou sub multi-pas).
+                    g.drawRoundedRectangle((visSpan > 1 ? fill : inner).reduced(0.3f), 2.0f, 2.2f);
                 }
             }
         }
@@ -691,7 +729,7 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     for (int k = 0; k < sn; ++k) {
         const float x = plot.getX() + static_cast<float>(k) * cellW;
         if (k == model_.subStep) {
-            g.setColour(kSelRowBg);
+            g.setColour(kSelStep.withAlpha(0.16f));   // colonne du sous-pas sélectionné : voile blanc
             g.fillRect(juce::Rectangle<float>(x, plot.getY(), cellW, plot.getHeight()));
         }
         g.setColour(kScreenBorder);

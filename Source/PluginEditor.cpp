@@ -602,15 +602,22 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
             // Relatif : Enc1 = intervalle → on convertit en hauteur absolue pour postSubStepPitch.
             postSubStepPitch(ss, sp.relativeToHost ? (subHostNote() + v) : v);
         } else if (shiftActive()) {
-            // ⇧Enc1 = span : durée du sub (nombre de pas hôtes couverts).
+            // ⇧Enc1 = span : nb de pas hôtes couverts. Le core fait primer le span du PAS HÔTE
+            // sur l'étalement du sub (RunningSubPattern.hostSpan), donc on règle le span du pas
+            // hôte (SetStepSpan) — même effet que ⇧Enc1 en grille PATTERN. SetSubPatternDuration
+            // n'est plus utilisé côté UI (source unique = span du pas hôte) ; la commande core reste.
             const auto& pat  = proc_.engine().pattern();
             const int   hr   = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-            const int   maxD = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
-            const int   d    = juce::jlimit(1, maxD, (int) std::lround(valueEncoder_.getValue()));
+            const int   rn   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
+            const int   hs   = juce::jlimit(0, rn - 1, subHostStep_);
+            const int   maxS = juce::jmax(1, rn - hs);
+            const int   d    = juce::jlimit(1, maxS, (int) std::lround(valueEncoder_.getValue()));
             SequencerCommand c;
-            c.id = SequencerCommandId::SetSubPatternDuration;
-            c.a  = static_cast<uint8_t>(subIdx);
-            c.b  = static_cast<uint8_t>(d);
+            c.id = SequencerCommandId::SetStepSpan;
+            c.a  = static_cast<uint8_t>(hr);
+            c.b  = static_cast<uint8_t>(hs);
+            c.c  = static_cast<uint8_t>(d);
+            c.f  = static_cast<uint8_t>(editBar_);
             proc_.controller().postCommand(c);
             buildScreenModel();
         } else {
@@ -630,12 +637,29 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Pattern) {
-        // PATTERN : Enc1 règle le N (tuplet) de la row sélectionnée → re-subdivision live.
         const auto& pat = proc_.engine().pattern();
         if (selectedRow_ < 0 || selectedRow_ >= static_cast<int>(pat.numRows))
             return;
+        const int rn = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(selectedRow_)].numSteps));
+        if (shiftActive()) {
+            // ⇧Enc1 = span : nb de pas hôtes couverts par le pas sélectionné (note longue / sub étalé).
+            // Clampé à 1..(N - pas) : le span ne déborde pas la mesure de la row.
+            const int ss   = juce::jlimit(0, rn - 1, selectedStep_);
+            const int maxS = juce::jmax(1, rn - ss);
+            const int sp   = juce::jlimit(1, maxS, (int) std::lround(valueEncoder_.getValue()));
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetStepSpan;
+            c.a  = static_cast<uint8_t>(selectedRow_);
+            c.b  = static_cast<uint8_t>(ss);
+            c.c  = static_cast<uint8_t>(sp);
+            c.f  = static_cast<uint8_t>(editBar_);
+            proc_.controller().postCommand(c);
+            buildScreenModel();
+            return;
+        }
+        // Enc1 (sans Shift) = N (tuplet) de la row sélectionnée → re-subdivision live.
         const int n = juce::jlimit(1, 64, (int) std::lround(valueEncoder_.getValue()));
-        if (n == static_cast<int>(pat.rows[static_cast<size_t>(selectedRow_)].numSteps))
+        if (n == rn)
             return;
         SequencerCommand c;
         c.id = SequencerCommandId::SetRowSteps;
@@ -849,14 +873,19 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
                 valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
             }
         } else if (shiftActive() && subIdx >= 0) {
-            // ⇧Enc1 = span : durée du sub en nombre de pas hôtes couverts.
+            // ⇧Enc1 = span du PAS HÔTE (nb de pas hôtes couverts). Source unique = span du pas
+            // hôte (le core fait primer hostSpan), même valeur/effet que ⇧Enc1 en grille PATTERN.
             const auto& pat   = proc_.engine().pattern();
             const int   hr    = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-            const int   maxD  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
-            const int   dur   = juce::jlimit(1, maxD, static_cast<int>(sp.duration));
-            valueEncoderLabel_.setText("Sub Dur " + juce::String(dur) + " pas", juce::dontSendNotification);
-            valueEncoder_.setRange(1.0, static_cast<double>(juce::jmax(1, maxD)), 1.0);
-            valueEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
+            const int   rn    = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
+            const int   hs    = juce::jlimit(0, rn - 1, subHostStep_);
+            const int   maxS  = juce::jmax(1, rn - hs);
+            const int   span  = juce::jlimit(1, maxS,
+                static_cast<int>(pat.rows[static_cast<size_t>(hr)].step(static_cast<uint8_t>(editBar_),
+                                                                       static_cast<uint8_t>(hs)).span));
+            valueEncoderLabel_.setText("Span " + juce::String(span) + " pas", juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, static_cast<double>(maxS), 1.0);
+            valueEncoder_.setValue(static_cast<double>(span), juce::dontSendNotification);
         } else {
             valueEncoderLabel_.setText("Sub N " + juce::String(sn), juce::dontSendNotification);
             valueEncoder_.setRange(1.0, 16.0, 1.0);
@@ -878,12 +907,23 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         const juce::String div = divisionLabel(n, pat.numerator, pat.denominator);
         const int ss = juce::jlimit(0, n - 1, selectedStep_);
         navEncoderLabel_.setText("Pas " + juce::String(ss + 1), juce::dontSendNotification);  // Enc2 = Pas
-        valueEncoderLabel_.setText("N " + juce::String(n) + (div.isEmpty() ? juce::String() : " " + div),
-                                   juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, n - 1)), 1.0);
         navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
-        valueEncoder_.setRange(1.0, 64.0, 1.0);
-        valueEncoder_.setValue(static_cast<double>(n), juce::dontSendNotification);
+        if (shiftActive()) {
+            // ⇧Enc1 = span du pas sélectionné (note longue / sub étalé). Plage 1..(N - pas).
+            const int maxS = juce::jmax(1, n - ss);
+            const int sp   = juce::jlimit(1, maxS,
+                static_cast<int>(pat.rows[static_cast<size_t>(sr)].step(static_cast<uint8_t>(editBar_),
+                                                                       static_cast<uint8_t>(ss)).span));
+            valueEncoderLabel_.setText("Span " + juce::String(sp) + " pas", juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, static_cast<double>(maxS), 1.0);
+            valueEncoder_.setValue(static_cast<double>(sp), juce::dontSendNotification);
+        } else {
+            valueEncoderLabel_.setText("N " + juce::String(n) + (div.isEmpty() ? juce::String() : " " + div),
+                                       juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, 64.0, 1.0);
+            valueEncoder_.setValue(static_cast<double>(n), juce::dontSendNotification);
+        }
     } else if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
         const auto& pat = proc_.engine().pattern();
         const int   nr  = juce::jmax(1, static_cast<int>(pat.numRows));
@@ -1304,6 +1344,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             dst.subIdx[static_cast<size_t>(s)]   = (sd.subPatIdx == kNoSubPattern)
                                                        ? static_cast<signed char>(-1)
                                                        : static_cast<signed char>(sd.subPatIdx);
+            dst.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 64, static_cast<int>(sd.span)));
             if (bound) {
                 const uint8_t pn = harmony::resolveDegreeToMidi(
                     sd.note, row.harmonyMode, currentChord, progActive,
