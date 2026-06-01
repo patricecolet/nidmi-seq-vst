@@ -789,9 +789,16 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     }
 
     // Notes posées : un bloc par pas actif dont la hauteur tombe dans la fenêtre.
+    // NB : un pas qui porte un sub valide est rendu plus bas (mini-blocs) — on le saute ici
+    // pour éviter le doublon avec le bloc « note simple » de la note hôte.
     for (int s = 0; s < L.n; ++s) {
         if (!row.enabled[static_cast<size_t>(s)])
             continue;
+        {
+            const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
+            if (subI >= 0 && subI < 16 && model_.subs[static_cast<size_t>(subI)].numSteps > 0)
+                continue;   // rendu par la boucle sous-patterns (mini-blocs)
+        }
         const int lane = L.topNote - static_cast<int>(row.note[static_cast<size_t>(s)]);
         if (lane < 0 || lane >= L.visibleLanes)
             continue;
@@ -806,6 +813,45 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
         if (s == row.playhead) {
             g.setColour(kPlayhead);
             g.drawRoundedRectangle(block.reduced(0.8f, 0.8f), 2.0f, 1.2f);
+        }
+    }
+
+    // Sous-patterns (LECTURE SEULE) : pour chaque pas actif portant un sub valide, on dessine
+    // ses sous-pas comme des mini-blocs répartis horizontalement sur le span du pas hôte, placés
+    // verticalement à LEUR vraie hauteur (relatif = note hôte + offset ; absolu = note brute).
+    // L'édition reste le drill-in : aucun hit-test n'est ajouté ici.
+    for (int s = 0; s < L.n; ++s) {
+        if (!row.enabled[static_cast<size_t>(s)])
+            continue;
+        const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
+        if (subI < 0 || subI >= 16 || model_.subs[static_cast<size_t>(subI)].numSteps <= 0)
+            continue;
+        const auto& sv = model_.subs[static_cast<size_t>(subI)];
+        const int   sn = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
+        // Étendue (cellules-hôtes) : le span du pas hôte prime, fallback sv.duration ; clamp à n-s.
+        const int   hostSpan = static_cast<int>(row.span[static_cast<size_t>(s)]);
+        const int   span = juce::jlimit(1, juce::jmax(1, L.n - s),
+                                        (hostSpan > 1) ? hostSpan
+                                                       : juce::jmax(1, sv.duration));
+        const float x0       = L.plot.getX() + static_cast<float>(s) * L.cellW;
+        const float zoneW    = static_cast<float>(span) * L.cellW;
+        const float subCellW = zoneW / static_cast<float>(sn);
+        for (int k = 0; k < sn; ++k) {
+            if (!sv.enabled[static_cast<size_t>(k)])
+                continue;   // sous-pas inactif : pas de bloc
+            const int pitch = juce::jlimit(0, 127,
+                sv.relative ? (static_cast<int>(row.note[static_cast<size_t>(s)])
+                               + (static_cast<int>(sv.note[static_cast<size_t>(k)]) - PatternScreenModel::kSubRelCenter))
+                            : static_cast<int>(sv.note[static_cast<size_t>(k)]));
+            const int lane = L.topNote - pitch;
+            if (lane < 0 || lane >= L.visibleLanes)
+                continue;   // hors fenêtre verticale (comme les notes simples)
+            const float x = x0 + static_cast<float>(k) * subCellW;
+            const float y = L.plot.getY() + static_cast<float>(lane) * L.laneH;
+            juce::Rectangle<float> mc(x, y, subCellW, L.laneH);
+            // Teinte légèrement distincte (plus claire) pour signaler un sous-pas vs note simple.
+            g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn.brighter(0.25f).withAlpha(0.9f));
+            g.fillRoundedRectangle(mc.reduced(0.8f, 1.0f), 1.5f);
         }
     }
 
