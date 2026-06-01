@@ -59,6 +59,7 @@ private:
     // que l'état change (onClick du bouton + suivi clavier en timerCallback).
     bool shiftHeld_       = false;   // bouton Shift maintenu (toggle)
     bool lastShiftActive_ = false;   // suivi inter-frames pour le Shift clavier OS
+    int  lastRelevantSub_ = -2;      // suivi du sub pertinent (noire 9) pour rafraîchir le label rel/abs
     bool shiftActive() const {
         return shiftHeld_ || juce::ModifierKeys::getCurrentModifiers().isShiftDown();
     }
@@ -108,6 +109,8 @@ private:
     int  subHostStep_ = 0;
     int  subStep_     = 0;        // curseur de sous-pas
     int  activeSubIdx() const;   // index du sub édité (host step), -1 si aucun
+    int  selectedStepSubIdx() const;  // index du sub porté par le pas SÉLECTIONNÉ (hors drill-in), -1 si aucun
+    int  relevantSubIdx() const;      // sub pertinent selon le contexte : drill-in -> activeSubIdx, sinon selectedStepSubIdx
     int  subHostNote() const;    // note du pas hôte (ancre du mode relatif)
     void enterOrCreateSub();     // crée le sub si besoin puis entre
     void exitSub();

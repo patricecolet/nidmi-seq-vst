@@ -347,7 +347,7 @@ void PatternScreen::paint(juce::Graphics& g) {
             const int  dur   = valid ? model_.subs[static_cast<size_t>(model_.subEditIdx)].duration : 1;
             crumb = "R" + juce::String(model_.subHostRow + 1) + arrow
                   + "P" + juce::String(model_.subHostStep + 1) + arrow
-                  + "SUB " + (rel ? "rel" : "abs")
+                  + "SUB " + (rel ? "REL" : "ABS")
                   + (dur > 1 ? (" x" + juce::String(dur)) : juce::String());
         } else if (model_.page == PatternScreenModel::Page::Pattern
             || model_.page == PatternScreenModel::Page::PianoRoll
@@ -611,12 +611,39 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     g.setColour(kPlayhead.withAlpha(0.85f));
                     g.fillPath(tri);
                 }
+                // Badge mode REL/ABS sur CHAQUE pas portant un sub (vue d'ensemble, pas seulement
+                // le pas édité). Compact : "REL"/"ABS" si la place existe, sinon lettre R/A, sinon
+                // pastille. Coin sup. droit de l'étendue du sub. Vert = REL, ambre = ABS.
+                if (hasSub) {
+                    const bool rel = model_.subs[static_cast<size_t>(subI)].relative;
+                    const juce::Colour bg = (rel ? kCellOn : kPlayhead).withAlpha(0.92f);
+                    const float fw = fill.getWidth();
+                    if (fw >= 22.0f) {
+                        juce::Rectangle<float> badge(fill.getRight() - 21.0f, fill.getY() + 1.0f, 20.0f, 9.0f);
+                        g.setColour(bg);
+                        g.fillRoundedRectangle(badge, 2.0f);
+                        g.setColour(kScreenBg);
+                        g.setFont(juce::Font(juce::FontOptions().withHeight(7.5f).withStyle("Bold")));
+                        g.drawText(rel ? "REL" : "ABS", badge, juce::Justification::centred);
+                    } else if (fw >= 11.0f) {
+                        juce::Rectangle<float> badge(fill.getRight() - 8.0f, fill.getY() + 1.0f, 7.0f, 8.0f);
+                        g.setColour(bg);
+                        g.fillRoundedRectangle(badge, 1.5f);
+                        g.setColour(kScreenBg);
+                        g.setFont(juce::Font(juce::FontOptions().withHeight(7.0f).withStyle("Bold")));
+                        g.drawText(rel ? "R" : "A", badge, juce::Justification::centred);
+                    } else {
+                        g.setColour(bg);
+                        g.fillEllipse(fill.getRight() - 4.0f, fill.getY() + 1.0f, 3.0f, 3.0f);
+                    }
+                }
                 // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré blanc vif
                 // (hors palette vert/ambre) pour bien distinguer le slot édité du playhead et du reste.
                 if (isSel) {
                     g.setColour(kSelStep);
                     // Le liseré englobe toute l'étendue du slot (note longue ou sub multi-pas).
-                    g.drawRoundedRectangle((visSpan > 1 ? fill : inner).reduced(0.3f), 2.0f, 2.2f);
+                    const auto selRect = (visSpan > 1 ? fill : inner);
+                    g.drawRoundedRectangle(selRect.reduced(0.3f), 2.0f, 2.2f);
                 }
             }
         }
@@ -786,6 +813,35 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
         }
         g.setColour(kScreenBorder);
         g.drawLine(x, L.plot.getY(), x, L.plot.getBottom(), 0.4f);
+    }
+
+    // Badge mode REL/ABS sur CHAQUE pas portant un sub (vue d'ensemble), en haut de sa colonne.
+    // Compact selon la largeur : "REL"/"ABS", sinon R/A, sinon pastille. Vert = REL, ambre = ABS.
+    for (int s = 0; s < L.n; ++s) {
+        const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
+        if (subI < 0 || subI >= 16 || model_.subs[static_cast<size_t>(subI)].numSteps == 0)
+            continue;
+        const bool  rel = model_.subs[static_cast<size_t>(subI)].relative;
+        const juce::Colour bg = (rel ? kCellOn : kPlayhead).withAlpha(0.92f);
+        const float x   = L.plot.getX() + static_cast<float>(s) * L.cellW;
+        if (L.cellW >= 22.0f) {
+            juce::Rectangle<float> badge(x + 1.0f, L.plot.getY() + 1.0f, 20.0f, 9.0f);
+            g.setColour(bg);
+            g.fillRoundedRectangle(badge, 2.0f);
+            g.setColour(kScreenBg);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(7.5f).withStyle("Bold")));
+            g.drawText(rel ? "REL" : "ABS", badge, juce::Justification::centred);
+        } else if (L.cellW >= 10.0f) {
+            juce::Rectangle<float> badge(x + 1.0f, L.plot.getY() + 1.0f, 7.0f, 8.0f);
+            g.setColour(bg);
+            g.fillRoundedRectangle(badge, 1.5f);
+            g.setColour(kScreenBg);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(7.0f).withStyle("Bold")));
+            g.drawText(rel ? "R" : "A", badge, juce::Justification::centred);
+        } else {
+            g.setColour(bg);
+            g.fillEllipse(x + 1.0f, L.plot.getY() + 1.0f, 3.0f, 3.0f);
+        }
     }
 
     // Notes posées : un bloc par pas actif dont la hauteur tombe dans la fenêtre.
@@ -1259,10 +1315,19 @@ void HardwareButtonLook::drawButtonBackground(juce::Graphics& g, juce::Button& b
         }
     } else if (kind_ == Kind::BlackKey) {
         const bool playhead = static_cast<bool>(b.getProperties().getWithDefault("playhead", false));
-        g.setColour(playhead ? juce::Colour(0xff7a4a10) : juce::Colour(0xff1c1c1e));
-        g.fillRoundedRectangle(r.reduced(0.5f), rad);
-        g.setColour(playhead ? juce::Colour(0xffd17a18) : juce::Colour(0xff4a4a50));
-        g.drawRoundedRectangle(r.reduced(0.5f), rad, playhead ? 1.5f : 1.0f);
+        const bool led      = static_cast<bool>(b.getProperties().getWithDefault("led", false));
+        // LED d'état (vert) prioritaire sur le highlight transitoire (ambre) ; sinon noir.
+        if (led) {
+            g.setColour(juce::Colour(0xff1e5a38));   // fond vert sombre = LED allumée
+            g.fillRoundedRectangle(r.reduced(0.5f), rad);
+            g.setColour(juce::Colour(0xff4fd488));   // liseré vert vif
+            g.drawRoundedRectangle(r.reduced(0.5f), rad, 1.5f);
+        } else {
+            g.setColour(playhead ? juce::Colour(0xff7a4a10) : juce::Colour(0xff1c1c1e));
+            g.fillRoundedRectangle(r.reduced(0.5f), rad);
+            g.setColour(playhead ? juce::Colour(0xffd17a18) : juce::Colour(0xff4a4a50));
+            g.drawRoundedRectangle(r.reduced(0.5f), rad, playhead ? 1.5f : 1.0f);
+        }
         if (isDown) {
             g.setColour(juce::Colours::white.withAlpha(0.08f));
             g.fillRoundedRectangle(r.reduced(0.5f), rad);
@@ -1400,6 +1465,23 @@ void PianoKeysPanel::setBlackKeyHighlight(int blackIdx) {
     apply(blackHighlight_, false);
     apply(blackIdx, true);
     blackHighlight_ = blackIdx;
+}
+
+void PianoKeysPanel::setBlackKeyLed(int blackIdx, bool on) {
+    // LED d'état : une seule noire allumée à la fois (la noire 9 rel/abs ici).
+    const int target = on ? blackIdx : -1;
+    if (target == blackLed_)
+        return;
+    auto apply = [this](int idx, bool lit) {
+        if (idx < 0 || idx >= kNumBlack) return;
+        auto& bt = *blackKeys_[static_cast<size_t>(idx)];
+        if (lit) bt.getProperties().set("led", true);
+        else     bt.getProperties().remove("led");
+        bt.repaint();
+    };
+    apply(blackLed_, false);
+    apply(target, true);
+    blackLed_ = target;
 }
 
 void PianoKeysPanel::setPlayheadStep(int step) {

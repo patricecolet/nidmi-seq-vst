@@ -225,6 +225,9 @@ public:
     void setPlayheadStep(int step);
     /// Surbrillance d'une noire (utilisée pendant l'overlay PITCH si l'altération est choisie).
     void setBlackKeyHighlight(int blackIdx);
+    /// LED d'ÉTAT persistante sur une noire (vert = ON). Indépendante du highlight transitoire.
+    /// idx ∈ [0, kNumBlack-1] ; on=true allume. À idx==-1 : éteint la LED actuelle.
+    void setBlackKeyLed(int blackIdx, bool on);
 
 private:
     static constexpr int kNumWhite = 16;
@@ -238,6 +241,7 @@ private:
     std::array<std::function<void()>, kNumWhite>              whiteUp_;
     int                                                       playheadStep_  = -1;
     int                                                       blackHighlight_ = -1;
+    int                                                       blackLed_       = -1;   // noire portant la LED d'état (-1 = aucune)
 
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;

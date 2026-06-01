@@ -435,6 +435,22 @@ int NidmiSeqAudioProcessorEditor::activeSubIdx() const {
     return (idx == kNoSubPattern) ? -1 : static_cast<int>(idx);
 }
 
+int NidmiSeqAudioProcessorEditor::selectedStepSubIdx() const {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return -1;
+    const int r = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    if (selectedStep_ < 0 || selectedStep_ >= n)
+        return -1;
+    const uint8_t idx = pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(selectedStep_)).subPatIdx;
+    return (idx == kNoSubPattern) ? -1 : static_cast<int>(idx);
+}
+
+int NidmiSeqAudioProcessorEditor::relevantSubIdx() const {
+    return inSub_ ? activeSubIdx() : selectedStepSubIdx();
+}
+
 void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
     const auto& pat = proc_.engine().pattern();
     if (pat.numRows == 0)
@@ -508,8 +524,9 @@ void NidmiSeqAudioProcessorEditor::postSubStepPitch(int subStepIndex, int absolu
 }
 
 void NidmiSeqAudioProcessorEditor::toggleSubMode() {
-    const int subIdx = activeSubIdx();
-    if (subIdx < 0) return;
+    // Cible : en drill-in le sub édité, sinon le sub du pas SÉLECTIONNÉ (PATTERN/ROLL).
+    const int subIdx = relevantSubIdx();
+    if (subIdx < 0) return;   // pas de sub pertinent → inactif
     const bool now = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)].relativeToHost;
     SequencerCommand c;
     c.id = SequencerCommandId::SetSubPatternRelative;
@@ -1202,6 +1219,14 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
         updateKeysForPage();
     }
 
+    // Apparition/disparition du label rel/abs sur la noire 9 quand le pas sélectionné change
+    // de sub (le curseur Enc2 ne rappelle pas updateKeysForPage). La LED, elle, est continue.
+    const int relSubNow = relevantSubIdx();
+    if (relSubNow != lastRelevantSub_) {
+        lastRelevantSub_ = relSubNow;
+        updateKeysForPage();
+    }
+
     const auto& pat = proc_.engine().pattern();
     if (selectedRow_ >= pat.numRows)
         selectedRow_ = juce::jmax(0, static_cast<int>(pat.numRows) - 1);
@@ -1461,8 +1486,20 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
 
 void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
     const auto& pat = proc_.engine().pattern();
-    if (pat.numRows == 0)
+    if (pat.numRows == 0) {
+        piano_.setBlackKeyLed(-1, false);
         return;
+    }
+
+    // LED d'état rel/abs sur la noire 9 : ON si le sub pertinent (drill-in : sub édité ;
+    // sinon : sub du pas sélectionné) est en mode relatif. Aucun sub pertinent → LED éteinte.
+    // Rafraîchi à chaque tick du timer → reflète l'état même si modifié ailleurs.
+    {
+        const int subIdx = relevantSubIdx();
+        const bool ledOn = (subIdx >= 0)
+            && pat.subPatterns[static_cast<size_t>(subIdx)].relativeToHost;
+        piano_.setBlackKeyLed(9, ledOn);
+    }
 
     // Édition d'un sub.
     if (inSub_) {
@@ -1771,11 +1808,11 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
 }
 
 void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
-    // Dans un sub : noire 0 = sortir, noire 1 = bascule mode relatif/absolu.
-    // (Grammaire propre au sub ; les autres noires sont inactives en sub — on affinera plus tard.)
+    // Dans un sub : noire 0 = sortir, noire 9 = bascule mode relatif/absolu.
+    // La noire 9 porte le mode rel/abs PARTOUT (cohérence "même touche") ; la noire 1 est libérée.
     if (inSub_) {
         if (index == 0)      exitSub();
-        else if (index == 1) toggleSubMode();
+        else if (index == 9) toggleSubMode();
         return;
     }
     const auto& pat = proc_.engine().pattern();
@@ -1801,12 +1838,15 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
     switch (screenPage_) {
         case PatternScreenModel::Page::Pattern:
             // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
-            runFunction(index, /*allowOct*/ false);
+            // Noire 9 = bascule rel/abs du sub du pas sélectionné (inactif si pas de sub).
+            if (index == 9) toggleSubMode();
+            else            runFunction(index, /*allowOct*/ false);
             break;
         case PatternScreenModel::Page::PianoRoll:
             if (shiftActive()) {
-                // ⇧ + noire = fonction (R±/Page±/Sub/Mes±/Oct±).
-                runFunction(index, /*allowOct*/ true);
+                // ⇧ + noire = fonction (R±/Page±/Sub/Mes±/Oct±) ; noire 9 = rel/abs du sub du pas sélectionné.
+                if (index == 9) toggleSubMode();
+                else            runFunction(index, /*allowOct*/ true);
             } else {
                 // Noire SEULE = joue/pose une note chromatique, même chemin que onWhiteKey ROLL.
                 if (pat.numRows == 0) return;
@@ -1847,14 +1887,14 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
 }
 
 void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
-    if (inSub_) {   // édition d'un sub : noire 0 = Back, noire 1 = Mode (abs/rel)
+    if (inSub_) {   // édition d'un sub : noire 0 = Back, noire 9 = Mode (abs/rel) ; noire 1 libérée
         if (screenPage_ == PatternScreenModel::Page::PianoRoll)
             for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, noteNameFromMidi(rollWhiteKeyMidi(i)));
         else
             for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
         piano_.setBlackKeyLabel(0, "Back");
-        piano_.setBlackKeyLabel(1, "Mode");
-        for (int i = 2; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+        for (int i = 1; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+        piano_.setBlackKeyLabel(9, "Mode");
         return;
     }
     switch (screenPage_) {
@@ -1871,7 +1911,7 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
                 piano_.setBlackKeyLabel(6, "Mes+");
                 piano_.setBlackKeyLabel(7, "Oct-");
                 piano_.setBlackKeyLabel(8, "Oct+");
-                piano_.setBlackKeyLabel(9, {});
+                piano_.setBlackKeyLabel(9, (selectedStepSubIdx() >= 0) ? "Mode" : juce::String());  // rel/abs sub
                 piano_.setBlackKeyLabel(10, {});
             } else {
                 // Shift OFF : noires = notes chromatiques (mêmes que le clavier).
@@ -1921,6 +1961,7 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             piano_.setBlackKeyLabel(5, "Mes-");
             piano_.setBlackKeyLabel(6, "Mes+");
             for (int i = 7; i < 11; ++i) piano_.setBlackKeyLabel(i, {});   // Oct± inactif en pattern
+            piano_.setBlackKeyLabel(9, (selectedStepSubIdx() >= 0) ? "Mode" : juce::String());  // rel/abs sub
             break;
         }
         case PatternScreenModel::Page::Global:
