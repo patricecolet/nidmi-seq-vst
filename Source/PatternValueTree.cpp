@@ -43,6 +43,7 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
     root.setProperty("v", 1, nullptr);
     root.setProperty("steps", p.numSteps, nullptr);
     root.setProperty("rows", p.numRows, nullptr);
+    root.setProperty("numBars", p.numBars, nullptr);   // multi-mesures (1..kMaxBars ; absent = 1)
     root.setProperty("num", p.numerator, nullptr);
     root.setProperty("den", p.denominator, nullptr);
     root.setProperty("loop", engine.isLooping() ? 1 : 0, nullptr);
@@ -95,27 +96,32 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
         row.setProperty("cc", p.rows[r].ccNumber, nullptr);
         row.setProperty("hm", static_cast<int>(p.rows[r].harmonyMode), nullptr);
         row.setProperty("mu", p.rows[r].muted ? 1 : 0, nullptr);
-        for (uint8_t s = 0; s < p.numSteps; ++s) {
-            const StepData& sd = p.rows[r].steps[s];
-            juce::ValueTree st("S");
-            st.setProperty("j", s, nullptr);
-            st.setProperty("n", sd.note, nullptr);
-            st.setProperty("v", sd.velocity, nullptr);
-            st.setProperty("g", sd.gate, nullptr);
-            st.setProperty("on", sd.enabled ? 1 : 0, nullptr);
-            st.setProperty("sub", sd.subPatIdx, nullptr);
-            st.setProperty("ac", sd.accent ? 1 : 0, nullptr);
-            st.setProperty("sw", sd.swingEnable ? 1 : 0, nullptr);
-            // P-locks CC : un enfant "CC" par slot actif.
-            for (uint8_t k = 0; k < kMaxCCLocksPerStep; ++k) {
-                if (sd.ccLocks[k].ccNumber == kNoCCLock) continue;
-                juce::ValueTree cc("CC");
-                cc.setProperty("k", k, nullptr);
-                cc.setProperty("c", sd.ccLocks[k].ccNumber, nullptr);
-                cc.setProperty("v", sd.ccLocks[k].value, nullptr);
-                st.appendChild(cc, nullptr);
+        // Sérialisation PAR MESURE : chaque pas porte sa mesure ("b"). Absent au chargement
+        // => mesure 0 (rétrocompat avec les anciens projets mono-mesure).
+        for (uint8_t bar = 0; bar < p.numBars && bar < kMaxBars; ++bar) {
+            for (uint8_t s = 0; s < p.numSteps; ++s) {
+                const StepData& sd = p.rows[r].step(bar, s);
+                juce::ValueTree st("S");
+                st.setProperty("b", bar, nullptr);
+                st.setProperty("j", s, nullptr);
+                st.setProperty("n", sd.note, nullptr);
+                st.setProperty("v", sd.velocity, nullptr);
+                st.setProperty("g", sd.gate, nullptr);
+                st.setProperty("on", sd.enabled ? 1 : 0, nullptr);
+                st.setProperty("sub", sd.subPatIdx, nullptr);
+                st.setProperty("ac", sd.accent ? 1 : 0, nullptr);
+                st.setProperty("sw", sd.swingEnable ? 1 : 0, nullptr);
+                // P-locks CC : un enfant "CC" par slot actif.
+                for (uint8_t k = 0; k < kMaxCCLocksPerStep; ++k) {
+                    if (sd.ccLocks[k].ccNumber == kNoCCLock) continue;
+                    juce::ValueTree cc("CC");
+                    cc.setProperty("k", k, nullptr);
+                    cc.setProperty("c", sd.ccLocks[k].ccNumber, nullptr);
+                    cc.setProperty("v", sd.ccLocks[k].value, nullptr);
+                    st.appendChild(cc, nullptr);
+                }
+                row.appendChild(st, nullptr);
             }
-            row.appendChild(st, nullptr);
         }
         rows.appendChild(row, nullptr);
     }
@@ -180,6 +186,9 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
 
     const uint8_t numSteps = static_cast<uint8_t>(static_cast<int>(rootIn.getProperty("steps", 16)));
     const uint8_t numRows  = static_cast<uint8_t>(static_cast<int>(rootIn.getProperty("rows", 4)));
+    // numBars : défaut 1 si absent (rétrocompat des anciens projets mono-mesure).
+    const uint8_t numBars  = static_cast<uint8_t>(juce::jlimit(1, static_cast<int>(kMaxBars),
+                                                               static_cast<int>(rootIn.getProperty("numBars", 1))));
     const uint8_t num      = static_cast<uint8_t>(static_cast<int>(rootIn.getProperty("num", 4)));
     const uint8_t den      = static_cast<uint8_t>(static_cast<int>(rootIn.getProperty("den", 4)));
     const bool    loop     = static_cast<int>(rootIn.getProperty("loop", 1)) != 0;
@@ -200,6 +209,11 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
     SequencerCommandApi::dispatch(engine, c, nowUs);
     c.id = SequencerCommandId::SetLoop;
     c.x  = loop;
+    SequencerCommandApi::dispatch(engine, c, nowUs);
+    // Nombre de mesures AVANT le chargement des pas (les écritures ciblent une mesure via cmd.f).
+    c    = SequencerCommand{};
+    c.id = SequencerCommandId::SetPatternNumBars;
+    c.a  = numBars;
     SequencerCommandApi::dispatch(engine, c, nowUs);
 
     juce::ValueTree h = rootIn.getChildWithName("Harmony");
@@ -403,17 +417,22 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                 if (st.getType().toString() != "S")
                     continue;
                 const uint8_t s = static_cast<uint8_t>(static_cast<int>(st.getProperty("j", 0)));
+                // Mesure du pas : "b" absent => mesure 0 (rétrocompat mono-mesure).
+                const uint8_t bar = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(numBars) - 1,
+                                                                      static_cast<int>(st.getProperty("b", 0))));
                 c.id            = SequencerCommandId::SetStep;
                 c.a             = r;
                 c.b             = s;
                 c.c             = static_cast<uint8_t>(static_cast<int>(st.getProperty("n", 60)));
                 c.d             = static_cast<uint8_t>(static_cast<int>(st.getProperty("v", 100)));
                 c.e             = static_cast<uint8_t>(static_cast<int>(st.getProperty("g", 80)));
+                c.f             = bar;
                 SequencerCommandApi::dispatch(engine, c, nowUs);
                 if (static_cast<int>(st.getProperty("on", 0)) == 0) {
                     c.id = SequencerCommandId::ToggleStep;
                     c.a  = r;
                     c.b  = s;
+                    c.f  = bar;
                     SequencerCommandApi::dispatch(engine, c, nowUs);
                 }
                 uint8_t subOld = static_cast<uint8_t>(static_cast<int>(st.getProperty("sub", kNoSubPattern)));
@@ -425,16 +444,19 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                     c.a  = r;
                     c.b  = s;
                     c.c  = subNew;
+                    c.f  = bar;
                     SequencerCommandApi::dispatch(engine, c, nowUs);
                 }
                 c.id = SequencerCommandId::SetStepAccent;
                 c.a  = r;
                 c.b  = s;
+                c.f  = bar;
                 c.x  = static_cast<int>(st.getProperty("ac", 0)) != 0;
                 SequencerCommandApi::dispatch(engine, c, nowUs);
                 c.id = SequencerCommandId::SetStepSwing;
                 c.a  = r;
                 c.b  = s;
+                c.f  = bar;
                 c.x  = static_cast<int>(st.getProperty("sw", 0)) != 0;
                 SequencerCommandApi::dispatch(engine, c, nowUs);
 
@@ -451,6 +473,7 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                     c.c  = slot;
                     c.d  = ccNb;
                     c.e  = vvv;
+                    c.f  = bar;
                     SequencerCommandApi::dispatch(engine, c, nowUs);
                 }
             }

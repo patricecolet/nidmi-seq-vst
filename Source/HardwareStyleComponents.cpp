@@ -45,6 +45,7 @@ const juce::Colour kCellGrid     {0xff14301f};
 const juce::Colour kPlayhead     {0xfff7a13a};
 const juce::Colour kSelRowBg     {0x2240e090};
 const juce::Colour kMutedText    {0xff8a5a5a};
+const juce::Colour kSelStep      {0xffffffff};   // pas sélectionné (curseur) : blanc vif, hors palette
 
 /// Teinte par pitch-class (0..11) : 12 couleurs distinctes, saturées mais non criardes,
 /// lisibles sur le fond sombre TFT. Les cellules tombant sur la MÊME note jouée partagent
@@ -249,13 +250,29 @@ void PatternScreen::recomputeLayout() {
 
     // Viewport vertical : nb de rows visibles = zoom utilisateur (rowZoom) sinon auto (≥ 22 px/row).
     // Fenêtre centrée sur la row sélectionnée (défile avec elle). Émule la contrainte 320×240.
+    // La grille démarre SOUS le bandeau de mesures (PATTERN multi-mesures), sinon = bodyArea_.
     constexpr float kMinRowH = 22.0f;
+    const auto grid   = gridArea();
     const int nr = juce::jmax(1, model_.numRows);
-    const int autoVis = juce::jlimit(1, nr, static_cast<int>(bodyArea_.getHeight() / kMinRowH));
+    const int autoVis = juce::jlimit(1, nr, static_cast<int>(grid.getHeight() / kMinRowH));
     visibleRows_ = (model_.rowZoom > 0) ? juce::jlimit(1, nr, model_.rowZoom) : autoVis;
-    rowH_        = bodyArea_.getHeight() / static_cast<float>(visibleRows_);
+    rowH_        = grid.getHeight() / static_cast<float>(visibleRows_);
     const int sel = juce::jlimit(0, nr - 1, model_.selectedRow);
     firstVisibleRow_ = juce::jlimit(0, juce::jmax(0, nr - visibleRows_), sel - visibleRows_ / 2);
+}
+
+// Bandeau de mesures : seulement en PATTERN, hors-sub, et si numBars>1. Hauteur fixe ~15px,
+// rogné en haut de bodyArea_. Sinon rect vide (les autres vues ignorent ce bandeau).
+juce::Rectangle<float> PatternScreen::measureBandArea() const {
+    if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub || model_.numBars <= 1)
+        return {};
+    constexpr float kBandH = 15.0f;
+    return bodyArea_.withHeight(juce::jmin(kBandH, bodyArea_.getHeight() * 0.4f));
+}
+
+juce::Rectangle<float> PatternScreen::gridArea() const {
+    const auto band = measureBandArea();
+    return band.isEmpty() ? bodyArea_ : bodyArea_.withTrimmedTop(band.getHeight());
 }
 
 int PatternScreen::tabAtX(float x) const {
@@ -264,6 +281,30 @@ int PatternScreen::tabAtX(float x) const {
     const float tabW = tabBarArea_.getWidth() / static_cast<float>(PatternScreenModel::kNumPages);
     const int   i    = static_cast<int>((x - tabBarArea_.getX()) / tabW);
     return juce::jlimit(0, PatternScreenModel::kNumPages - 1, i);
+}
+
+// Géométrie du bandeau de mesures : préfixe "Mes" optionnel à gauche puis numBars chips égales.
+// Renvoie le rect des chips (hors préfixe) et la largeur d'une chip via les paramètres out.
+static juce::Rectangle<float> measureChipsArea(juce::Rectangle<float> band, int numBars,
+                                               float& chipW) {
+    constexpr float kPrefixW = 30.0f;
+    auto chips = band;
+    if (band.getWidth() > kPrefixW + static_cast<float>(numBars) * 14.0f)
+        chips.removeFromLeft(kPrefixW);   // place pour le préfixe "Mes"
+    chipW = chips.getWidth() / static_cast<float>(juce::jmax(1, numBars));
+    return chips;
+}
+
+int PatternScreen::measureAtX(float x) const {
+    const auto band = measureBandArea();
+    if (band.isEmpty())
+        return -1;
+    float chipW = 0.0f;
+    const auto chips = measureChipsArea(band, model_.numBars, chipW);
+    if (chipW <= 0.0f || x < chips.getX() || x >= chips.getRight())
+        return -1;
+    const int i = static_cast<int>((x - chips.getX()) / chipW);
+    return juce::jlimit(0, model_.numBars - 1, i);
 }
 
 void PatternScreen::paintTabBar(juce::Graphics& g) {
@@ -312,6 +353,13 @@ void PatternScreen::paint(juce::Graphics& g) {
             || model_.page == PatternScreenModel::Page::PianoRoll
             || model_.page == PatternScreenModel::Page::Auto) {
             crumb = "R" + juce::String(model_.selectedRow + 1) + "/" + juce::String(juce::jmax(1, model_.numRows));
+            // Indicateur de mesure éditée "Mes e/n". Si la lecture est sur une autre
+            // mesure, on l'indique discrètement (▸joue X).
+            crumb += "  Mes " + juce::String(model_.editBar + 1) + "/" + juce::String(juce::jmax(1, model_.numBars));
+            if (model_.playing && model_.numBars > 1 && model_.playBar != model_.editBar) {
+                const juce::String play(juce::CharPointer_UTF8("\xe2\x96\xb8"));   // ▸
+                crumb += play + "joue" + juce::String(model_.playBar + 1);
+            }
             if (model_.keyPageStart >= 0 && model_.keyPageCount > 1) {
                 const int rowN = (model_.selectedRow < model_.numRows)
                                      ? juce::jlimit(1, 64, model_.rows[static_cast<size_t>(model_.selectedRow)].numSteps)
@@ -325,7 +373,7 @@ void PatternScreen::paint(juce::Graphics& g) {
         }
         g.setColour(kRowLabel);
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
-        g.drawText(crumb, header.removeFromLeft(120.0f), juce::Justification::centredLeft);
+        g.drawText(crumb, header.removeFromLeft(220.0f), juce::Justification::centredLeft);
         juce::String right = glyph + "  " + juce::String(model_.bpm, 1) + " BPM   Mesure "
                              + juce::String(model_.tsNum) + "/" + juce::String(model_.tsDen);
         g.drawText(right, header, juce::Justification::centredRight);
@@ -379,8 +427,42 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
         return;
     }
 
-    const float stripX = bodyArea_.getX() + gutterW_;
-    const float stripW = juce::jmax(10.0f, bodyArea_.getWidth() - gutterW_ - infoW_);
+    // Bandeau de mesures (multi-mesures) : chips cliquables au-dessus de la grille.
+    // Mesure éditée = surlignée ; mesure jouée = liseré ambre (playhead).
+    {
+        const auto band = measureBandArea();
+        if (!band.isEmpty()) {
+            float chipW = 0.0f;
+            const auto chips = measureChipsArea(band, model_.numBars, chipW);
+            if (chips.getX() > band.getX() + 1.0f) {   // préfixe "Mes" si la place existe
+                g.setColour(kRowLabel);
+                g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
+                g.drawText("Mes", band.withWidth(chips.getX() - band.getX()).reduced(2.0f, 0.0f),
+                           juce::Justification::centredLeft);
+            }
+            for (int b = 0; b < model_.numBars; ++b) {
+                juce::Rectangle<float> chip(chips.getX() + static_cast<float>(b) * chipW,
+                                            chips.getY(), chipW, chips.getHeight());
+                const auto inner = chip.reduced(1.5f, 1.5f);
+                const bool edited = (b == model_.editBar);
+                const bool played = model_.playing && (b == model_.playBar);
+                g.setColour(edited ? kHeaderText : kCellOff);
+                g.fillRoundedRectangle(inner, 3.0f);
+                g.setColour(edited ? kScreenBg : kRowLabel);
+                g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)
+                                         .withStyle(edited ? "Bold" : "")));
+                g.drawText(juce::String(b + 1), inner, juce::Justification::centred);
+                if (played) {   // marqueur de lecture : liseré ambre autour de la chip
+                    g.setColour(kPlayhead);
+                    g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.6f);
+                }
+            }
+        }
+    }
+
+    const auto  grid   = gridArea();
+    const float stripX = grid.getX() + gutterW_;
+    const float stripW = juce::jmax(10.0f, grid.getWidth() - gutterW_ - infoW_);
 
     // Zoom horizontal : fenêtre = 1/stepZoom de la mesure, centrée sur le pas sélectionné.
     const int   zoom    = juce::jlimit(1, 8, model_.stepZoom);
@@ -395,14 +477,14 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
     auto barToX = [stripX, stripW, winStart, winLen](float frac) {
         return stripX + (frac - winStart) / winLen * stripW;
     };
-    const juce::Rectangle<int> stripClip(juce::roundToInt(stripX), juce::roundToInt(bodyArea_.getY()),
-                                         juce::roundToInt(stripW), juce::roundToInt(bodyArea_.getHeight()));
+    const juce::Rectangle<int> stripClip(juce::roundToInt(stripX), juce::roundToInt(grid.getY()),
+                                         juce::roundToInt(stripW), juce::roundToInt(grid.getHeight()));
 
     const int rEnd = juce::jmin(model_.numRows, firstVisibleRow_ + visibleRows_);
     for (int r = firstVisibleRow_; r < rEnd; ++r) {
         const auto& row = model_.rows[static_cast<size_t>(r)];
-        const float y   = bodyArea_.getY() + static_cast<float>(r - firstVisibleRow_) * rowH_;
-        juce::Rectangle<float> rowRect(bodyArea_.getX(), y, bodyArea_.getWidth(), rowH_);
+        const float y   = grid.getY() + static_cast<float>(r - firstVisibleRow_) * rowH_;
+        juce::Rectangle<float> rowRect(grid.getX(), y, grid.getWidth(), rowH_);
 
         if (r == model_.selectedRow) {
             g.setColour(kSelRowBg);
@@ -414,7 +496,7 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)
                                  .withStyle(r == model_.selectedRow ? "Bold" : "")));
         g.drawText("R" + juce::String(r + 1),
-                   juce::Rectangle<float>(bodyArea_.getX(), y, gutterW_, rowH_).reduced(2.0f),
+                   juce::Rectangle<float>(grid.getX(), y, gutterW_, rowH_).reduced(2.0f),
                    juce::Justification::centredLeft);
 
         // Strip de pas : N cellules réparties sur la fenêtre-mesure (zoom horizontal), clippées au strip.
@@ -492,10 +574,11 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     g.setColour(kPlayhead.withAlpha(0.85f));
                     g.fillPath(tri);
                 }
-                // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré clair.
+                // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré blanc vif
+                // (hors palette vert/ambre) pour bien distinguer le slot édité du playhead et du reste.
                 if (r == model_.selectedRow && s == model_.selectedStep) {
-                    g.setColour(kHeaderText);
-                    g.drawRoundedRectangle(inner.reduced(0.3f), 2.0f, 1.6f);
+                    g.setColour(kSelStep);
+                    g.drawRoundedRectangle(inner.reduced(0.3f), 2.0f, 2.2f);
                 }
             }
         }
@@ -526,7 +609,7 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
         const int   end   = juce::jmin(n, start + 16);
         const float bx0   = juce::jlimit(stripX, stripX + stripW, barToX(static_cast<float>(start) / n));
         const float bx1   = juce::jlimit(stripX, stripX + stripW, barToX(static_cast<float>(end) / n));
-        const float y     = bodyArea_.getY() + static_cast<float>(model_.selectedRow - firstVisibleRow_) * rowH_;
+        const float y     = grid.getY() + static_cast<float>(model_.selectedRow - firstVisibleRow_) * rowH_;
         if (bx1 - bx0 > 1.0f) {
             juce::Rectangle<float> box(bx0, y + 1.0f, bx1 - bx0, rowH_ - 2.0f);
             g.setColour(kPlayhead.withAlpha(0.12f));
@@ -541,11 +624,11 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
     g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
     if (firstVisibleRow_ > 0)
         g.drawText(juce::CharPointer_UTF8("\xe2\x96\xb2"),  // ▲
-                   juce::Rectangle<float>(bodyArea_.getRight() - 12.0f, bodyArea_.getY(), 12.0f, 10.0f),
+                   juce::Rectangle<float>(grid.getRight() - 12.0f, grid.getY(), 12.0f, 10.0f),
                    juce::Justification::centred);
     if (firstVisibleRow_ + visibleRows_ < model_.numRows)
         g.drawText(juce::CharPointer_UTF8("\xe2\x96\xbc"),  // ▼
-                   juce::Rectangle<float>(bodyArea_.getRight() - 12.0f, bodyArea_.getBottom() - 10.0f, 12.0f, 10.0f),
+                   juce::Rectangle<float>(grid.getRight() - 12.0f, grid.getBottom() - 10.0f, 12.0f, 10.0f),
                    juce::Justification::centred);
 }
 
@@ -1013,18 +1096,31 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
 
     if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub)
         return;  // autres pages / mode sub : édition par encodeurs+touches, pas à la souris (V1).
+
+    // Clic dans le bandeau de mesures (multi-mesures) : sélection de la mesure éditée.
+    {
+        const auto band = measureBandArea();
+        if (!band.isEmpty() && band.contains(x, y)) {
+            const int b = measureAtX(x);
+            if (b >= 0 && onMeasureSelected)
+                onMeasureSelected(b);
+            return;
+        }
+    }
+
     if (model_.numRows <= 0 || rowH_ <= 0.0f)
         return;
-    if (!bodyArea_.contains(x, y))
+    const auto grid = gridArea();   // grille décalée sous le bandeau (cf. paint)
+    if (!grid.contains(x, y))
         return;
 
-    int r = firstVisibleRow_ + static_cast<int>((y - bodyArea_.getY()) / rowH_);   // offset viewport
+    int r = firstVisibleRow_ + static_cast<int>((y - grid.getY()) / rowH_);   // offset viewport
     r = juce::jlimit(0, model_.numRows - 1, r);
     if (onRowSelected)
         onRowSelected(r);
 
-    const float stripX = bodyArea_.getX() + gutterW_;
-    const float stripW = juce::jmax(10.0f, bodyArea_.getWidth() - gutterW_ - infoW_);
+    const float stripX = grid.getX() + gutterW_;
+    const float stripW = juce::jmax(10.0f, grid.getWidth() - gutterW_ - infoW_);
     if (x < stripX || x >= stripX + stripW)
         return;  // gouttière ou zone d'infos = sélection de row uniquement.
 

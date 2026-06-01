@@ -98,6 +98,10 @@ private:
     int stepPage_     = 0;
     int stepPageCount() const;   // nb de pages de 16 pas de la row sélectionnée
 
+    // Mesure actuellement ÉDITÉE (0..numBars-1), INDÉPENDANTE de la mesure de LECTURE.
+    // Choix utilisateur (⇧Page-/⇧Page+). Toutes les écritures de pas la passent via cmd.f.
+    int editBar_      = 0;
+
     // Subpatterns (tuplets imbriqués) : édition « drill-in » re-ciblant la Vue PATTERN.
     bool inSub_       = false;
     int  subHostRow_  = 0;

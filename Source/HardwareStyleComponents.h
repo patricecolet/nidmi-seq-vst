@@ -55,6 +55,12 @@ struct PatternScreenModel {
     int   tsNum        = 4;
     int   tsDen        = 4;
 
+    // Multi-mesures (1..kMaxBars). editBar = mesure ÉDITÉE (choix utilisateur) ;
+    // playBar = mesure en LECTURE (moteur). numBars==1 => tout reste à 0 (rétrocompat).
+    int   numBars      = 1;
+    int   editBar      = 0;
+    int   playBar      = 0;
+
     // Vue PATTERN.
     int   numRows      = 0;
     int   selectedRow  = 0;
@@ -136,6 +142,7 @@ public:
     std::function<void(int slotIdx)>             onAutoSlot;      // AUTO : slot de P-lock actif
     std::function<void(int field)>               onAutoField;     // AUTO : champ (Valeur/CC#)
     std::function<void(int step, int value)>     onAutoValueSet;  // AUTO : valeur d'un pas (clic lane)
+    std::function<void(int bar)>                 onMeasureSelected; // PATTERN : clic sur le bandeau de mesures
 
     static const char* chordQualityShort(int quality);
 
@@ -154,6 +161,12 @@ private:
     void mouseDown(const juce::MouseEvent& e) override;
     void recomputeLayout();
     int  tabAtX(float x) const;
+    /// Bandeau de mesures (PATTERN, numBars>1, hors-sub) : rect réservé en haut de bodyArea_,
+    /// vide (height==0) sinon. Calculé à l'identique par paint et le hit-test.
+    juce::Rectangle<float> measureBandArea() const;
+    /// Zone de grille des rows = bodyArea_ moins le bandeau de mesures (si présent).
+    juce::Rectangle<float> gridArea() const;
+    int  measureAtX(float x) const;   // index de mesure cliqué dans le bandeau (-1 hors bandeau)
 
     PatternScreenModel model_;
 
