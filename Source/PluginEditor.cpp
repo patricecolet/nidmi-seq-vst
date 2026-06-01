@@ -18,13 +18,7 @@ constexpr const char* kOledTitles[]   = {"BPM",        "Pas/mesure", "Rangees", 
 static_assert(std::size(kOledParamIds) == std::size(kOledTitles));
 constexpr int kNumOledParams = static_cast<int>(std::size(kOledParamIds));
 
-// Page HARMONIE : index 1..7 = un bit d'extension unitaire (9/11/13/b9/#9/#11/b13) ; 0 = none.
-// Conservé pour setChordField (champ Extensions par index, ré-utilisable hors clavier).
-constexpr uint8_t kHarmExtBits[8] = {0, 1u << 0, 1u << 1, 1u << 2, 1u << 3, 1u << 4, 1u << 5, 1u << 6};
 const char* kRoman[7]         = {"I", "II", "III", "IV", "V", "VI", "VII"};
-
-const char* kQualName[12]     = {"maj", "m", "dim", "aug", "7", "maj7",
-                                 "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
 
 // Type de division musicale donné par N pas dans une mesure tsNum/tsDen.
 // Ex. 4/4 : N=16 -> "1/16", N=12 -> "1/8T", N=20 -> "5:tps". Vide si non interprétable.
@@ -120,6 +114,22 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         c.id = SequencerCommandId::SetRowMuted;
         c.a  = static_cast<uint8_t>(selectedRow_);
         c.x  = !pat.rows[static_cast<size_t>(selectedRow_)].muted;
+        proc_.controller().postCommand(c);
+    };
+
+    // Harmonie ON/OFF du pattern (toggle + LED, visible toutes vues, miroir de muteBtn_).
+    harmBtn_.setLookAndFeel(&transportLook_);
+    harmBtn_.setButtonText("Harm");
+    harmBtn_.setToggleable(true);
+    harmBtn_.setClickingTogglesState(false);
+    harmBtn_.onClick = [this] {
+        const auto& ph = proc_.engine().pattern().harmony;
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetPatternHarmony;
+        c.x  = !ph.harmonyEnabled;                       // toggle
+        c.a  = static_cast<uint8_t>(ph.scaleId);         // préserve gamme
+        c.b  = static_cast<uint8_t>(ph.rootPc);          // préserve tonique
+        c.y  = ph.followProgression;                     // préserve suivi progression
         proc_.controller().postCommand(c);
     };
 
@@ -299,6 +309,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(exportBtn_);
     addAndMakeVisible(shiftBtn_);
     addAndMakeVisible(muteBtn_);
+    addAndMakeVisible(harmBtn_);
     for (int i = 0; i < 4; ++i)
         addAndMakeVisible(pushBtn_[i]);
 
@@ -327,6 +338,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     exportBtn_.toFront(false);
     shiftBtn_.toFront(false);
     muteBtn_.toFront(false);
+    harmBtn_.toFront(false);
     for (int i = 0; i < 4; ++i)
         pushBtn_[i].toFront(false);
 
@@ -342,6 +354,7 @@ NidmiSeqAudioProcessorEditor::~NidmiSeqAudioProcessorEditor() {
     exportBtn_.setLookAndFeel(nullptr);
     shiftBtn_.setLookAndFeel(nullptr);
     muteBtn_.setLookAndFeel(nullptr);
+    harmBtn_.setLookAndFeel(nullptr);
     for (int i = 0; i < 4; ++i)
         pushBtn_[i].setLookAndFeel(nullptr);
 }
@@ -401,16 +414,18 @@ void NidmiSeqAudioProcessorEditor::resized() {
         screen_.setBounds(block.reduced(6, 2));
     }
 
-    // Rangée « contrôles » : Mute (row sélectionnée) + Shift (secondes fonctions). 32 px.
+    // Rangée « contrôles » : Mute (row) + Shift (2des fonctions) + Harm (harmonie ON/OFF). 32 px.
     {
         auto      row = r.removeFromTop(32);
         const int bw  = 70;
         const int gap = 6;
-        const int totalW = bw * 2 + gap;
+        const int totalW = bw * 3 + gap * 2;
         row.removeFromLeft(juce::jmax(0, (row.getWidth() - totalW) / 2));
         muteBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
         row.removeFromLeft(gap);
         shiftBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
+        row.removeFromLeft(gap);
+        harmBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
     }
 
     piano_.setBounds(r);
@@ -779,8 +794,9 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
     // (sinon : I major par défaut, deg=1 qual=0 ext=0 bass=0 dur=1 ci-dessus)
     switch (field) {
         case 0: deg  = juce::jlimit(1, 7, value); break;             // Degré
-        case 1: qual = juce::jlimit(0, 11, value); break;            // Qualité
-        case 2: ext  = kHarmExtBits[juce::jlimit(0, 7, value)]; break; // Extensions (index)
+        case 1: qual = juce::jlimit(0, 5, value); break;             // Qualité (triade 0..5)
+        // case 2 (Extensions par index) supprimé : les extensions sont des bits togglés par les
+        //   noires (onBlackKey), pas un index. setChordField préserve les bits existants tels quels.
         case 3: bass = juce::jlimit(-12, 12, value); break;          // Bass
         default: dur = juce::jlimit(1, 16, value); break;            // Durée
     }
@@ -797,7 +813,9 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
     c.a  = static_cast<uint8_t>(cur);
     c.b  = static_cast<uint8_t>(deg);
     c.c  = static_cast<uint8_t>(qual);
-    c.d  = static_cast<uint8_t>(ext);
+    // extensions est un uint16 : octet bas dans c.d, octet haut dans c.len (cf. SetChordSlot core).
+    c.d  = static_cast<uint8_t>(ext & 0xFF);
+    c.len = static_cast<uint8_t>((ext >> 8) & 0xFF);
     c.e  = static_cast<uint8_t>(static_cast<int8_t>(bass));
     c.f  = static_cast<uint8_t>(dur);
     proc_.controller().postCommand(c);
@@ -1084,7 +1102,7 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         const bool realSlot = harmonyCursor_ < len;   // Suppr seulement sur un slot existant
         setAction(0, "Suppr", realSlot);               // Enc1 : action immédiate
         setToggle(1, "\xe2\x86\x92" "Bass",  harmValBass_);   // Enc2 : →Bass
-        setToggle(2, "\xe2\x86\x92" "Durée", harmVeloDur_);   // Enc3 : →Durée
+        hide(2);                                               // Enc3 = Durée en rotation directe (plus de toggle)
         setToggle(3, "\xe2\x86\x92" "Gamme", harmZoomScale_); // Enc4 : →Gamme
         return;
     }
@@ -1133,25 +1151,17 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
         return;
     }
 
-    // HARMONIE : Enc3 = Qualité, ou Durée si push →Durée actif.
+    // HARMONIE : la qualité (triade) passe sur les blanches 8..13 → Enc3 = Durée du slot.
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        int qual = 0, dur = 1;
-        if (cur < static_cast<int>(prog.len)) {
-            qual = static_cast<int>(prog.slots[static_cast<size_t>(cur)].quality);
-            dur  = prog.slots[static_cast<size_t>(cur)].durationSlots;
-        }
-        if (harmVeloDur_) {
-            veloEncoder_.setRange(1.0, 16.0, 1.0);
-            veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
-            veloEncoderLabel_.setText("Durée " + juce::String(dur), juce::dontSendNotification);
-        } else {
-            veloEncoder_.setRange(0.0, 11.0, 1.0);
-            veloEncoder_.setValue(static_cast<double>(qual), juce::dontSendNotification);
-            veloEncoderLabel_.setText("Qual " + juce::String(kQualName[juce::jlimit(0, 11, qual)]),
-                                      juce::dontSendNotification);
-        }
+        int dur = 1;
+        if (cur < static_cast<int>(prog.len))
+            dur = prog.slots[static_cast<size_t>(cur)].durationSlots;
+        veloEncoder_.setRange(1.0, 16.0, 1.0);
+        veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
+        // durationSlots = nombre de MESURES pendant lesquelles l'accord reste actif.
+        veloEncoderLabel_.setText("Duree " + juce::String(dur) + " mes", juce::dontSendNotification);
         return;
     }
 
@@ -1198,9 +1208,9 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         return;
     }
 
-    // HARMONIE : Enc3 = Qualité, ou Durée si push →Durée actif.
+    // HARMONIE : Enc3 = Durée du slot (la qualité est posée par les blanches 8..13).
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        setChordField(harmVeloDur_ ? 4 : 1, (int) std::lround(veloEncoder_.getValue()));
+        setChordField(4, (int) std::lround(veloEncoder_.getValue()));
         return;
     }
 
@@ -1398,6 +1408,11 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
                        && pat.rows[static_cast<size_t>(selectedRow_)].muted;
     muteBtn_.setToggleState(muted, juce::dontSendNotification);
     muteBtn_.setButtonText(muted ? "Muted" : "Mute");
+
+    // Harmonie ON/OFF : LED + texte reflètent l'état réel du pattern.
+    const bool harmOn = pat.harmony.harmonyEnabled;
+    harmBtn_.setToggleState(harmOn, juce::dontSendNotification);
+    harmBtn_.setButtonText(harmOn ? "Harm ON" : "Harm");
 
     if (!navEncoder_.isMouseButtonDown() && !valueEncoder_.isMouseButtonDown())
         applyEncoderConfigForState();
@@ -1655,14 +1670,16 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
     //  - sinon : noire 9 rel/abs du sub pertinent (drill-in : sub édité ; sinon sub du pas sél.).
     // Rafraîchi à chaque tick du timer → reflète l'état même si modifié ailleurs.
     if (!inSub_ && screenPage_ == PatternScreenModel::Page::Harmony) {
-        static const uint8_t kBit[7] = {
+        // Même ordre/mapping que kBlackExtBit dans onBlackKey (11 noires).
+        static const uint16_t kBit[11] = {
+            kExtFlat7, kExtMaj7, kExtFlat5, kExtSharp5,
             kExt9, kExt11, kExt13, kExtFlat9, kExtSharp9, kExtSharp11, kExtFlat13};
         const auto& prog = pat.chordProgression;
         const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        const int   ext  = (cur < static_cast<int>(prog.len))
+        const uint16_t ext = (cur < static_cast<int>(prog.len))
                                ? prog.slots[static_cast<size_t>(cur)].extensions : 0;
         int litExt = -1;
-        for (int i = 0; i < 7; ++i)
+        for (int i = 0; i < 11; ++i)
             if ((ext & kBit[i]) != 0) { litExt = i; break; }
         piano_.setBlackKeyLed(litExt, litExt >= 0);
     } else {
@@ -1963,10 +1980,14 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
                 buildScreenModel();
                 return;
             }
-            if (index >= 7) return;          // blanches 1..7 = degrés
-            setChordField(0, index + 1);     // pose le degré du slot
-            if (recArmed_)                   // REC = step-record d'accords : avance au slot suivant
-                harmonyCursor_ = juce::jlimit(0, 31, harmonyCursor_ + 1);
+            if (index >= 0 && index < 7) {
+                setChordField(0, index + 1);     // blanches 0..6 = degrés I..VII
+                if (recArmed_)                   // REC = step-record d'accords : avance au slot suivant
+                    harmonyCursor_ = juce::jlimit(0, 31, harmonyCursor_ + 1);
+            } else if (index >= 7 && index <= 12) {
+                setChordField(1, index - 7);     // blanches 7..12 = triades 0..5 (qualité) ; pas d'avance REC
+            }
+            // blanches 13..15 : inactives.
             break;
         }
         case PatternScreenModel::Page::Global:
@@ -2046,19 +2067,21 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             else if (index == 3) stepPage_ = juce::jmin(stepPageCount() - 1, stepPage_ + 1); // Page+ (adaptatif)
             break;
         case PatternScreenModel::Page::Harmony: {
-            // Noires 0..6 = bascule d'un bit d'extension (9/11/13/b9/#9/#11/b13). 7..10 inactives.
-            // XOR du bit sur les extensions du slot courant ; on relit les autres champs et on
-            // réémet SetChordSlot (setChordField ne sait poser qu'un index unitaire, pas un masque).
-            if (index < 0 || index > 6)
+            // Noires 0..10 = bascule d'un bit d'extension (11 bits du core). 7e/5-alt mutuellement
+            // exclusives par groupe. XOR du bit sur les extensions du slot courant, puis réémission
+            // de SetChordSlot (split ext sur c.d|c.len ; extensions est un uint16).
+            if (index < 0 || index > 10)
                 break;
-            static const uint8_t kBlackExtBit[7] = {
+            static const uint16_t kBlackExtBit[11] = {
+                kExtFlat7, kExtMaj7, kExtFlat5, kExtSharp5,
                 kExt9, kExt11, kExt13, kExtFlat9, kExtSharp9, kExtSharp11, kExtFlat13};
             const auto& prog = proc_.engine().pattern().chordProgression;
             const int   len  = juce::jlimit(0, 32, static_cast<int>(prog.len));
             const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
             // Slot d'ajout (cur >= len) : on crée d'abord le slot (seed via setChordField, qui
             // copie le dernier slot), puis on rebascule l'extension sur le slot fraîchement créé.
-            int deg = 1, qual = 0, ext = 0, bass = 0, dur = 1;
+            int deg = 1, qual = 0, bass = 0, dur = 1;
+            uint16_t ext = 0;
             if (cur < len) {
                 const auto& cs = prog.slots[static_cast<size_t>(cur)];
                 deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
@@ -2072,13 +2095,22 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
                     bass = cs.bassOffset; dur = cs.durationSlots;
                 }
             }
-            ext ^= kBlackExtBit[index];   // toggle du bit
+            const uint16_t bit = kBlackExtBit[index];
+            ext ^= bit;   // toggle du bit
+            // Exclusivité de groupe : si on vient d'ACTIVER un bit, masque l'autre membre du groupe.
+            if (ext & bit) {
+                if      (bit == kExtFlat7) ext &= ~kExtMaj7;   // 7e : b7 ↔ 7♮
+                else if (bit == kExtMaj7)  ext &= ~kExtFlat7;
+                else if (bit == kExtFlat5) ext &= ~kExtSharp5; // 5-alt : b5 ↔ #5
+                else if (bit == kExtSharp5) ext &= ~kExtFlat5;
+            }
             SequencerCommand c;
             c.id = SequencerCommandId::SetChordSlot;
             c.a  = static_cast<uint8_t>(cur);
             c.b  = static_cast<uint8_t>(deg);
             c.c  = static_cast<uint8_t>(qual);
-            c.d  = static_cast<uint8_t>(ext);
+            c.d  = static_cast<uint8_t>(ext & 0xFF);            // octet bas
+            c.len = static_cast<uint8_t>((ext >> 8) & 0xFF);    // octet haut (uint16)
             c.e  = static_cast<uint8_t>(static_cast<int8_t>(bass));
             c.f  = static_cast<uint8_t>(dur);
             proc_.controller().postCommand(c);
@@ -2127,8 +2159,11 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             break;
         case PatternScreenModel::Page::Harmony: {
             static const char* kR[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
-            // Noires 0..6 = extensions (toggle bitfield) ; 7..10 inactives.
-            static const char* kExtLbl[7] = {"9", "11", "13", "b9", "#9", "#11", "b13"};
+            static const char* kTri[6] = {"maj", "m", "dim", "aug", "sus2", "sus4"};   // blanches 7..12
+            // Noires 0..10 = 11 extensions (toggle bitfield), même ordre que kBlackExtBit dans onBlackKey.
+            // Noire 0 = 7e mineure (+10, donne les accords « 7 ») ; noire 1 = 7e majeure (+11, « M7 »).
+            static const char* kExtLbl[11] = {"7", "M7", "b5", "#5", "9", "11", "13",
+                                              "b9", "#9", "#11", "b13"};
             static const char* kMode[4] = {"A", "B1", "B2", "CHR"};
             if (shiftActive()) {
                 // ⇧ : les blanches 1..numRows = rows à cycler. Libellé "Rn:mode" (CHR = délié).
@@ -2143,11 +2178,11 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
                     }
                 }
             } else {
-                for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);
-                for (int i = 7; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
+                for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);        // 0..6 = degrés
+                for (int i = 7; i < 13; ++i) piano_.setWhiteKeyLabel(i, kTri[i - 7]);  // 7..12 = triades
+                for (int i = 13; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});          // 13..15 = vides
             }
-            for (int i = 0; i < 7; ++i)  piano_.setBlackKeyLabel(i, kExtLbl[i]);
-            for (int i = 7; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+            for (int i = 0; i < 11; ++i) piano_.setBlackKeyLabel(i, kExtLbl[i]);
             // (la LED d'extension active est gérée par frame dans refreshPianoKeysFromEngine.)
             break;
         }

@@ -135,14 +135,78 @@ juce::String pitchClassName(int pc) {
     return juce::String(kN[((pc % 12) + 12) % 12]);
 }
 
+// ─── Miroir LOCAL des bits d'extension du core (StepTypes.h). PatternScreen est AGNOSTIQUE du
+//     core et ne doit PAS l'inclure ; ces valeurs DOIVENT matcher le core à l'identique.
+//     core : kExt9=1<<0 kExt11=1<<1 kExt13=1<<2 kExtFlat9=1<<3 kExtSharp9=1<<4 kExtSharp11=1<<5
+//            kExtFlat13=1<<6 kExtFlat7=1<<7 kExtMaj7=1<<8 kExtFlat5=1<<9 kExtSharp5=1<<10.
+namespace ext {
+constexpr int k9       = 1 << 0;
+constexpr int k11      = 1 << 1;
+constexpr int k13      = 1 << 2;
+constexpr int kFlat9   = 1 << 3;
+constexpr int kSharp9  = 1 << 4;
+constexpr int kSharp11 = 1 << 5;
+constexpr int kFlat13  = 1 << 6;
+constexpr int kFlat7   = 1 << 7;
+constexpr int kMaj7    = 1 << 8;
+constexpr int kFlat5   = 1 << 9;
+constexpr int kSharp5  = 1 << 10;
+}  // namespace ext
+
+// Liste UNIQUEMENT les tensions (9/11/13/b9/#9/#11/b13). La 7e (b7/7♮) et la 5-alt (b5/#5)
+// sont gérées par chordSuffix (intégrées au nom d'accord), pas ici.
 juce::String extensionsShort(int bits) {
     struct { int bit; const char* name; } kE[] = {
-        {1 << 0, "9"}, {1 << 1, "11"}, {1 << 2, "13"},
-        {1 << 3, "b9"}, {1 << 4, "#9"}, {1 << 5, "#11"}, {1 << 6, "b13"}};
+        {ext::k9, "9"}, {ext::k11, "11"}, {ext::k13, "13"},
+        {ext::kFlat9, "b9"}, {ext::kSharp9, "#9"}, {ext::kSharp11, "#11"}, {ext::kFlat13, "b13"}};
     juce::StringArray parts;
     for (auto& e : kE)
         if (bits & e.bit) parts.add(e.name);
     return parts.isEmpty() ? juce::String() : ("+" + parts.joinIntoString(","));
+}
+
+// Suffixe d'accord USUEL recomposé depuis la triade + la 7e + la 5-alt + les tensions.
+// quality : 0=maj 1=min 2=dim 3=aug 4=sus2 5=sus4. extensions : bitfield (miroir ci-dessus).
+juce::String chordSuffix(int quality, int extensions) {
+    const int q = juce::jlimit(0, 5, quality);
+    const bool hasFlat7 = (extensions & ext::kFlat7) != 0;
+    const bool hasMaj7  = (extensions & ext::kMaj7)  != 0;
+    const bool hasFlat5 = (extensions & ext::kFlat5) != 0;
+    const bool hasSharp5 = (extensions & ext::kSharp5) != 0;
+
+    // Base : triade + type de 7e.
+    juce::String base;
+    switch (q) {
+        case 0: base = hasMaj7 ? "maj7" : (hasFlat7 ? "7"     : "");      break;  // Major
+        case 1: base = hasMaj7 ? "mM7"  : (hasFlat7 ? "m7"    : "m");     break;  // Minor
+        case 2: base = hasMaj7 ? "dimM7": (hasFlat7 ? "m7b5"  : "dim");   break;  // Diminished
+        case 3: base = hasMaj7 ? "augM7": (hasFlat7 ? "aug7"  : "aug");   break;  // Augmented
+        case 4: base = hasMaj7 ? "maj7sus2" : (hasFlat7 ? "7sus2" : "sus2"); break; // Sus2
+        default: base = hasMaj7 ? "maj7sus4" : (hasFlat7 ? "7sus4" : "sus4"); break; // Sus4
+    }
+
+    // 5-alt : n'affiche que si non DÉJÀ impliquée par le nom de base.
+    //  - dim / m7b5 impliquent déjà b5 → ne pas réafficher b5.
+    //  - aug implique déjà #5 → ne pas réafficher #5.
+    juce::String alt5;
+    if (hasFlat5  && q != 2) alt5 = "b5";   // b5 visible sauf si triade Diminished
+    if (hasSharp5 && q != 3) alt5 = "#5";   // #5 visible sauf si triade Augmented
+
+    // Tensions (sans 7e ni 5-alt).
+    juce::StringArray tens;
+    struct { int bit; const char* name; } kT[] = {
+        {ext::k9, "9"}, {ext::k11, "11"}, {ext::k13, "13"},
+        {ext::kFlat9, "b9"}, {ext::kSharp9, "#9"}, {ext::kSharp11, "#11"}, {ext::kFlat13, "b13"}};
+    for (auto& t : kT)
+        if (extensions & t.bit) tens.add(t.name);
+
+    juce::String out = base + alt5;
+    if (!tens.isEmpty()) {
+        const bool seventh = hasFlat7 || hasMaj7;
+        out += seventh ? ("(" + tens.joinIntoString(",") + ")")   // accord de 7e : tensions entre ()
+                       : ("add" + tens.joinIntoString(","));      // sinon : style add9/add11…
+    }
+    return out;
 }
 
 struct HarmLayout {
@@ -217,9 +281,10 @@ RollFrame computeRollFrame(juce::Rectangle<float> body) {
 }  // namespace
 
 const char* PatternScreen::chordQualityShort(int quality) {
-    static const char* kQ[12] = {"", "m", "dim", "aug", "7", "maj7",
-                                 "m7", "mM7", "m7b5", "dim7", "sus2", "sus4"};
-    return kQ[juce::jlimit(0, 11, quality)];
+    // 6 triades de base (ChordQuality du core). Le suffixe complet (7e/5-alt/tensions) est
+    // recomposé par chordSuffix ; cette fonction ne donne que la triade nue.
+    static const char* kQ[6] = {"", "m", "dim", "aug", "sus2", "sus4"};
+    return kQ[juce::jlimit(0, 5, quality)];
 }
 
 PatternScreen::PatternScreen() {
@@ -1004,9 +1069,10 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
 
         if (used) {
             const auto&  c         = model_.chord[static_cast<size_t>(i)];
-            // Haut : chiffrage romain + qualité ; bas : nom d'accord réel (note + qualité).
-            juce::String roman     = juce::String(romanNumeral(c.degree)) + chordQualityShort(c.quality);
-            juce::String chordName = pitchClassName(c.rootPc) + chordQualityShort(c.quality);
+            // Haut : chiffrage romain + suffixe usuel ; bas : nom d'accord réel (note + suffixe).
+            const juce::String suffix = chordSuffix(c.quality, c.extensions);
+            juce::String roman     = juce::String(romanNumeral(c.degree)) + suffix;
+            juce::String chordName = pitchClassName(c.rootPc) + suffix;
 
             auto top   = inner;
             auto lower = top.removeFromBottom(inner.getHeight() * 0.42f);
@@ -1026,13 +1092,15 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     // Ligne de détail du slot sélectionné : inclut le nom d'accord réel.
     juce::String detail;
     if (model_.harmonyCursor < model_.progLen) {
-        const auto&  c    = model_.chord[static_cast<size_t>(model_.harmonyCursor)];
-        const juce::String ext  = extensionsShort(c.extensions);
-        const juce::String name = pitchClassName(c.rootPc) + chordQualityShort(c.quality);
+        const auto&  c      = model_.chord[static_cast<size_t>(model_.harmonyCursor)];
+        const juce::String suffix = chordSuffix(c.quality, c.extensions);
+        const juce::String ext    = extensionsShort(c.extensions);   // tensions seules (détail)
+        const juce::String name   = pitchClassName(c.rootPc) + suffix;
         detail = "Slot " + juce::String(model_.harmonyCursor + 1) + "/" + juce::String(model_.progLen)
-               + "   " + romanNumeral(c.degree) + chordQualityShort(c.quality) + " " + name
+               + "   " + romanNumeral(c.degree) + suffix + " " + name
                + "   ext " + (ext.isEmpty() ? juce::String("-") : ext)
-               + "   bass " + juce::String(c.bassOffset) + "   duree " + juce::String(c.durationSlots);
+               + "   bass " + juce::String(c.bassOffset)
+               + "   duree " + juce::String(c.durationSlots) + " mes";
     } else {
         detail = "Slot " + juce::String(model_.harmonyCursor + 1) + " vide - edite un champ pour l'ajouter";
     }

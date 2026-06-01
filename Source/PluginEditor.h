@@ -52,6 +52,7 @@ private:
     juce::TextButton exportBtn_;
     juce::TextButton shiftBtn_;
     juce::TextButton muteBtn_;
+    juce::TextButton harmBtn_;   // Harmonie ON/OFF du pattern (toggle + LED), visible partout
 
     // Brique PUSH générique : un petit bouton sous chaque encodeur.
     // Convention d'indexation pushBtn_[i] <-> encodeur :
