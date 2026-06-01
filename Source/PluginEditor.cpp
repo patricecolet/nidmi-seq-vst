@@ -1639,6 +1639,15 @@ int NidmiSeqAudioProcessorEditor::rollWhiteKeyMidi(int index) const {
     return juce::jlimit(0, 127, base + 12 * (k / count) + sc.intervals[k % count]);
 }
 
+// Miroir de HardwareStyleComponents : la noire k est entre la blanche kBlackLeftWhiteIndex[k]
+// et la suivante. Une noire ROLL joue donc un demi-ton au-dessus de sa blanche de gauche.
+static const int kBlackLeftWhiteIndexEd[11] = {0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14};
+
+int NidmiSeqAudioProcessorEditor::rollBlackKeyMidi(int blackIndex) const {
+    const int k = juce::jlimit(0, 10, blackIndex);
+    return juce::jlimit(0, 127, rollWhiteKeyMidi(kBlackLeftWhiteIndexEd[k]) + 1);
+}
+
 void NidmiSeqAudioProcessorEditor::shiftKeyboardOctave(int delta) {
     keyboardOctave_ = juce::jlimit(-4, 4, keyboardOctave_ + delta);
     updateKeysForPage();
@@ -1763,31 +1772,61 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
 
 void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
     // Dans un sub : noire 0 = sortir, noire 1 = bascule mode relatif/absolu.
+    // (Grammaire propre au sub ; les autres noires sont inactives en sub — on affinera plus tard.)
     if (inSub_) {
         if (index == 0)      exitSub();
         else if (index == 1) toggleSubMode();
         return;
     }
     const auto& pat = proc_.engine().pattern();
+
+    // Mapping des fonctions des 11 noires, IDENTIQUE sur la même touche physique en PATTERN et ROLL.
+    // 0=R- 1=R+ 2=Page- 3=Page+ 4=Sub 5=Mes- 6=Mes+ 7=Oct- 8=Oct+ 9,10=libre.
+    // allowOct : Oct± n'a de sens qu'en ROLL (clavier de hauteur).
+    auto runFunction = [this, &pat](int idx, bool allowOct) {
+        switch (idx) {
+            case 0: selectedRow_ = juce::jmax(0, selectedRow_ - 1); break;                       // R-
+            case 1: selectedRow_ = juce::jmin(static_cast<int>(pat.numRows) - 1, selectedRow_ + 1); break; // R+
+            case 2: stepPage_ = juce::jmax(0, stepPage_ - 1); break;                             // Page-
+            case 3: stepPage_ = juce::jmin(stepPageCount() - 1, stepPage_ + 1); break;           // Page+
+            case 4: enterOrCreateSub(); return;                                                  // Sub (drill-in)
+            case 5: editBar_ = juce::jmax(0, editBar_ - 1); break;                               // Mes-
+            case 6: editBar_ = juce::jmin(static_cast<int>(pat.numBars) - 1, editBar_ + 1); break; // Mes+
+            case 7: if (allowOct) shiftKeyboardOctave(-1); break;                                // Oct-
+            case 8: if (allowOct) shiftKeyboardOctave(+1); break;                                // Oct+
+            default: break;                                                                      // 9,10 libres
+        }
+    };
+
     switch (screenPage_) {
         case PatternScreenModel::Page::Pattern:
-            if (index == 0)      selectedRow_ = juce::jmax(0, selectedRow_ - 1);
-            else if (index == 1) selectedRow_ = juce::jmin(static_cast<int>(pat.numRows) - 1, selectedRow_ + 1);
-            else if (index == 2) {
-                if (shiftActive())                                                         // ⇧Page- = mesure éditée -1
-                    editBar_ = juce::jmax(0, editBar_ - 1);
-                else
-                    stepPage_ = juce::jmax(0, stepPage_ - 1);                              // Page-
-            } else if (index == 3) {
-                if (shiftActive())                                                         // ⇧Page+ = mesure éditée +1
-                    editBar_ = juce::jmin(static_cast<int>(pat.numBars) - 1, editBar_ + 1);
-                else
-                    stepPage_ = juce::jmin(stepPageCount() - 1, stepPage_ + 1);            // Page+ (adaptatif)
-            } else if (index == 4) { enterOrCreateSub(); return; }                          // « Sub »
+            // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
+            runFunction(index, /*allowOct*/ false);
             break;
         case PatternScreenModel::Page::PianoRoll:
-            if (index == 0)      shiftKeyboardOctave(-1);
-            else if (index == 1) shiftKeyboardOctave(+1);
+            if (shiftActive()) {
+                // ⇧ + noire = fonction (R±/Page±/Sub/Mes±/Oct±).
+                runFunction(index, /*allowOct*/ true);
+            } else {
+                // Noire SEULE = joue/pose une note chromatique, même chemin que onWhiteKey ROLL.
+                if (pat.numRows == 0) return;
+                const int   sr  = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+                const auto& row = pat.rows[static_cast<size_t>(sr)];
+                const int   n   = juce::jmax(1, static_cast<int>(row.numSteps));
+                const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
+                const auto& sd  = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss));
+                SequencerCommand c;
+                c.id = SequencerCommandId::SetStep;
+                c.a  = static_cast<uint8_t>(sr);
+                c.b  = static_cast<uint8_t>(ss);
+                c.c  = static_cast<uint8_t>(rollBlackKeyMidi(index));
+                c.d  = sd.velocity;
+                c.e  = sd.gate;
+                c.f  = static_cast<uint8_t>(editBar_);
+                proc_.controller().postCommand(c);
+                if (recArmed_)
+                    selectedStep_ = (ss + 1) % n;   // step-record : avance le curseur
+            }
             break;
         case PatternScreenModel::Page::Auto:
             if (index == 0)      autoSlot_ = juce::jmax(0, autoSlot_ - 1);
@@ -1821,9 +1860,23 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
     switch (screenPage_) {
         case PatternScreenModel::Page::PianoRoll:
             for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, noteNameFromMidi(rollWhiteKeyMidi(i)));
-            piano_.setBlackKeyLabel(0, "Oct-");
-            piano_.setBlackKeyLabel(1, "Oct+");
-            for (int i = 2; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+            if (shiftActive()) {
+                // ⇧ : noires = fonctions (R±/Page±/Sub/Mes±/Oct±).
+                piano_.setBlackKeyLabel(0, "R-");
+                piano_.setBlackKeyLabel(1, "R+");
+                piano_.setBlackKeyLabel(2, "Pg-");
+                piano_.setBlackKeyLabel(3, "Pg+");
+                piano_.setBlackKeyLabel(4, "Sub");
+                piano_.setBlackKeyLabel(5, "Mes-");
+                piano_.setBlackKeyLabel(6, "Mes+");
+                piano_.setBlackKeyLabel(7, "Oct-");
+                piano_.setBlackKeyLabel(8, "Oct+");
+                piano_.setBlackKeyLabel(9, {});
+                piano_.setBlackKeyLabel(10, {});
+            } else {
+                // Shift OFF : noires = notes chromatiques (mêmes que le clavier).
+                for (int i = 0; i < 11; ++i) piano_.setBlackKeyLabel(i, noteNameFromMidi(rollBlackKeyMidi(i)));
+            }
             break;
         case PatternScreenModel::Page::Harmony: {
             static const char* kR[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
@@ -1859,14 +1912,15 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             break;
         case PatternScreenModel::Page::Pattern: {
             for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
-            const bool sh = shiftActive();
+            // Noires = fonctions directes (Mes a maintenant ses propres touches 5/6 → plus de ⇧Page=Mes).
             piano_.setBlackKeyLabel(0, "R-");
             piano_.setBlackKeyLabel(1, "R+");
-            // ⇧ : les noires Page deviennent navigation de MESURE éditée (Mes-/Mes+).
-            piano_.setBlackKeyLabel(2, sh ? "Mes-" : "Pg-");
-            piano_.setBlackKeyLabel(3, sh ? "Mes+" : "Pg+");
+            piano_.setBlackKeyLabel(2, "Pg-");
+            piano_.setBlackKeyLabel(3, "Pg+");
             piano_.setBlackKeyLabel(4, "Sub");
-            for (int i = 5; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+            piano_.setBlackKeyLabel(5, "Mes-");
+            piano_.setBlackKeyLabel(6, "Mes+");
+            for (int i = 7; i < 11; ++i) piano_.setBlackKeyLabel(i, {});   // Oct± inactif en pattern
             break;
         }
         case PatternScreenModel::Page::Global:

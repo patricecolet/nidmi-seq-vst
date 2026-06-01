@@ -142,6 +142,7 @@ private:
     void onBlackKey(int index);                 // tap noire, dispatché selon l'onglet
     void updateKeysForPage();                   // labels + état des touches selon l'onglet
     int  rollWhiteKeyMidi(int index) const;     // degré diatonique -> note MIDI (ROLL)
+    int  rollBlackKeyMidi(int blackIndex) const; // note chromatique d'une noire (ROLL) = blanche gauche + 1 demi-ton
     static juce::String noteNameFromMidi(int midi);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NidmiSeqAudioProcessorEditor)
