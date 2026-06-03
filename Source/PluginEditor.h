@@ -141,6 +141,13 @@ private:
     bool harmValBass_   = false;   // Enc2 : rotation édite Bass au lieu du Degré
     bool harmVeloDur_   = false;   // Enc3 : rotation édite Durée au lieu de la Qualité
     bool harmZoomScale_ = false;   // Enc4 : rotation édite Gamme au lieu de la Tonique
+
+    // Bascules push d'encodeur pour les autres vues (remplacent les anciens combos ⇧Enc).
+    bool patternValSpan_ = false;   // PATTERN Enc2 : rotation édite Span au lieu de N
+    bool veloGate_       = false;   // PATTERN Enc3 : rotation édite Gate au lieu de Vélo
+    bool rollVeloGate_   = false;   // ROLL Enc3 : rotation édite Gate au lieu de Vélo
+    bool subVeloGate_    = false;   // DRILL-IN Enc3 : rotation édite Gate au lieu de Vélo du sous-pas
+    bool zoomNumBars_    = false;   // PATTERN Enc4 : rotation édite NumBars au lieu de Row
     void setChordField(int field, int value);   // field 0=deg 1=qual 2=ext 3=bass 4=dur
     int  sharedHarmonyMode() const;             // mode commun aux rows liées (-1 = mixte) — affichage seul
 

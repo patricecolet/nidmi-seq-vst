@@ -773,7 +773,12 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     }
     const auto& sv = model_.subs[static_cast<size_t>(model_.subEditIdx)];
     const int   sn = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
-    auto        plot = bodyArea_.withTrimmedLeft(26.0f).reduced(2.0f);
+    // Réserve une lane vélo en bas (même esprit que le piano-roll normal).
+    const float subLaneH = juce::jlimit(14.0f, 26.0f, bodyArea_.getHeight() * 0.22f);
+    auto        bodyTop  = bodyArea_.withTrimmedBottom(subLaneH);
+    const juce::Rectangle<float> velLane(bodyArea_.getX(), bodyTop.getBottom(),
+                                         bodyArea_.getWidth(), subLaneH);
+    auto        plot = bodyTop.withTrimmedLeft(26.0f).reduced(2.0f);
     if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f)
         return;
 
@@ -839,6 +844,33 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
             }
         }
     }
+
+    // Lane vélo (bas) : histogramme de la vélo par sous-pas (visualisation + clic).
+    // Alignée sur les colonnes du sub-roll (même plot.getX()/cellW).
+    {
+        auto lane = velLane.reduced(2.0f);
+        g.setColour(kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
+        g.drawText("Vélo",
+                   juce::Rectangle<float>(bodyArea_.getX(), lane.getY(), 24.0f, lane.getHeight()),
+                   juce::Justification::centredLeft);
+        g.setColour(kScreenBorder);
+        g.drawLine(plot.getX(), lane.getY(), plot.getRight(), lane.getY(), 0.6f);
+        for (int k = 0; k < sn; ++k) {
+            const float x = plot.getX() + static_cast<float>(k) * cellW;
+            if (k == model_.subStep) {
+                g.setColour(kSelStep.withAlpha(0.16f));
+                g.fillRect(juce::Rectangle<float>(x, lane.getY(), cellW, lane.getHeight()));
+            }
+            if (sv.enabled[static_cast<size_t>(k)]) {
+                const float h = lane.getHeight()
+                              * juce::jlimit(0.0f, 1.0f, static_cast<float>(sv.velocity[static_cast<size_t>(k)]) / 127.0f);
+                g.setColour(kCellOn);
+                g.fillRoundedRectangle(juce::Rectangle<float>(x + 1.0f, lane.getBottom() - h,
+                                                              cellW - 2.0f, h), 1.0f);
+            }
+        }
+    }
 }
 
 void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
@@ -869,12 +901,29 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
         g.drawLine(L.plot.getX(), y, L.plot.getRight(), y, 0.4f);
     }
 
+    // Pas RECOUVERTS par le span d'un pas-hôte antérieur (même règle que paintPatternPage) :
+    // ils ne déclenchent pas → ni note, ni sous-pas, ni badge de mode dessinés. Recalculé
+    // chaque frame, suit le span courant.
+    bool coveredRoll[64] = {};
+    for (int s = 0; s < L.n; ++s)
+        for (int o = s - 1; o >= 0; --o) {
+            if (!row.enabled[static_cast<size_t>(o)])
+                continue;
+            const int osp = juce::jlimit(1, L.n - o, juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(o)])));
+            if (o + osp > s) { coveredRoll[s] = true; break; }
+        }
+
     // Colonnes (cases du tuplet) : curseur de pas + playhead + séparateurs.
     for (int s = 0; s < L.n; ++s) {
         const float x = L.plot.getX() + static_cast<float>(s) * L.cellW;
         if (s == model_.selectedStep) {
+            // La surbrillance du pas sélectionné couvre tout son SPAN (note longue / sub étalé),
+            // pas une seule cellule — elle suit la taille réglée par le push →Span.
+            const int   sp = juce::jlimit(1, juce::jmax(1, L.n - s),
+                                          juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(s)])));
             g.setColour(kSelRowBg);
-            g.fillRect(juce::Rectangle<float>(x, L.plot.getY(), L.cellW, L.plot.getHeight()));
+            g.fillRect(juce::Rectangle<float>(x, L.plot.getY(),
+                                              L.cellW * static_cast<float>(sp), L.plot.getHeight()));
         }
         if (s == row.playhead) {
             g.setColour(kPlayhead.withAlpha(0.22f));
@@ -887,6 +936,8 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     // Badge mode REL/ABS sur CHAQUE pas portant un sub (vue d'ensemble), en haut de sa colonne.
     // Compact selon la largeur : "REL"/"ABS", sinon R/A, sinon pastille. Vert = REL, ambre = ABS.
     for (int s = 0; s < L.n; ++s) {
+        if (coveredRoll[static_cast<size_t>(s)])
+            continue;   // pas recouvert par un span antérieur : pas de badge
         const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
         if (subI < 0 || subI >= 16 || model_.subs[static_cast<size_t>(subI)].numSteps == 0)
             continue;
@@ -917,7 +968,7 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     // NB : un pas qui porte un sub valide est rendu plus bas (mini-blocs) — on le saute ici
     // pour éviter le doublon avec le bloc « note simple » de la note hôte.
     for (int s = 0; s < L.n; ++s) {
-        if (!row.enabled[static_cast<size_t>(s)])
+        if (!row.enabled[static_cast<size_t>(s)] || coveredRoll[static_cast<size_t>(s)])
             continue;
         {
             const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
@@ -946,7 +997,7 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     // verticalement à LEUR vraie hauteur (relatif = note hôte + offset ; absolu = note brute).
     // L'édition reste le drill-in : aucun hit-test n'est ajouté ici.
     for (int s = 0; s < L.n; ++s) {
-        if (!row.enabled[static_cast<size_t>(s)])
+        if (!row.enabled[static_cast<size_t>(s)] || coveredRoll[static_cast<size_t>(s)])
             continue;
         const int subI = static_cast<int>(row.subIdx[static_cast<size_t>(s)]);
         if (subI < 0 || subI >= 16 || model_.subs[static_cast<size_t>(subI)].numSteps <= 0)
@@ -1262,10 +1313,24 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         const int   sn = juce::jlimit(1, 16, juce::jmax(1, sv.numSteps));
 
         if (model_.page == PatternScreenModel::Page::PianoRoll) {
-            // SUB-ROLL : clic = pose la hauteur (lane) sur le sous-pas (colonne). Géométrie
-            // recalculée à l'identique de paintSubRoll (plot / cellW / laneH / topNote).
-            auto plot = bodyArea_.withTrimmedLeft(26.0f).reduced(2.0f);
-            if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f || !plot.contains(x, y))
+            // SUB-ROLL : clic grille = hauteur ; clic lane (bas) = vélo. Géométrie
+            // recalculée à l'identique de paintSubRoll (subLaneH / plot / cellW / laneH / topNote).
+            const float subLaneH = juce::jlimit(14.0f, 26.0f, bodyArea_.getHeight() * 0.22f);
+            auto        bodyTop  = bodyArea_.withTrimmedBottom(subLaneH);
+            const juce::Rectangle<float> velLane(bodyArea_.getX(), bodyTop.getBottom(),
+                                                 bodyArea_.getWidth(), subLaneH);
+            auto plot = bodyTop.withTrimmedLeft(26.0f).reduced(2.0f);
+            if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f)
+                return;
+            const float cellWlane = plot.getWidth() / static_cast<float>(sn);
+            if (velLane.contains(x, y)) {                  // clic lane = vélo du sous-pas
+                const int   k    = juce::jlimit(0, sn - 1, static_cast<int>((x - plot.getX()) / cellWlane));
+                const float frac = 1.0f - (y - velLane.getY()) / juce::jmax(1.0f, velLane.getHeight());
+                const int   v    = juce::jlimit(0, 127, static_cast<int>(frac * 127.0f + 0.5f));
+                if (onSubLaneValue) onSubLaneValue(k, v);
+                return;
+            }
+            if (!plot.contains(x, y))
                 return;
             const float laneH   = juce::jlimit(7.0f, 16.0f, plot.getHeight() / 24.0f);
             const int   visible = juce::jmax(1, static_cast<int>(plot.getHeight() / laneH));

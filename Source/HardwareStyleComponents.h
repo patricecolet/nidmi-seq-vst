@@ -37,6 +37,7 @@ struct PatternScreenModel {
         int           numSteps    = 0;      // N du sub (0 = slot libre)
         bool          enabled[16] = {};
         unsigned char note[16]    = {};     // note brute (absolue, ou offset centré sur 64 si relatif)
+        unsigned char velocity[16] = {};    // vélocité par sous-pas (0..127) — lane vélo du sub-roll
         bool          relative    = false;  // mode : sous-pas relatifs à la note hôte (ancre)
         int           duration    = 1;      // span : nombre de pas hôtes couverts (1..64)
     };
@@ -146,6 +147,7 @@ public:
     std::function<void(int bar)>                 onMeasureSelected; // PATTERN : clic sur le bandeau de mesures
     std::function<void(int subStep)>             onSubStepToggled;  // DRILL-IN (strip) : sélectionne + toggle un sous-pas
     std::function<void(int subStep, int note)>   onSubNoteSet;      // DRILL-IN (sub-roll) : pose une hauteur sur un sous-pas
+    std::function<void(int subStep, int value)>  onSubLaneValue;    // DRILL-IN (sub-roll) : vélo d'un sous-pas via la lane
 
     static const char* chordQualityShort(int quality);
 

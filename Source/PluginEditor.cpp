@@ -290,6 +290,27 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         postSubStepPitch(subStep, juce::jlimit(0, 127, note));
         applyEncoderConfigForState();
     };
+    // DRILL-IN (sub-roll, lane vélo) : clic = règle la vélo du sous-pas (note/gate préservés).
+    screen_.onSubLaneValue = [this](int subStep, int value) {
+        if (!inSub_) return;
+        const int subIdx = activeSubIdx();
+        if (subIdx < 0) return;
+        const auto& sp = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)];
+        const int   sn = juce::jlimit(1, 16, static_cast<int>(sp.numSteps));
+        if (subStep < 0 || subStep >= sn) return;
+        const auto& sd = sp.steps[static_cast<size_t>(subStep)];
+        subStep_ = subStep;
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetSubStep;
+        c.a  = static_cast<uint8_t>(subIdx);
+        c.b  = static_cast<uint8_t>(subStep);
+        c.c  = sd.note;                                              // note préservée
+        c.d  = static_cast<uint8_t>(juce::jlimit(0, 127, value));    // nouvelle vélo
+        c.e  = sd.gate;                                              // gate préservé
+        proc_.controller().postCommand(c);
+        applyEncoderConfigForState();
+        buildScreenModel();
+    };
 
     // Ordre d’empilement : arrière-plan → premier plan (transport au-dessus).
     addAndMakeVisible(piano_);
@@ -543,6 +564,8 @@ void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
     }
     inSub_ = true; subHostRow_ = r; subHostStep_ = s; subStep_ = 0;
     applyEncoderConfigForState();
+    configureVeloEncoder();
+    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
@@ -550,6 +573,8 @@ void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
 void NidmiSeqAudioProcessorEditor::exitSub() {
     inSub_ = false;
     applyEncoderConfigForState();
+    configureVeloEncoder();
+    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
@@ -680,25 +705,6 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
             const int   v  = (int) std::lround(valueEncoder_.getValue());
             // Relatif : Enc1 = intervalle → on convertit en hauteur absolue pour postSubStepPitch.
             postSubStepPitch(ss, sp.relativeToHost ? (subHostNote() + v) : v);
-        } else if (shiftActive()) {
-            // ⇧Enc1 = span : nb de pas hôtes couverts. Le core fait primer le span du PAS HÔTE
-            // sur l'étalement du sub (RunningSubPattern.hostSpan), donc on règle le span du pas
-            // hôte (SetStepSpan) — même effet que ⇧Enc1 en grille PATTERN. SetSubPatternDuration
-            // n'est plus utilisé côté UI (source unique = span du pas hôte) ; la commande core reste.
-            const auto& pat  = proc_.engine().pattern();
-            const int   hr   = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-            const int   rn   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
-            const int   hs   = juce::jlimit(0, rn - 1, subHostStep_);
-            const int   maxS = juce::jmax(1, rn - hs);
-            const int   d    = juce::jlimit(1, maxS, (int) std::lround(valueEncoder_.getValue()));
-            SequencerCommand c;
-            c.id = SequencerCommandId::SetStepSpan;
-            c.a  = static_cast<uint8_t>(hr);
-            c.b  = static_cast<uint8_t>(hs);
-            c.c  = static_cast<uint8_t>(d);
-            c.f  = static_cast<uint8_t>(editBar_);
-            proc_.controller().postCommand(c);
-            buildScreenModel();
         } else {
             // Enc1 = N du sub (tuplet imbriqué).
             const int n = juce::jlimit(1, 16, (int) std::lround(valueEncoder_.getValue()));
@@ -720,8 +726,8 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         if (selectedRow_ < 0 || selectedRow_ >= static_cast<int>(pat.numRows))
             return;
         const int rn = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(selectedRow_)].numSteps));
-        if (shiftActive()) {
-            // ⇧Enc1 = span : nb de pas hôtes couverts par le pas sélectionné (note longue / sub étalé).
+        if (patternValSpan_) {
+            // Push →Span = span : nb de pas hôtes couverts par le pas sélectionné (note longue / sub étalé).
             // Clampé à 1..(N - pas) : le span ne déborde pas la mesure de la row.
             const int ss   = juce::jlimit(0, rn - 1, selectedStep_);
             const int maxS = juce::jmax(1, rn - ss);
@@ -749,12 +755,26 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
-        // PIANO ROLL : Enc1 = Note du pas sous le curseur (vélo = Enc3, gate = Shift+Enc3).
+        // PIANO ROLL : Enc2 = Note du pas sous le curseur (vélo = Enc3, gate = push →Gate).
         const auto& pat = proc_.engine().pattern();
         const int   nr  = juce::jmax(1, static_cast<int>(pat.numRows));
         const int   sr  = juce::jlimit(0, nr - 1, selectedRow_);
         const int   n   = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
         const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
+        if (patternValSpan_) {
+            // Push →Span = span du pas sélectionné (note longue / sub étalé), comme PATTERN.
+            const int maxS = juce::jmax(1, n - ss);
+            const int sp   = juce::jlimit(1, maxS, (int) std::lround(valueEncoder_.getValue()));
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetStepSpan;
+            c.a  = static_cast<uint8_t>(sr);
+            c.b  = static_cast<uint8_t>(ss);
+            c.c  = static_cast<uint8_t>(sp);
+            c.f  = static_cast<uint8_t>(editBar_);
+            proc_.controller().postCommand(c);
+            buildScreenModel();
+            return;
+        }
         setStepField(ss, 0, (int) std::lround(valueEncoder_.getValue()));
         return;
     }
@@ -953,20 +973,6 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
                 valueEncoder_.setRange(0.0, 127.0, 1.0);
                 valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
             }
-        } else if (shiftActive() && subIdx >= 0) {
-            // ⇧Enc1 = span du PAS HÔTE (nb de pas hôtes couverts). Source unique = span du pas
-            // hôte (le core fait primer hostSpan), même valeur/effet que ⇧Enc1 en grille PATTERN.
-            const auto& pat   = proc_.engine().pattern();
-            const int   hr    = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-            const int   rn    = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
-            const int   hs    = juce::jlimit(0, rn - 1, subHostStep_);
-            const int   maxS  = juce::jmax(1, rn - hs);
-            const int   span  = juce::jlimit(1, maxS,
-                static_cast<int>(pat.rows[static_cast<size_t>(hr)].step(static_cast<uint8_t>(editBar_),
-                                                                       static_cast<uint8_t>(hs)).span));
-            valueEncoderLabel_.setText("Span " + juce::String(span) + " pas", juce::dontSendNotification);
-            valueEncoder_.setRange(1.0, static_cast<double>(maxS), 1.0);
-            valueEncoder_.setValue(static_cast<double>(span), juce::dontSendNotification);
         } else {
             valueEncoderLabel_.setText("Sub N " + juce::String(sn), juce::dontSendNotification);
             valueEncoder_.setRange(1.0, 16.0, 1.0);
@@ -990,8 +996,8 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         navEncoderLabel_.setText("Pas " + juce::String(ss + 1), juce::dontSendNotification);  // Enc2 = Pas
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, n - 1)), 1.0);
         navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
-        if (shiftActive()) {
-            // ⇧Enc1 = span du pas sélectionné (note longue / sub étalé). Plage 1..(N - pas).
+        if (patternValSpan_) {
+            // Push →Span = span du pas sélectionné (note longue / sub étalé). Plage 1..(N - pas).
             const int maxS = juce::jmax(1, n - ss);
             const int sp   = juce::jlimit(1, maxS,
                 static_cast<int>(pat.rows[static_cast<size_t>(sr)].step(static_cast<uint8_t>(editBar_),
@@ -1015,10 +1021,19 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         navEncoderLabel_.setText("Pas " + juce::String(ss + 1), juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, n - 1)), 1.0);
         navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
-        // Enc1 = Note (vélo sur Enc3, gate sur Shift+Enc3).
-        valueEncoderLabel_.setText("Note " + noteNameFromMidi(sd.note), juce::dontSendNotification);
-        valueEncoder_.setRange(0.0, 127.0, 1.0);
-        valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
+        if (patternValSpan_) {
+            // Push →Span actif : Enc2 = span du pas (note longue / sub étalé).
+            const int maxS = juce::jmax(1, n - ss);
+            const int sp   = juce::jlimit(1, maxS, static_cast<int>(sd.span));
+            valueEncoderLabel_.setText("Span " + juce::String(sp), juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, static_cast<double>(maxS), 1.0);
+            valueEncoder_.setValue(static_cast<double>(sp), juce::dontSendNotification);
+        } else {
+            // Enc2 = Note (vélo sur Enc3, gate sur push →Gate).
+            valueEncoderLabel_.setText("Note " + noteNameFromMidi(sd.note), juce::dontSendNotification);
+            valueEncoder_.setRange(0.0, 127.0, 1.0);
+            valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
+        }
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   len  = juce::jlimit(0, 32, static_cast<int>(prog.len));
@@ -1097,7 +1112,19 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         pushBtn_[i].repaint();
     };
 
-    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Harmony) {
+    // Flèche « → » réutilisée pour les toggles d'attribut secondaire (même encodage que HARMONIE).
+    const juce::String arrow = juce::CharPointer_UTF8("\xe2\x86\x92");
+
+    if (inSub_) {
+        // Drill-in sub : Enc1 = Sortir (action). Enc2 = contenu du sub (N ou note) en
+        // rotation directe — le span du pas hôte se règle dans la vue normale, pas ici.
+        setAction(0, juce::String(juce::CharPointer_UTF8("\xe2\x86\x91")) + " Sortir", true);
+        hide(1);
+        setToggle(2, arrow + "Gate", subVeloGate_);   // Enc3 : Vélo <-> Gate du sous-pas
+        hide(3);
+        return;
+    }
+    if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
         const bool realSlot = harmonyCursor_ < len;   // Suppr seulement sur un slot existant
         setAction(0, "Suppr", realSlot);               // Enc1 : action immédiate
@@ -1106,32 +1133,65 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         setToggle(3, "\xe2\x86\x92" "Gamme", harmZoomScale_); // Enc4 : →Gamme
         return;
     }
-    // Toutes les autres Vues (et drill-in sub) : pushBtn cachés (incrément 2).
+    if (screenPage_ == PatternScreenModel::Page::Pattern) {
+        setAction(0, arrow + "Sub", true);            // Enc1 : entre/crée le sous-pattern
+        setToggle(1, arrow + "Span", patternValSpan_);// Enc2 : N <-> Span
+        setToggle(2, arrow + "Gate", veloGate_);      // Enc3 : Vélo <-> Gate
+        setToggle(3, arrow + "Bars", zoomNumBars_);   // Enc4 : Row <-> Mesures
+        return;
+    }
+    if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
+        setAction(0, arrow + "Sub", true);            // Enc1 : entre/crée le sous-pattern
+        setToggle(1, arrow + "Span", patternValSpan_);// Enc2 : Note <-> Span (comme PATTERN)
+        setToggle(2, arrow + "Gate", rollVeloGate_);  // Enc3 : Vélo <-> Gate
+        hide(3);                                       // Enc4 = zoom octaves
+        return;
+    }
+    // Auto / Global / Song : pushBtn cachés.
     for (int i = 0; i < 4; ++i) hide(i);
 }
 
 void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
-    // Pour ce lot : seules les fonctions HARMONIE sont câblées.
-    if (inSub_ || screenPage_ != PatternScreenModel::Page::Harmony)
-        return;
-
-    switch (idx) {
-        case 0: {   // Enc1 PUSH = Suppr le slot courant (action immédiate, non toggle).
-            const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
-            if (harmonyCursor_ >= len)
-                return;   // curseur sur slot d'ajout : rien à supprimer
-            SequencerCommand c;
-            c.id = SequencerCommandId::DeleteChordSlot;
-            c.a  = static_cast<uint8_t>(harmonyCursor_);
-            proc_.controller().postCommand(c);
-            // Clamp du curseur sur la nouvelle longueur (len-1), bornée à >=0.
-            harmonyCursor_ = juce::jlimit(0, juce::jmax(0, len - 1), harmonyCursor_);
-            break;
+    // Routage du push d'encodeur par Vue. Les actions (drill-in sub) rafraîchissent
+    // elles-mêmes l'UI et sortent tôt ; les bascules tombent dans le refresh commun.
+    if (inSub_) {
+        if (idx == 0) { exitSub(); return; }          // Enc1 = Sortir du sub
+        else if (idx == 2) { subVeloGate_ = !subVeloGate_; }   // Enc3 = →Gate (Vélo/Gate du sous-pas)
+        else return;                                  // autres push inertes
+    } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
+        switch (idx) {
+            case 0: enterOrCreateSub(); return;        // Enc1 = entre/crée le sub
+            case 1: patternValSpan_ = !patternValSpan_; break;
+            case 2: veloGate_       = !veloGate_;       break;
+            case 3: zoomNumBars_    = !zoomNumBars_;    break;
+            default: return;
         }
-        case 1: harmValBass_   = !harmValBass_;   break;   // Enc2 : bascule →Bass
-        case 2: harmVeloDur_   = !harmVeloDur_;    break;   // Enc3 : bascule →Durée
-        case 3: harmZoomScale_ = !harmZoomScale_;  break;   // Enc4 : bascule →Gamme
-        default: return;
+    } else if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
+        if (idx == 0) { enterOrCreateSub(); return; }  // Enc1 = entre/crée le sub
+        else if (idx == 1) { patternValSpan_ = !patternValSpan_; }  // Enc2 = →Span (comme PATTERN)
+        else if (idx == 2) { rollVeloGate_   = !rollVeloGate_; }    // Enc3 = →Gate
+        else return;
+    } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
+        switch (idx) {
+            case 0: {   // Enc1 PUSH = Suppr le slot courant (action immédiate, non toggle).
+                const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
+                if (harmonyCursor_ >= len)
+                    return;   // curseur sur slot d'ajout : rien à supprimer
+                SequencerCommand c;
+                c.id = SequencerCommandId::DeleteChordSlot;
+                c.a  = static_cast<uint8_t>(harmonyCursor_);
+                proc_.controller().postCommand(c);
+                // Clamp du curseur sur la nouvelle longueur (len-1), bornée à >=0.
+                harmonyCursor_ = juce::jlimit(0, juce::jmax(0, len - 1), harmonyCursor_);
+                break;
+            }
+            case 1: harmValBass_   = !harmValBass_;   break;   // Enc2 : bascule →Bass
+            case 2: harmVeloDur_   = !harmVeloDur_;    break;   // Enc3 : bascule →Durée
+            case 3: harmZoomScale_ = !harmZoomScale_;  break;   // Enc4 : bascule →Gamme
+            default: return;
+        }
+    } else {
+        return;   // Auto / Global / Song : pas de push câblé.
     }
     applyEncoderConfigForState();
     configureVeloEncoder();
@@ -1140,14 +1200,24 @@ void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
 }
 
 void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
-    const bool shift = shiftActive();
-
-    // Dans un sub : Enc3 = Ancre (la note du pas hôte) → déplace l'ancre / transpose le sub.
+    // Dans un sub : Enc3 = Vélo (ou Gate via push) du sous-pas courant.
+    // (L'ancre se règle dans PATTERN/ROLL, accès rapide par push ↑Sortir.)
     if (inSub_) {
-        const int hn = subHostNote();
-        veloEncoder_.setRange(0.0, 127.0, 1.0);
-        veloEncoder_.setValue(static_cast<double>(hn), juce::dontSendNotification);
-        veloEncoderLabel_.setText("Ancre " + noteNameFromMidi(hn), juce::dontSendNotification);
+        const int subIdx = activeSubIdx();
+        if (subIdx < 0) return;
+        const auto& sp = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)];
+        const int   sn = juce::jlimit(1, 16, static_cast<int>(sp.numSteps));
+        const int   ss = juce::jlimit(0, sn - 1, subStep_);
+        const auto& sd = sp.steps[static_cast<size_t>(ss)];
+        if (subVeloGate_) {
+            veloEncoder_.setRange(1.0, 100.0, 1.0);
+            veloEncoder_.setValue(static_cast<double>(sd.gate), juce::dontSendNotification);
+            veloEncoderLabel_.setText("Gate " + juce::String(sd.gate), juce::dontSendNotification);
+        } else {
+            veloEncoder_.setRange(0.0, 127.0, 1.0);
+            veloEncoder_.setValue(static_cast<double>(sd.velocity), juce::dontSendNotification);
+            veloEncoderLabel_.setText("Vélo " + juce::String(sd.velocity), juce::dontSendNotification);
+        }
         return;
     }
 
@@ -1165,7 +1235,8 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
         return;
     }
 
-    // Cale Enc3 sur Vélo, ou Gate si Shift maintenu (émule le push de l'encodeur).
+    // Cale Enc3 sur Vélo, ou Gate selon la bascule push de l'encodeur (par vue).
+    const bool gate = (screenPage_ == PatternScreenModel::Page::PianoRoll) ? rollVeloGate_ : veloGate_;
     const auto& pat = proc_.engine().pattern();
     if (pat.numRows == 0)
         return;
@@ -1173,7 +1244,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
     const int n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
     const int ss = juce::jlimit(0, n - 1, selectedStep_);
     const auto& sd = pat.rows[static_cast<size_t>(sr)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss));
-    if (shift) {
+    if (gate) {
         veloEncoder_.setRange(1.0, 100.0, 1.0);
         veloEncoder_.setValue(static_cast<double>(sd.gate), juce::dontSendNotification);
         veloEncoderLabel_.setText("Gate " + juce::String(sd.gate), juce::dontSendNotification);
@@ -1185,24 +1256,24 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
 }
 
 void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
-    const bool shift = shiftActive();
-
-    // Dans un sub : Enc3 = Ancre = la note du pas hôte (le sub transpose avec elle).
+    // Dans un sub : Enc3 = Vélo (ou Gate via push) du sous-pas courant.
+    // SetSubStep(subIdx, subStep, note, vélo, gate) : on relit la note + le champ
+    // non édité pour ne changer QUE vélo (ou gate).
     if (inSub_) {
-        const auto& pat = proc_.engine().pattern();
-        if (pat.numRows == 0) return;
-        const int hr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-        const int hn = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps));
-        const int hs = juce::jlimit(0, hn - 1, subHostStep_);
-        const auto& sd = pat.rows[static_cast<size_t>(hr)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(hs));
+        const int subIdx = activeSubIdx();
+        if (subIdx < 0) return;
+        const auto& sp = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)];
+        const int   sn = juce::jlimit(1, 16, static_cast<int>(sp.numSteps));
+        const int   ss = juce::jlimit(0, sn - 1, subStep_);
+        const auto& sd = sp.steps[static_cast<size_t>(ss)];
+        const int   v  = (int) std::lround(veloEncoder_.getValue());
         SequencerCommand c;
-        c.id = SequencerCommandId::SetStep;
-        c.a  = static_cast<uint8_t>(hr);
-        c.b  = static_cast<uint8_t>(hs);
-        c.c  = static_cast<uint8_t>(juce::jlimit(0, 127, (int) std::lround(veloEncoder_.getValue())));
-        c.d  = sd.velocity;
-        c.e  = sd.gate;
-        c.f  = static_cast<uint8_t>(editBar_);
+        c.id = SequencerCommandId::SetSubStep;
+        c.a  = static_cast<uint8_t>(subIdx);
+        c.b  = static_cast<uint8_t>(ss);
+        c.c  = sd.note;                                                  // note préservée
+        c.d  = subVeloGate_ ? sd.velocity : static_cast<uint8_t>(juce::jlimit(0, 127, v));
+        c.e  = subVeloGate_ ? static_cast<uint8_t>(juce::jlimit(1, 100, v)) : sd.gate;
         proc_.controller().postCommand(c);
         buildScreenModel();
         return;
@@ -1214,7 +1285,8 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         return;
     }
 
-    // Tourne = Vélo ; Shift+tourne = Gate (push émulé). Seulement sur un pas actif.
+    // Tourne = Vélo ; bascule push →Gate (par vue) = Gate. Seulement sur un pas actif.
+    const bool gate = (screenPage_ == PatternScreenModel::Page::PianoRoll) ? rollVeloGate_ : veloGate_;
     const auto& pat = proc_.engine().pattern();
     if (pat.numRows == 0)
         return;
@@ -1223,7 +1295,7 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
     const int ss = juce::jlimit(0, n - 1, selectedStep_);
     if (!pat.rows[static_cast<size_t>(sr)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss)).enabled)
         return;
-    setStepField(ss, shift ? 2 : 1, (int) std::lround(veloEncoder_.getValue()));
+    setStepField(ss, gate ? 2 : 1, (int) std::lround(veloEncoder_.getValue()));
 }
 
 void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
@@ -1291,8 +1363,8 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
                 }
             }
         }
-    } else if (screenPage_ == PatternScreenModel::Page::Pattern && shiftActive()) {
-        // ⇧Enc4 (PATTERN) = nombre de MESURES du pattern (1..kMaxBars). Le core duplique
+    } else if (screenPage_ == PatternScreenModel::Page::Pattern && zoomNumBars_) {
+        // Push →Bars (PATTERN) = nombre de MESURES du pattern (1..kMaxBars). Le core duplique
         // la dernière mesure quand on augmente ; ici on poste juste la commande + on rafraîchit.
         const int cur = juce::jlimit(1, 4, static_cast<int>(proc_.engine().patternNumBars()));
         const int nb  = juce::jlimit(1, 4, cur + dir);
@@ -1429,8 +1501,8 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
             zoomEncoderLabel_.setText(juce::String("Tonique ") + kPc[juce::jlimit(0, 11, rp)],
                                       juce::dontSendNotification);
         }
-    } else if (screenPage_ == PatternScreenModel::Page::Pattern && shiftActive()) {
-        // ⇧Enc4 (PATTERN) = nombre de mesures du pattern.
+    } else if (screenPage_ == PatternScreenModel::Page::Pattern && zoomNumBars_) {
+        // Push →Bars (PATTERN) = nombre de mesures du pattern.
         const int nb = juce::jlimit(1, 4, static_cast<int>(proc_.engine().patternNumBars()));
         zoomEncoderLabel_.setText("Mesures " + juce::String(nb), juce::dontSendNotification);
     } else
@@ -1557,8 +1629,9 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         sv.relative = sp.relativeToHost;
         sv.duration = juce::jlimit(1, 64, static_cast<int>(sp.duration));
         for (int s = 0; s < sn; ++s) {
-            sv.enabled[static_cast<size_t>(s)] = sp.steps[static_cast<size_t>(s)].enabled;
-            sv.note[static_cast<size_t>(s)]    = sp.steps[static_cast<size_t>(s)].note;
+            sv.enabled[static_cast<size_t>(s)]  = sp.steps[static_cast<size_t>(s)].enabled;
+            sv.note[static_cast<size_t>(s)]     = sp.steps[static_cast<size_t>(s)].note;
+            sv.velocity[static_cast<size_t>(s)] = sp.steps[static_cast<size_t>(s)].velocity;
         }
     }
     m.inSub      = inSub_;
