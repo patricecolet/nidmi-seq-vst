@@ -114,6 +114,12 @@ private:
     // Choix utilisateur (⇧Page-/⇧Page+). Toutes les écritures de pas la passent via cmd.f.
     int editBar_      = 0;
 
+    // Presse-papier de PAS (Vue PATTERN). Mémorise les COORDONNÉES de la SOURCE d'une copie ;
+    // le collage poste CopyStep(source -> curseur). Limite assumée : si la source est modifiée
+    // entre copier et coller, le coller reflète l'état au moment du coller.
+    // cut=true → couper-coller : la source n'est effacée qu'AU collage (puis presse-papier consommé).
+    struct { int row = 0; int step = 0; int bar = 0; bool valid = false; bool cut = false; } stepClip_;
+
     // Subpatterns (tuplets imbriqués) : édition « drill-in » re-ciblant la Vue PATTERN.
     bool inSub_       = false;
     int  subHostRow_  = 0;

@@ -1525,6 +1525,15 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     m.selectedRow = juce::jlimit(0, juce::jmax(0, m.numRows - 1), selectedRow_);
     m.selectedStep = selectedStep_;
     m.recArmed    = recArmed_;
+    // Presse-papier : pas source en attente (visible seulement sur la mesure éditée).
+    if (stepClip_.valid && stepClip_.bar == editBar_) {
+        m.clipRow  = stepClip_.row;
+        m.clipStep = stepClip_.step;
+        m.clipCut  = stepClip_.cut;
+    } else {
+        m.clipRow = m.clipStep = -1;
+        m.clipCut = false;
+    }
     // Indicateur de fenêtre de page (touches) : seulement sur PATTERN/AUTO et si N>16.
     stepPage_ = juce::jlimit(0, stepPageCount() - 1, stepPage_);
     const bool pageRelevant = (screenPage_ == PatternScreenModel::Page::Pattern
@@ -2087,12 +2096,55 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
     };
 
     switch (screenPage_) {
-        case PatternScreenModel::Page::Pattern:
+        case PatternScreenModel::Page::Pattern: {
             // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
             // Noire 9 = bascule rel/abs du sub du pas sélectionné (inactif si pas de sub).
-            if (index == 9) toggleSubMode();
-            else            runFunction(index, /*allowOct*/ false);
+            // Noires libres 7/8/10 = presse-papier de pas : 7=Copy (⇧=Cut) 8=Paste 10=Clear.
+            if (index == 9) { toggleSubMode(); break; }
+            if (index == 7 || index == 8 || index == 10) {
+                if (pat.numRows == 0) break;
+                const int   sr  = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+                const auto& row = pat.rows[static_cast<size_t>(sr)];
+                const int   n   = juce::jmax(1, static_cast<int>(row.numSteps));
+                const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
+                if (index == 7) {
+                    // Copy (mémorise la source) ; ⇧ = Cut (mémorise + marque « move », sans effacer).
+                    stepClip_ = { sr, ss, editBar_, /*valid*/ true, /*cut*/ shiftActive() };
+                } else if (index == 8) {
+                    // Paste : CopyStep(source -> curseur). Si Cut : efface la source et consomme le presse-papier.
+                    if (stepClip_.valid) {
+                        SequencerCommand c;
+                        c.id = SequencerCommandId::CopyStep;
+                        c.a  = static_cast<uint8_t>(stepClip_.row);    // rowSrc
+                        c.b  = static_cast<uint8_t>(stepClip_.step);   // stepSrc
+                        c.c  = static_cast<uint8_t>(sr);               // rowDst
+                        c.d  = static_cast<uint8_t>(ss);               // stepDst
+                        c.e  = static_cast<uint8_t>(stepClip_.bar);    // barSrc
+                        c.f  = static_cast<uint8_t>(editBar_);         // barDst
+                        proc_.controller().postCommand(c);
+                        if (stepClip_.cut) {
+                            SequencerCommand cc;
+                            cc.id = SequencerCommandId::ClearStep;
+                            cc.a  = static_cast<uint8_t>(stepClip_.row);
+                            cc.b  = static_cast<uint8_t>(stepClip_.step);
+                            cc.f  = static_cast<uint8_t>(stepClip_.bar);
+                            proc_.controller().postCommand(cc);
+                            stepClip_.valid = false;   // le déplacement consomme le presse-papier
+                        }
+                    }
+                } else {   // index == 10 : Clear du pas courant.
+                    SequencerCommand c;
+                    c.id = SequencerCommandId::ClearStep;
+                    c.a  = static_cast<uint8_t>(sr);
+                    c.b  = static_cast<uint8_t>(ss);
+                    c.f  = static_cast<uint8_t>(editBar_);
+                    proc_.controller().postCommand(c);
+                }
+                break;
+            }
+            runFunction(index, /*allowOct*/ false);
             break;
+        }
         case PatternScreenModel::Page::PianoRoll:
             if (shiftActive()) {
                 // ⇧ + noire = fonction (R±/Page±/Sub/Mes±/Oct±) ; noire 9 = rel/abs du sub du pas sélectionné.
@@ -2263,8 +2315,11 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             piano_.setBlackKeyLabel(4, "Sub");
             piano_.setBlackKeyLabel(5, "Mes-");
             piano_.setBlackKeyLabel(6, "Mes+");
-            for (int i = 7; i < 11; ++i) piano_.setBlackKeyLabel(i, {});   // Oct± inactif en pattern
+            // Noires libres 7/8/10 = presse-papier de pas. 7 = Copy (⇧ = Cut), 8 = Paste, 10 = Clear.
+            piano_.setBlackKeyLabel(7, shiftActive() ? "Cut" : "Copy");
+            piano_.setBlackKeyLabel(8, "Paste");
             piano_.setBlackKeyLabel(9, (selectedStepSubIdx() >= 0) ? "Mode" : juce::String());  // rel/abs sub
+            piano_.setBlackKeyLabel(10, "Clear");
             break;
         }
         case PatternScreenModel::Page::Global:

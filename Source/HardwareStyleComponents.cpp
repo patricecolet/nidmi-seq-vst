@@ -46,6 +46,8 @@ const juce::Colour kPlayhead     {0xfff7a13a};
 const juce::Colour kSelRowBg     {0x2240e090};
 const juce::Colour kMutedText    {0xff8a5a5a};
 const juce::Colour kSelStep      {0xffffffff};   // pas sélectionné (curseur) : blanc vif, hors palette
+const juce::Colour kClipCut      {0xff5aa0ff};   // pas COUPÉ en attente (bleu) : « va être déplacé »
+const juce::Colour kClipCopy     {0xff3a78c0};   // pas COPIÉ en attente (bleu plus sombre)
 
 /// Teinte par pitch-class (0..11) : 12 couleurs distinctes, saturées mais non criardes,
 /// lisibles sur le fond sombre TFT. Les cellules tombant sur la MÊME note jouée partagent
@@ -705,6 +707,18 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                         g.setColour(bg);
                         g.fillEllipse(fill.getRight() - 4.0f, fill.getY() + 1.0f, 3.0f, 3.0f);
                     }
+                }
+                // Pas dans le presse-papier (copié/coupé) en attente : liseré bleu pour le repérer.
+                // Coupé = bleu vif + intérieur grisé (« ce pas va être déplacé ») ; copié = bleu sombre.
+                const bool isClip = (r == model_.clipRow && s == model_.clipStep);
+                if (isClip) {
+                    const auto clipRect = (visSpan > 1 ? fill : inner);
+                    if (model_.clipCut) {
+                        g.setColour(kClipCut.withAlpha(0.22f));
+                        g.fillRoundedRectangle(clipRect.reduced(0.5f), 2.0f);
+                    }
+                    g.setColour(model_.clipCut ? kClipCut : kClipCopy);
+                    g.drawRoundedRectangle(clipRect.reduced(0.3f), 2.0f, 1.6f);
                 }
                 // Pas sélectionné (curseur Enc2) sur la row sélectionnée : liseré blanc vif
                 // (hors palette vert/ambre) pour bien distinguer le slot édité du playhead et du reste.
