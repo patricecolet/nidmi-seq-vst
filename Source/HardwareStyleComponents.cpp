@@ -722,15 +722,24 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                     g.setColour((row.subShared[static_cast<size_t>(s)] ? kGhost : kSubSolo).withAlpha(subAlpha));
                     g.fillPath(gtri);
                 }
-                // Pas dans le presse-papier (copié/coupé) en attente : liseré bleu pour le repérer.
-                // Coupé = bleu vif + intérieur grisé (« ce pas va être déplacé ») ; copié = bleu sombre.
-                const bool isClip = (r == model_.clipRow && s == model_.clipStep);
-                if (isClip) {
+                // Presse-papier (copié/coupé) en attente. Le GRAIN (clipScope) fixe l'étendue :
+                // PAS = cellule ancre seule ; ROW = toute la row source (bande) ; MESURE = toute
+                // la grille. Bande = voile bleu translucide ; la cellule ANCRE garde un liseré pour
+                // repérer l'origine. Coupé = bleu vif, copié = bleu sombre.
+                const bool clipActive = (model_.clipRow >= 0);
+                const bool inClipScope = clipActive
+                    && (model_.clipScope == 2
+                        || (model_.clipScope == 1 && r == model_.clipRow)
+                        || (model_.clipScope == 0 && r == model_.clipRow && s == model_.clipStep));
+                if (inClipScope) {
                     const auto clipRect = (visSpan > 1 ? fill : inner);
-                    if (model_.clipCut) {
-                        g.setColour(kClipCut.withAlpha(0.22f));
-                        g.fillRoundedRectangle(clipRect.reduced(0.5f), 2.0f);
-                    }
+                    const float wash = model_.clipCut ? 0.22f : 0.14f;
+                    g.setColour((model_.clipCut ? kClipCut : kClipCopy).withAlpha(wash));
+                    g.fillRoundedRectangle(clipRect.reduced(0.5f), 2.0f);
+                }
+                const bool isClipAnchor = clipActive && r == model_.clipRow && s == model_.clipStep;
+                if (isClipAnchor) {
+                    const auto clipRect = (visSpan > 1 ? fill : inner);
                     g.setColour(model_.clipCut ? kClipCut : kClipCopy);
                     g.drawRoundedRectangle(clipRect.reduced(0.3f), 2.0f, 1.6f);
                 }

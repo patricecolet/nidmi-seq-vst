@@ -75,6 +75,7 @@ struct PatternScreenModel {
     int   clipStep     = -1;
     int   clipBar      = -1;
     bool  clipCut      = false;
+    int   clipScope    = 0;    // 0=PAS, 1=ROW, 2=MESURE : étendue du presse-papier (surbrillance)
     int   keyPageStart = -1;   // 1er pas de la fenêtre de 16 éditée par les touches (-1 = aucune)
     int   keyPageCount = 1;    // nb total de pages de 16 pas (pour l'indicateur P2/4)
     int   prBottomNote   = -1; // PIANO ROLL : note MIDI du bas de la fenêtre (défilement Oct± ; -1 = auto)

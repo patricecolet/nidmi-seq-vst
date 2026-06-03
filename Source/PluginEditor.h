@@ -114,11 +114,24 @@ private:
     // Choix utilisateur (⇧Page-/⇧Page+). Toutes les écritures de pas la passent via cmd.f.
     int editBar_      = 0;
 
-    // Presse-papier de PAS (Vue PATTERN). Mémorise les COORDONNÉES de la SOURCE d'une copie ;
-    // le collage poste CopyStep(source -> curseur). Limite assumée : si la source est modifiée
-    // entre copier et coller, le coller reflète l'état au moment du coller.
+    // Grain du presse-papier (Vue PATTERN). Choisi par re-tap de Copy/Clear : un tap sur la MÊME
+    // cible élargit (Pas → Row → Mesure → Pas) ; changer de touche ou de cible repart à Pas.
+    enum class ClipScope { Pas = 0, Row = 1, Mesure = 2 };
+
+    // Presse-papier de PAS/ROW/MESURE (Vue PATTERN). Mémorise les COORDONNÉES de la SOURCE d'une
+    // copie ; le collage poste CopyStep/CopyRow/CopyBar(source -> curseur) selon scope. Limite
+    // assumée : si la source est modifiée entre copier et coller, le coller reflète l'état au coller.
     // cut=true → couper-coller : la source n'est effacée qu'AU collage (puis presse-papier consommé).
-    struct { int row = 0; int step = 0; int bar = 0; bool valid = false; bool cut = false; } stepClip_;
+    struct { int row = 0; int step = 0; int bar = 0; bool valid = false; bool cut = false;
+             ClipScope scope = ClipScope::Pas; } stepClip_;
+
+    // Suivi du cycle de re-tap (grain courant + dernière cible/touche de presse-papier).
+    ClipScope clipCycleScope_ = ClipScope::Pas;
+    int  lastClipKey_  = -1;
+    int  lastClipRow_  = -1;
+    int  lastClipStep_ = -1;
+    int  lastClipBar_  = -1;
+    ClipScope advanceClipScope(int key);   // élargit si re-tap même cible, sinon repart à Pas
 
     // Subpatterns (tuplets imbriqués) : édition « drill-in » re-ciblant la Vue PATTERN.
     bool inSub_       = false;

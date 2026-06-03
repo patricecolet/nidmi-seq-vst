@@ -534,6 +534,26 @@ int NidmiSeqAudioProcessorEditor::relevantSubIdx() const {
     return inSub_ ? activeSubIdx() : selectedStepSubIdx();
 }
 
+// Re-tap pour élargir : un tap sur la MÊME cible (même touche + même curseur) fait
+// Pas → Row → Mesure → Pas ; sinon (autre touche ou curseur déplacé) repart à Pas.
+NidmiSeqAudioProcessorEditor::ClipScope
+NidmiSeqAudioProcessorEditor::advanceClipScope(int key) {
+    const bool sameTarget = (key == lastClipKey_
+                             && selectedRow_  == lastClipRow_
+                             && selectedStep_ == lastClipStep_
+                             && editBar_      == lastClipBar_);
+    if (sameTarget) {
+        clipCycleScope_ = static_cast<ClipScope>((static_cast<int>(clipCycleScope_) + 1) % 3);
+    } else {
+        clipCycleScope_ = ClipScope::Pas;
+    }
+    lastClipKey_  = key;
+    lastClipRow_  = selectedRow_;
+    lastClipStep_ = selectedStep_;
+    lastClipBar_  = editBar_;
+    return clipCycleScope_;
+}
+
 void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
     const auto& pat = proc_.engine().pattern();
     if (pat.numRows == 0)
@@ -1527,12 +1547,15 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     m.recArmed    = recArmed_;
     // Presse-papier : pas source en attente (visible seulement sur la mesure éditée).
     if (stepClip_.valid && stepClip_.bar == editBar_) {
-        m.clipRow  = stepClip_.row;
-        m.clipStep = stepClip_.step;
-        m.clipCut  = stepClip_.cut;
+        m.clipRow   = stepClip_.row;
+        m.clipStep  = stepClip_.step;
+        m.clipBar   = stepClip_.bar;
+        m.clipCut   = stepClip_.cut;
+        m.clipScope = static_cast<int>(stepClip_.scope);
     } else {
-        m.clipRow = m.clipStep = -1;
+        m.clipRow = m.clipStep = m.clipBar = -1;
         m.clipCut = false;
+        m.clipScope = 0;
     }
     // Indicateur de fenêtre de page (touches) : seulement sur PATTERN/AUTO et si N>16.
     stepPage_ = juce::jlimit(0, stepPageCount() - 1, stepPage_);
@@ -2128,38 +2151,55 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
                 const auto& row = pat.rows[static_cast<size_t>(sr)];
                 const int   n   = juce::jmax(1, static_cast<int>(row.numSteps));
                 const int   ss  = juce::jlimit(0, n - 1, selectedStep_);
+                // Poste le CLEAR de la SOURCE selon le grain (pour Cut). dr/ds/db = coords source.
+                auto postClearScoped = [this](ClipScope sc, int dr, int ds, int db) {
+                    SequencerCommand c;
+                    if (sc == ClipScope::Mesure)   { c.id = SequencerCommandId::ClearBar; c.f = static_cast<uint8_t>(db); }
+                    else if (sc == ClipScope::Row) { c.id = SequencerCommandId::ClearRow; c.a = static_cast<uint8_t>(dr); c.f = static_cast<uint8_t>(db); }
+                    else                           { c.id = SequencerCommandId::ClearStep; c.a = static_cast<uint8_t>(dr); c.b = static_cast<uint8_t>(ds); c.f = static_cast<uint8_t>(db); }
+                    proc_.controller().postCommand(c);
+                };
                 if (index == 7) {
-                    // Copy (mémorise la source) ; ⇧ = Cut (mémorise + marque « move », sans effacer).
-                    stepClip_ = { sr, ss, editBar_, /*valid*/ true, /*cut*/ shiftActive() };
+                    // Copy (⇧ = Cut). Re-tap sur la même cible élargit le grain Pas→Row→Mesure.
+                    const ClipScope sc = advanceClipScope(7);
+                    stepClip_ = { sr, ss, editBar_, /*valid*/ true, /*cut*/ shiftActive(), sc };
                 } else if (index == 8) {
-                    // Paste : CopyStep(source -> curseur). Si Cut : efface la source et consomme le presse-papier.
+                    // Paste : CopyStep/CopyRow/CopyBar(source -> curseur) selon le grain mémorisé.
                     if (stepClip_.valid) {
                         SequencerCommand c;
-                        c.id = SequencerCommandId::CopyStep;
-                        c.a  = static_cast<uint8_t>(stepClip_.row);    // rowSrc
-                        c.b  = static_cast<uint8_t>(stepClip_.step);   // stepSrc
-                        c.c  = static_cast<uint8_t>(sr);               // rowDst
-                        c.d  = static_cast<uint8_t>(ss);               // stepDst
-                        c.e  = static_cast<uint8_t>(stepClip_.bar);    // barSrc
-                        c.f  = static_cast<uint8_t>(editBar_);         // barDst
+                        switch (stepClip_.scope) {
+                            case ClipScope::Mesure:
+                                c.id = SequencerCommandId::CopyBar;
+                                c.a  = static_cast<uint8_t>(stepClip_.bar);    // barSrc
+                                c.f  = static_cast<uint8_t>(editBar_);         // barDst
+                                break;
+                            case ClipScope::Row:
+                                c.id = SequencerCommandId::CopyRow;
+                                c.a  = static_cast<uint8_t>(stepClip_.row);    // rowSrc
+                                c.b  = static_cast<uint8_t>(stepClip_.bar);    // barSrc
+                                c.c  = static_cast<uint8_t>(sr);               // rowDst
+                                c.f  = static_cast<uint8_t>(editBar_);         // barDst
+                                break;
+                            case ClipScope::Pas:
+                                c.id = SequencerCommandId::CopyStep;
+                                c.a  = static_cast<uint8_t>(stepClip_.row);    // rowSrc
+                                c.b  = static_cast<uint8_t>(stepClip_.step);   // stepSrc
+                                c.c  = static_cast<uint8_t>(sr);               // rowDst
+                                c.d  = static_cast<uint8_t>(ss);               // stepDst
+                                c.e  = static_cast<uint8_t>(stepClip_.bar);    // barSrc
+                                c.f  = static_cast<uint8_t>(editBar_);         // barDst
+                                break;
+                        }
                         proc_.controller().postCommand(c);
                         if (stepClip_.cut) {
-                            SequencerCommand cc;
-                            cc.id = SequencerCommandId::ClearStep;
-                            cc.a  = static_cast<uint8_t>(stepClip_.row);
-                            cc.b  = static_cast<uint8_t>(stepClip_.step);
-                            cc.f  = static_cast<uint8_t>(stepClip_.bar);
-                            proc_.controller().postCommand(cc);
+                            postClearScoped(stepClip_.scope, stepClip_.row, stepClip_.step, stepClip_.bar);
                             stepClip_.valid = false;   // le déplacement consomme le presse-papier
                         }
+                        lastClipKey_ = 8;              // un Copy suivant repartira à Pas
                     }
-                } else {   // index == 10 : Clear du pas courant.
-                    SequencerCommand c;
-                    c.id = SequencerCommandId::ClearStep;
-                    c.a  = static_cast<uint8_t>(sr);
-                    c.b  = static_cast<uint8_t>(ss);
-                    c.f  = static_cast<uint8_t>(editBar_);
-                    proc_.controller().postCommand(c);
+                } else {   // index == 10 : Clear. Re-tap élargit le grain Pas→Row→Mesure.
+                    const ClipScope sc = advanceClipScope(10);
+                    postClearScoped(sc, sr, ss, editBar_);
                 }
                 break;
             }
@@ -2336,9 +2376,13 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             piano_.setBlackKeyLabel(4, "Sub");
             piano_.setBlackKeyLabel(5, "Mes-");
             piano_.setBlackKeyLabel(6, "Mes+");
-            // Noires libres 7/8/10 = presse-papier de pas. 7 = Copy (⇧ = Cut), 8 = Paste, 10 = Clear.
+            // Noires 7/8/10 = presse-papier. 7 = Copy (⇧ = Cut), 8 = Paste, 10 = Clear.
+            // Grain par re-tap (Pas→Row→Mesure) : le label de Paste reflète le grain mémorisé.
             piano_.setBlackKeyLabel(7, shiftActive() ? "Cut" : "Copy");
-            piano_.setBlackKeyLabel(8, "Paste");
+            piano_.setBlackKeyLabel(8, !stepClip_.valid ? juce::String("Paste")
+                                        : stepClip_.scope == ClipScope::Mesure ? juce::String("PstMes")
+                                        : stepClip_.scope == ClipScope::Row    ? juce::String("PstRow")
+                                                                               : juce::String("Paste"));
             {
                 const int sub9 = selectedStepSubIdx();
                 const bool shared = sub9 >= 0 && proc_.engine().subPatternRefCount(static_cast<uint8_t>(sub9)) > 1;
