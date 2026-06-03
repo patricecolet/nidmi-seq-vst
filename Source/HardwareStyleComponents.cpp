@@ -1130,7 +1130,7 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
     g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7"))
                    + "+blanche N : cycle mode row N (CHR/A/B1/B2)   "
-                   + juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7")) + "Enc4 : Harmonie ON/OFF",
+                   + "bouton Harm : Harmonie ON/OFF",
                L.hint, juce::Justification::centredLeft);
 }
 
