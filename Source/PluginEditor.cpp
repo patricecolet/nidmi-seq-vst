@@ -1610,6 +1610,8 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             dst.subIdx[static_cast<size_t>(s)]   = (sd.subPatIdx == kNoSubPattern)
                                                        ? static_cast<signed char>(-1)
                                                        : static_cast<signed char>(sd.subPatIdx);
+            dst.subShared[static_cast<size_t>(s)] = (sd.subPatIdx != kNoSubPattern)
+                                                    && proc_.engine().subPatternRefCount(sd.subPatIdx) > 1;
             dst.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 64, static_cast<int>(sd.span)));
             if (bound) {
                 const uint8_t pn = harmony::resolveDegreeToMidi(
@@ -2099,8 +2101,27 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
         case PatternScreenModel::Page::Pattern: {
             // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
             // Noire 9 = bascule rel/abs du sub du pas sélectionné (inactif si pas de sub).
+            // ⇧+noire 9 = DÉTACHER un sous-pattern partagé (ghost) → copie indépendante.
             // Noires libres 7/8/10 = presse-papier de pas : 7=Copy (⇧=Cut) 8=Paste 10=Clear.
-            if (index == 9) { toggleSubMode(); break; }
+            if (index == 9) {
+                if (shiftActive()) {
+                    const int sub = selectedStepSubIdx();
+                    if (sub >= 0 && proc_.engine().subPatternRefCount(static_cast<uint8_t>(sub)) > 1) {
+                        const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+                        const int n  = juce::jmax(1, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
+                        const int ss = juce::jlimit(0, n - 1, selectedStep_);
+                        SequencerCommand c;
+                        c.id = SequencerCommandId::DetachStepSubPattern;
+                        c.a  = static_cast<uint8_t>(sr);
+                        c.b  = static_cast<uint8_t>(ss);
+                        c.f  = static_cast<uint8_t>(editBar_);
+                        proc_.controller().postCommand(c);
+                    }
+                } else {
+                    toggleSubMode();
+                }
+                break;
+            }
             if (index == 7 || index == 8 || index == 10) {
                 if (pat.numRows == 0) break;
                 const int   sr  = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
@@ -2318,7 +2339,13 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             // Noires libres 7/8/10 = presse-papier de pas. 7 = Copy (⇧ = Cut), 8 = Paste, 10 = Clear.
             piano_.setBlackKeyLabel(7, shiftActive() ? "Cut" : "Copy");
             piano_.setBlackKeyLabel(8, "Paste");
-            piano_.setBlackKeyLabel(9, (selectedStepSubIdx() >= 0) ? "Mode" : juce::String());  // rel/abs sub
+            {
+                const int sub9 = selectedStepSubIdx();
+                const bool shared = sub9 >= 0 && proc_.engine().subPatternRefCount(static_cast<uint8_t>(sub9)) > 1;
+                piano_.setBlackKeyLabel(9, sub9 < 0 ? juce::String()
+                                            : (shiftActive() && shared) ? juce::String("Detach")
+                                            : juce::String("Mode"));   // ⇧+partagé = détacher, sinon rel/abs
+            }
             piano_.setBlackKeyLabel(10, "Clear");
             break;
         }

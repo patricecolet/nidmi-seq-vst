@@ -48,6 +48,8 @@ const juce::Colour kMutedText    {0xff8a5a5a};
 const juce::Colour kSelStep      {0xffffffff};   // pas sélectionné (curseur) : blanc vif, hors palette
 const juce::Colour kClipCut      {0xff5aa0ff};   // pas COUPÉ en attente (bleu) : « va être déplacé »
 const juce::Colour kClipCopy     {0xff3a78c0};   // pas COPIÉ en attente (bleu plus sombre)
+const juce::Colour kGhost        {0xff35d2d6};   // sous-pattern PARTAGÉ (alias) : triangle cyan, coin bas-gauche
+const juce::Colour kSubSolo      {0xffff00ff};   // sous-pattern INDÉPENDANT : triangle magenta, coin bas-gauche
 
 /// Teinte par pitch-class (0..11) : 12 couleurs distinctes, saturées mais non criardes,
 /// lisibles sur le fond sombre TFT. Les cellules tombant sur la MÊME note jouée partagent
@@ -708,6 +710,18 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                         g.fillEllipse(fill.getRight() - 4.0f, fill.getY() + 1.0f, 3.0f, 3.0f);
                     }
                 }
+                // Marqueur de STATUT du sub au coin BAS-GAUCHE (miroir du triangle « snappé » ambre
+                // en haut-gauche) : MAGENTA = sub indépendant (propre à ce pas), CYAN = sub partagé
+                // (alias/ghost référencé par ≥2 pas). Toujours présent dès qu'un pas porte un sub.
+                if (hasSub) {
+                    const float gs = juce::jmin(8.0f, fill.getWidth() * 0.55f);
+                    const float gx = fill.getX() + 0.5f;
+                    const float gy = fill.getBottom() - 0.5f;
+                    juce::Path gtri;
+                    gtri.addTriangle(gx, gy, gx + gs, gy, gx, gy - gs);
+                    g.setColour((row.subShared[static_cast<size_t>(s)] ? kGhost : kSubSolo).withAlpha(subAlpha));
+                    g.fillPath(gtri);
+                }
                 // Pas dans le presse-papier (copié/coupé) en attente : liseré bleu pour le repérer.
                 // Coupé = bleu vif + intérieur grisé (« ce pas va être déplacé ») ; copié = bleu sombre.
                 const bool isClip = (r == model_.clipRow && s == model_.clipStep);
@@ -1042,6 +1056,17 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             // Teinte légèrement distincte (plus claire) pour signaler un sous-pas vs note simple.
             g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn.brighter(0.25f).withAlpha(0.9f));
             g.fillRoundedRectangle(mc.reduced(0.8f, 1.0f), 1.5f);
+        }
+        // Marqueur de STATUT du sub au coin bas-gauche de la zone : magenta = indépendant,
+        // cyan = partagé (alias/ghost). Toujours présent (cohérent avec la vue PATTERN).
+        {
+            const float gs = juce::jmin(7.0f, zoneW * 0.5f);
+            const float gx = x0 + 0.5f;
+            const float gy = L.plot.getBottom() - 0.5f;
+            juce::Path gtri;
+            gtri.addTriangle(gx, gy, gx + gs, gy, gx, gy - gs);
+            g.setColour(row.subShared[static_cast<size_t>(s)] ? kGhost : kSubSolo);
+            g.fillPath(gtri);
         }
     }
 
