@@ -104,7 +104,7 @@ struct PatternScreenModel {
         int quality       = 0;   // index ChordQuality
         int extensions    = 0;   // bitfield
         int bassOffset    = 0;   // -12..+12
-        int durationSlots = 1;
+        int durationBeats = 1;   // durée du slot en TEMPS
         int rootPc        = 0;   // pitch-class (0..11) de la racine réelle (calculée core-side)
     };
     int           progLen       = 0;   // nb de slots utilisés

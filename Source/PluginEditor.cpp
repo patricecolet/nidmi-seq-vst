@@ -820,16 +820,18 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
     const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
 
     // Lit le slot existant, ou des valeurs par défaut s'il s'agit d'un ajout.
-    int deg = 1, qual = 0, ext = 0, bass = 0, dur = 1;
+    // Durée par défaut d'un NOUVEAU slot = nombre de temps de la mesure (numerator) → 1 mesure pleine.
+    int deg = 1, qual = 0, ext = 0, bass = 0;
+    int dur = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
     if (cur < len) {
         const auto& cs = prog.slots[static_cast<size_t>(cur)];
         deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
-        bass = cs.bassOffset; dur = cs.durationSlots;
+        bass = cs.bassOffset; dur = cs.durationBeats;
     } else if (len > 0) {
         // Ajout : copie complète du dernier slot édité (degré + qualité + ext + bass + durée).
         const auto& cs = prog.slots[static_cast<size_t>(len - 1)];
         deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
-        bass = cs.bassOffset; dur = cs.durationSlots;
+        bass = cs.bassOffset; dur = cs.durationBeats;
     }
     // (sinon : I major par défaut, deg=1 qual=0 ext=0 bass=0 dur=1 ci-dessus)
     switch (field) {
@@ -838,7 +840,7 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
         // case 2 (Extensions par index) supprimé : les extensions sont des bits togglés par les
         //   noires (onBlackKey), pas un index. setChordField préserve les bits existants tels quels.
         case 3: bass = juce::jlimit(-12, 12, value); break;          // Bass
-        default: dur = juce::jlimit(1, 16, value); break;            // Durée
+        default: dur = juce::jlimit(1, 64, value); break;            // Durée (en TEMPS)
     }
 
     // Ajout d'un slot : étend d'abord la longueur de la progression.
@@ -1245,13 +1247,13 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        int dur = 1;
+        int dur = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
         if (cur < static_cast<int>(prog.len))
-            dur = prog.slots[static_cast<size_t>(cur)].durationSlots;
-        veloEncoder_.setRange(1.0, 16.0, 1.0);
+            dur = prog.slots[static_cast<size_t>(cur)].durationBeats;
+        veloEncoder_.setRange(1.0, 64.0, 1.0);
         veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
-        // durationSlots = nombre de MESURES pendant lesquelles l'accord reste actif.
-        veloEncoderLabel_.setText("Duree " + juce::String(dur) + " mes", juce::dontSendNotification);
+        // durationBeats = nombre de TEMPS pendant lesquels l'accord reste actif.
+        veloEncoderLabel_.setText("Duree " + juce::String(dur) + " tps", juce::dontSendNotification);
         return;
     }
 
@@ -1717,7 +1719,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         cv.quality       = static_cast<int>(cs.quality);
         cv.extensions    = cs.extensions;
         cv.bassOffset    = cs.bassOffset;
-        cv.durationSlots = cs.durationSlots;
+        cv.durationBeats = cs.durationBeats;
         cv.rootPc        = static_cast<int>(
             harmony::degreePitchClass(static_cast<uint8_t>(cs.degree),
                                       static_cast<uint8_t>(effScale),
@@ -2257,14 +2259,14 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             if (cur < len) {
                 const auto& cs = prog.slots[static_cast<size_t>(cur)];
                 deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
-                bass = cs.bassOffset; dur = cs.durationSlots;
+                bass = cs.bassOffset; dur = cs.durationBeats;
             } else {
                 setChordField(0, (len > 0) ? prog.slots[static_cast<size_t>(len - 1)].degree : 1);
                 const auto& prog2 = proc_.engine().pattern().chordProgression;
                 if (cur < static_cast<int>(prog2.len)) {
                     const auto& cs = prog2.slots[static_cast<size_t>(cur)];
                     deg = cs.degree; qual = static_cast<int>(cs.quality); ext = cs.extensions;
-                    bass = cs.bassOffset; dur = cs.durationSlots;
+                    bass = cs.bassOffset; dur = cs.durationBeats;
                 }
             }
             const uint16_t bit = kBlackExtBit[index];

@@ -1199,7 +1199,7 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
                + "   " + romanNumeral(c.degree) + suffix + " " + name
                + "   ext " + (ext.isEmpty() ? juce::String("-") : ext)
                + "   bass " + juce::String(c.bassOffset)
-               + "   duree " + juce::String(c.durationSlots) + " mes";
+               + "   duree " + juce::String(c.durationBeats) + " tps";
     } else {
         detail = "Slot " + juce::String(model_.harmonyCursor + 1) + " vide - edite un champ pour l'ajouter";
     }

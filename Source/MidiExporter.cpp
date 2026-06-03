@@ -57,10 +57,14 @@ int computeNumBars(const SequencerEngine& engine) {
     const auto& prog = engine.pattern().chordProgression;
     if (prog.len == 0)
         return kMinBars;
-    int sum = 0;
+    // durationBeats est désormais exprimé en TEMPS (beats). On somme les temps de tous
+    // les slots puis on convertit en mesures (arrondi supérieur) via le numérateur.
+    int sumBeats = 0;
     for (juce::uint8 i = 0; i < prog.len; ++i)
-        sum += juce::jmax<int>(1, prog.slots[i].durationSlots);
-    return juce::jlimit(kMinBars, kSafetyBarsCap, sum);
+        sumBeats += juce::jmax<int>(1, prog.slots[i].durationBeats);
+    const int beatsPerBar = juce::jmax<int>(1, engine.pattern().numerator);
+    const int bars = (sumBeats + beatsPerBar - 1) / beatsPerBar;  // ceil
+    return juce::jlimit(kMinBars, kSafetyBarsCap, bars);
 }
 
 double ticksFromUs(int64_t us, double usPerQuarter) {

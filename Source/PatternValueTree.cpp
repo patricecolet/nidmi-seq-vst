@@ -81,7 +81,7 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
         cs_vt.setProperty("qua", static_cast<int>(cs.quality),           nullptr);
         cs_vt.setProperty("ext", cs.extensions,                          nullptr);
         cs_vt.setProperty("bas", static_cast<int>(cs.bassOffset),        nullptr);
-        cs_vt.setProperty("dur", cs.durationSlots,                       nullptr);
+        cs_vt.setProperty("dur", cs.durationBeats,                       nullptr);
         cprog.appendChild(cs_vt, nullptr);
     }
     root.appendChild(cprog, nullptr);
