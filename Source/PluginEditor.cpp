@@ -872,9 +872,9 @@ int NidmiSeqAudioProcessorEditor::sharedHarmonyMode() const {
     const int   nr  = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
     int shared = -2;   // -2 = aucune row liée vue encore
     for (int r = 0; r < nr; ++r) {
-        const int rm = static_cast<int>(pat.rows[static_cast<size_t>(r)].harmonyMode);
+        const int rm = static_cast<int>(pat.rows[static_cast<size_t>(r)].harmonyModeAt(static_cast<uint8_t>(editBar_)));
         if (rm == static_cast<int>(RowHarmonyMode::Chromatic))
-            continue;                            // row déliée → ignorée
+            continue;                            // row déliée → ignorée (mesure éditée)
         if (shared == -2)        shared = rm;
         else if (shared != rm) { return -1; }    // rows liées divergentes → mixte
     }
@@ -1473,8 +1473,14 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     const auto& pat = proc_.engine().pattern();
     if (selectedRow_ >= pat.numRows)
         selectedRow_ = juce::jmax(0, static_cast<int>(pat.numRows) - 1);
-    if (selectedStep_ >= pat.numSteps)
-        selectedStep_ = juce::jmax(0, static_cast<int>(pat.numSteps) - 1);
+    // Borne le curseur de pas sur le N de la ROW sélectionnée (1..64), PAS sur le legacy
+    // pat.numSteps (global, =16 par défaut) qui plafonnait la sélection à 16.
+    const int selRowN = (pat.numRows > 0)
+        ? juce::jlimit(1, 64, static_cast<int>(
+              pat.rows[static_cast<size_t>(juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_))].numSteps))
+        : 1;
+    if (selectedStep_ >= selRowN)
+        selectedStep_ = juce::jmax(0, selRowN - 1);
     // Mesure éditée : bornée à [0, numBars-1] (numBars==1 => toujours 0).
     editBar_ = juce::jlimit(0, juce::jmax(0, static_cast<int>(pat.numBars) - 1), editBar_);
 
@@ -1616,7 +1622,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         const int   n   = juce::jlimit(1, 64, static_cast<int>(row.numSteps));
         dst.numSteps    = n;
         dst.channel     = static_cast<int>(row.channel) + 1;
-        dst.harmonyMode = static_cast<int>(row.harmonyMode);
+        dst.harmonyMode = static_cast<int>(row.harmonyModeAt(static_cast<uint8_t>(editBar_)));  // mode de la mesure ÉDITÉE
         dst.muted       = row.muted;
         // Libellé musical (1/16, 1/8T, 5:tps…) + durée réelle d'un pas en ms.
         // Calculs côté éditeur → PatternScreen reste agnostique du core.
@@ -1624,7 +1630,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         const double stepUs = barUs / static_cast<double>(juce::jmax(1, n));
         dst.stepMs      = static_cast<int>(stepUs / 1000.0 + 0.5);
         // Row soumise à l'harmonie : harmonie active globale ET mode != Chromatic.
-        const bool bound = harmActive && row.harmonyMode != RowHarmonyMode::Chromatic;
+        const bool bound = harmActive && row.harmonyModeAt(static_cast<uint8_t>(editBar_)) != RowHarmonyMode::Chromatic;
         dst.harmonyBound = bound;
         for (int s = 0; s < n; ++s) {
             const auto& sd = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s));   // mesure ÉDITÉE
@@ -1640,7 +1646,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             dst.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 64, static_cast<int>(sd.span)));
             if (bound) {
                 const uint8_t pn = harmony::resolveDegreeToMidi(
-                    sd.note, row.harmonyMode, currentChord, progActive,
+                    sd.note, row.harmonyModeAt(static_cast<uint8_t>(editBar_)), currentChord, progActive,
                     static_cast<uint8_t>(effScaleB), static_cast<uint8_t>(effRootB));
                 dst.playedNote[static_cast<size_t>(s)] = pn;
                 dst.snapped[static_cast<size_t>(s)]    = (pn != sd.note);
@@ -1857,10 +1863,17 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
             clearWhites();
             const int ss   = juce::jlimit(0, rowN - 1, selectedStep_);
             const int note = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss)).note;
-            int hl = -1;
+            // Indique la note sélectionnée sur le clavier : blanche OU noire selon sa hauteur.
+            // (En Shift, les noires sont des fonctions → pas d'indication de note dessus.)
+            int hlW = -1;
             for (int i = 0; i < 16; ++i)
-                if (rollWhiteKeyMidi(i) == note) { hl = i; break; }
-            piano_.setPlayheadStep(hl);
+                if (rollWhiteKeyMidi(i) == note) { hlW = i; break; }
+            piano_.setPlayheadStep(hlW);
+            int hlB = -1;
+            if (!shiftActive())
+                for (int i = 0; i < 11; ++i)
+                    if (rollBlackKeyMidi(i) == note) { hlB = i; break; }
+            piano_.setBlackKeyHighlight(hlB);
             break;
         }
 
@@ -1871,7 +1884,7 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
                 const int nr = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
                 for (int i = 0; i < nr && i < 16; ++i)
                     piano_.whiteKey(i).setToggleState(
-                        pat.rows[static_cast<size_t>(i)].harmonyMode != RowHarmonyMode::Chromatic,
+                        pat.rows[static_cast<size_t>(i)].harmonyModeAt(static_cast<uint8_t>(editBar_)) != RowHarmonyMode::Chromatic,
                         juce::dontSendNotification);
                 piano_.setPlayheadStep(-1);
             } else {
@@ -2054,12 +2067,12 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
             break;
         }
         case PatternScreenModel::Page::Harmony: {
-            // ⇧ + blanche N : cycle l'état harmonique de la row N (les blanches ↔ rows 0..15).
+            // ⇧ + blanche N : cycle l'état harmonique de la row N POUR LA MESURE ÉDITÉE.
             // Ordre : Chromatic(délié) → A → B1 → B2 → Chromatic.
             if (shiftActive()) {
                 const int hr = index;   // blanche index ↔ row index
                 if (hr >= static_cast<int>(pat.numRows)) return;   // pas de row N
-                const int rm = static_cast<int>(pat.rows[static_cast<size_t>(hr)].harmonyMode);
+                const int rm = static_cast<int>(pat.rows[static_cast<size_t>(hr)].harmonyModeAt(static_cast<uint8_t>(editBar_)));
                 int newMode;
                 switch (rm) {
                     case static_cast<int>(RowHarmonyMode::Chromatic): newMode = 0; break;  // → A
@@ -2071,6 +2084,7 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
                 c.id = SequencerCommandId::SetRowHarmonyMode;
                 c.a  = static_cast<uint8_t>(hr);
                 c.b  = static_cast<uint8_t>(newMode);
+                c.f  = static_cast<uint8_t>(editBar_);   // mesure ciblée
                 proc_.controller().postCommand(c);
                 buildScreenModel();
                 return;
@@ -2196,6 +2210,17 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
                         if (stepClip_.cut) {
                             postClearScoped(stepClip_.scope, stepClip_.row, stepClip_.step, stepClip_.bar);
                             stepClip_.valid = false;   // le déplacement consomme le presse-papier
+                        }
+                        // Grain PAS : avance le curseur APRÈS le span collé (un drill/note longue
+                        // occupe ss..ss+span-1) → chaînage : le prochain Paste tombe juste après.
+                        if (stepClip_.scope == ClipScope::Pas) {
+                            const int srcRow = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, stepClip_.row);
+                            const int srcN   = juce::jmax(1, static_cast<int>(pat.rows[static_cast<size_t>(srcRow)].numSteps));
+                            const int srcStp = juce::jlimit(0, srcN - 1, stepClip_.step);
+                            const int span   = juce::jmax(1, static_cast<int>(
+                                pat.rows[static_cast<size_t>(srcRow)].step(
+                                    static_cast<uint8_t>(stepClip_.bar), static_cast<uint8_t>(srcStp)).span));
+                            selectedStep_ = juce::jlimit(0, n - 1, ss + span);
                         }
                         lastClipKey_ = 8;              // un Copy suivant repartira à Pas
                     }
@@ -2345,7 +2370,7 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
                 const int   nr  = juce::jlimit(0, 16, static_cast<int>(pat.numRows));
                 for (int i = 0; i < 16; ++i) {
                     if (i < nr) {
-                        const int m = juce::jlimit(0, 3, static_cast<int>(pat.rows[static_cast<size_t>(i)].harmonyMode));
+                        const int m = juce::jlimit(0, 3, static_cast<int>(pat.rows[static_cast<size_t>(i)].harmonyModeAt(static_cast<uint8_t>(editBar_))));
                         piano_.setWhiteKeyLabel(i, "R" + juce::String(i + 1) + ":" + kMode[m]);
                     } else {
                         piano_.setWhiteKeyLabel(i, {});   // au-delà de numRows : neutre

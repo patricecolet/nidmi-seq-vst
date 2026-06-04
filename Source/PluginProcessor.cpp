@@ -132,6 +132,9 @@ void NidmiSeqAudioProcessor::syncParametersToEngine(int64_t nowUs) {
     const bool useHostBpm =
         apvts_.getRawParameterValue(kIdUseHostBpm) != nullptr &&
         apvts_.getRawParameterValue(kIdUseHostBpm)->load() > 0.5f;
+    // En standalone il n'y a pas d'hôte : le BPM hôte est inopérant, donc le BPM manuel
+    // (GLOBAL) doit piloter le moteur. (Hors standalone, followHost gère déjà le suivi.)
+    const bool hostBpmActive = useHostBpm && !isStandaloneApp();
     const float bpm = apvts_.getRawParameterValue(kIdBpm) != nullptr
                           ? apvts_.getRawParameterValue(kIdBpm)->load()
                           : 120.0f;
@@ -182,7 +185,7 @@ void NidmiSeqAudioProcessor::syncParametersToEngine(int64_t nowUs) {
         SequencerCommandApi::dispatch(engine_, c, nowUs);
     }
 
-    if (!useHostBpm && !useMidiClock && std::abs(bpm - lastBpmParam_) > 0.01f) {
+    if (!hostBpmActive && !useMidiClock && std::abs(bpm - lastBpmParam_) > 0.01f) {
         lastBpmParam_ = bpm;
         c.id          = SequencerCommandId::SetBpm;
         c.f32         = bpm;

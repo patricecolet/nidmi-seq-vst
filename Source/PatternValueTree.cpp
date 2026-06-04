@@ -94,7 +94,11 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
         row.setProperty("ns", p.rows[r].numSteps, nullptr);
         row.setProperty("k", static_cast<int>(p.rows[r].kind), nullptr);
         row.setProperty("cc", p.rows[r].ccNumber, nullptr);
-        row.setProperty("hm", static_cast<int>(p.rows[r].harmonyMode), nullptr);
+        // Mode harmonique PAR MESURE (hm0..hm3). hm0 sert aussi de marqueur de version :
+        // un ancien projet n'a que "hm" (unique) → migré sur toutes les mesures au chargement.
+        for (uint8_t bar = 0; bar < kMaxBars; ++bar)
+            row.setProperty("hm" + juce::String(static_cast<int>(bar)),
+                            static_cast<int>(p.rows[r].harmonyMode[bar]), nullptr);
         row.setProperty("mu", p.rows[r].muted ? 1 : 0, nullptr);
         // Sérialisation PAR MESURE : chaque pas porte sa mesure ("b"). Absent au chargement
         // => mesure 0 (rétrocompat avec les anciens projets mono-mesure).
@@ -400,10 +404,21 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                 c.b  = static_cast<uint8_t>(static_cast<int>(row.getProperty("cc", 74)));
                 SequencerCommandApi::dispatch(engine, c, nowUs);
             }
-            if (row.hasProperty("hm")) {
+            // Mode harmonique PAR MESURE (hm0..hm3). Ancien projet (clé "hm" unique, sans hm0)
+            // => migration : appliqué à toutes les mesures via la sentinelle kRowModeAllBars.
+            if (row.hasProperty("hm0")) {
+                for (int bar = 0; bar < kMaxBars; ++bar) {
+                    c.id = SequencerCommandId::SetRowHarmonyMode;
+                    c.a  = r;
+                    c.b  = static_cast<uint8_t>(static_cast<int>(row.getProperty("hm" + juce::String(bar), 1)));
+                    c.f  = static_cast<uint8_t>(bar);
+                    SequencerCommandApi::dispatch(engine, c, nowUs);
+                }
+            } else if (row.hasProperty("hm")) {
                 c.id = SequencerCommandId::SetRowHarmonyMode;
                 c.a  = r;
                 c.b  = static_cast<uint8_t>(static_cast<int>(row.getProperty("hm", 1)));
+                c.f  = kRowModeAllBars;   // migration ancien format : toutes les mesures
                 SequencerCommandApi::dispatch(engine, c, nowUs);
             }
             if (row.hasProperty("mu")) {
