@@ -168,6 +168,7 @@ private:
     void paintPianoRollPage(juce::Graphics& g);
     void paintSubRoll(juce::Graphics& g);   // piano-roll du sub (ligne d'ancrage si relatif)
     void paintHarmonyPage(juce::Graphics& g);
+    void paintMeasureBand(juce::Graphics& g);   // bandeau de mesures (PATTERN/HARMONIE)
     void paintAutoPage(juce::Graphics& g);
     void paintGlobalPage(juce::Graphics& g);
     void paintStubPage(juce::Graphics& g, const juce::String& title, const juce::String& subtitle);

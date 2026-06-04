@@ -330,13 +330,51 @@ void PatternScreen::recomputeLayout() {
     firstVisibleRow_ = juce::jlimit(0, juce::jmax(0, nr - visibleRows_), sel - visibleRows_ / 2);
 }
 
-// Bandeau de mesures : seulement en PATTERN, hors-sub, et si numBars>1. Hauteur fixe ~15px,
+// Bandeau de mesures : en PATTERN et HARMONIE, hors-sub, et si numBars>1. Hauteur fixe ~15px,
 // rogné en haut de bodyArea_. Sinon rect vide (les autres vues ignorent ce bandeau).
 juce::Rectangle<float> PatternScreen::measureBandArea() const {
-    if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub || model_.numBars <= 1)
+    const bool pageOk = (model_.page == PatternScreenModel::Page::Pattern
+                         || model_.page == PatternScreenModel::Page::Harmony
+                         || model_.page == PatternScreenModel::Page::PianoRoll);
+    if (!pageOk || model_.inSub || model_.numBars <= 1)
         return {};
     constexpr float kBandH = 15.0f;
     return bodyArea_.withHeight(juce::jmin(kBandH, bodyArea_.getHeight() * 0.4f));
+}
+
+static juce::Rectangle<float> measureChipsArea(juce::Rectangle<float> band, int numBars, float& chipW);
+
+// Bandeau de mesures (multi-mesures) : chips cliquables au-dessus du contenu de la vue.
+// Mesure éditée = surlignée ; mesure jouée = liseré ambre (playhead). Partagé PATTERN/HARMONIE.
+void PatternScreen::paintMeasureBand(juce::Graphics& g) {
+    const auto band = measureBandArea();
+    if (band.isEmpty())
+        return;
+    float chipW = 0.0f;
+    const auto chips = measureChipsArea(band, model_.numBars, chipW);
+    if (chips.getX() > band.getX() + 1.0f) {   // préfixe "Mes" si la place existe
+        g.setColour(kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
+        g.drawText("Mes", band.withWidth(chips.getX() - band.getX()).reduced(2.0f, 0.0f),
+                   juce::Justification::centredLeft);
+    }
+    for (int b = 0; b < model_.numBars; ++b) {
+        juce::Rectangle<float> chip(chips.getX() + static_cast<float>(b) * chipW,
+                                    chips.getY(), chipW, chips.getHeight());
+        const auto inner = chip.reduced(1.5f, 1.5f);
+        const bool edited = (b == model_.editBar);
+        const bool played = model_.playing && (b == model_.playBar);
+        g.setColour(edited ? kHeaderText : kCellOff);
+        g.fillRoundedRectangle(inner, 3.0f);
+        g.setColour(edited ? kScreenBg : kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)
+                                 .withStyle(edited ? "Bold" : "")));
+        g.drawText(juce::String(b + 1), inner, juce::Justification::centred);
+        if (played) {   // marqueur de lecture : liseré ambre autour de la chip
+            g.setColour(kPlayhead);
+            g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.6f);
+        }
+    }
 }
 
 juce::Rectangle<float> PatternScreen::gridArea() const {
@@ -439,6 +477,13 @@ void PatternScreen::paint(juce::Graphics& g) {
             }
             if (model_.recArmed)
                 crumb += "  REC";
+        } else if (model_.page == PatternScreenModel::Page::Harmony) {
+            // Indicateur de mesure éditée (le mode harmonique est par row+mesure).
+            crumb = "Mes " + juce::String(model_.editBar + 1) + "/" + juce::String(juce::jmax(1, model_.numBars));
+            if (model_.playing && model_.numBars > 1 && model_.playBar != model_.editBar) {
+                const juce::String play(juce::CharPointer_UTF8("\xe2\x96\xb8"));   // ▸
+                crumb += play + "joue" + juce::String(model_.playBar + 1);
+            }
         }
         g.setColour(kRowLabel);
         g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
@@ -496,38 +541,7 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
         return;
     }
 
-    // Bandeau de mesures (multi-mesures) : chips cliquables au-dessus de la grille.
-    // Mesure éditée = surlignée ; mesure jouée = liseré ambre (playhead).
-    {
-        const auto band = measureBandArea();
-        if (!band.isEmpty()) {
-            float chipW = 0.0f;
-            const auto chips = measureChipsArea(band, model_.numBars, chipW);
-            if (chips.getX() > band.getX() + 1.0f) {   // préfixe "Mes" si la place existe
-                g.setColour(kRowLabel);
-                g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
-                g.drawText("Mes", band.withWidth(chips.getX() - band.getX()).reduced(2.0f, 0.0f),
-                           juce::Justification::centredLeft);
-            }
-            for (int b = 0; b < model_.numBars; ++b) {
-                juce::Rectangle<float> chip(chips.getX() + static_cast<float>(b) * chipW,
-                                            chips.getY(), chipW, chips.getHeight());
-                const auto inner = chip.reduced(1.5f, 1.5f);
-                const bool edited = (b == model_.editBar);
-                const bool played = model_.playing && (b == model_.playBar);
-                g.setColour(edited ? kHeaderText : kCellOff);
-                g.fillRoundedRectangle(inner, 3.0f);
-                g.setColour(edited ? kScreenBg : kRowLabel);
-                g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)
-                                         .withStyle(edited ? "Bold" : "")));
-                g.drawText(juce::String(b + 1), inner, juce::Justification::centred);
-                if (played) {   // marqueur de lecture : liseré ambre autour de la chip
-                    g.setColour(kPlayhead);
-                    g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.6f);
-                }
-            }
-        }
-    }
+    paintMeasureBand(g);
 
     const auto  grid   = gridArea();
     const float stripX = grid.getX() + gutterW_;
@@ -912,7 +926,8 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
 
 void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     if (model_.inSub) { paintSubRoll(g); return; }   // re-cible le piano-roll sur le sub
-    const RollFrame F = computeRollFrame(bodyArea_);
+    paintMeasureBand(g);                              // bandeau de mesures (multi-mesures), cliquable
+    const RollFrame F = computeRollFrame(gridArea()); // le roll démarre sous le bandeau
     const PrLayout  L = computePrLayout(model_, F.grid);
     if (!L.valid) {
         paintStubPage(g, "PIANO ROLL", "selectionne une row");
@@ -1106,7 +1121,10 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
 }
 
 void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
-    const HarmLayout L = computeHarmLayout(model_, bodyArea_);
+    // Bandeau de mesures en haut (multi-mesures) : indicateur + chips cliquables.
+    // Le layout HARMONIE démarre SOUS le bandeau (gridArea = bodyArea moins le bandeau).
+    paintMeasureBand(g);
+    const HarmLayout L = computeHarmLayout(model_, gridArea());
 
     // En-tête : la vue hérite et affiche la tonalité + le suivi réels du pattern.
     const juce::String check(juce::CharPointer_UTF8("\xe2\x9c\x93"));  // ✓
@@ -1451,7 +1469,17 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
 
     // PIANO ROLL : grille de notes (haut) + lane vélo (bas).
     if (model_.page == PatternScreenModel::Page::PianoRoll) {
-        const RollFrame F = computeRollFrame(bodyArea_);
+        // Clic bandeau de mesures (au-dessus de la grille) : sélection de la mesure éditée.
+        {
+            const auto band = measureBandArea();
+            if (!band.isEmpty() && band.contains(x, y)) {
+                const int b = measureAtX(x);
+                if (b >= 0 && onMeasureSelected)
+                    onMeasureSelected(b);
+                return;
+            }
+        }
+        const RollFrame F = computeRollFrame(gridArea());
         const PrLayout  L = computePrLayout(model_, F.grid);
         if (L.valid && L.plot.contains(x, y)) {              // clic grille = pose une hauteur
             int s    = juce::jlimit(0, L.n - 1, static_cast<int>((x - L.plot.getX()) / L.cellW));
@@ -1470,11 +1498,8 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub)
-        return;  // autres pages / mode sub : édition par encodeurs+touches, pas à la souris (V1).
-
-    // Clic dans le bandeau de mesures (multi-mesures) : sélection de la mesure éditée.
-    {
+    // Clic dans le bandeau de mesures (PATTERN et HARMONIE, hors-sub) : sélection de la mesure éditée.
+    if (!model_.inSub) {
         const auto band = measureBandArea();
         if (!band.isEmpty() && band.contains(x, y)) {
             const int b = measureAtX(x);
@@ -1483,6 +1508,9 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
             return;
         }
     }
+
+    if (model_.page != PatternScreenModel::Page::Pattern || model_.inSub)
+        return;  // édition grille/rows à la souris = PATTERN seulement (V1).
 
     if (model_.numRows <= 0 || rowH_ <= 0.0f)
         return;

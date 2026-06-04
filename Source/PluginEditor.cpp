@@ -200,6 +200,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         const int nb = juce::jlimit(1, 4, static_cast<int>(proc_.engine().patternNumBars()));
         editBar_ = juce::jlimit(0, nb - 1, bar);
         applyEncoderConfigForState();
+        updateKeysForPage();   // rafraîchit les labels R1:A… (mode par mesure)
         buildScreenModel();
     };
     screen_.onHarmonySlot = [this](int slot) {
@@ -2095,8 +2096,13 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
                     harmonyCursor_ = juce::jlimit(0, 31, harmonyCursor_ + 1);
             } else if (index >= 7 && index <= 12) {
                 setChordField(1, index - 7);     // blanches 7..12 = triades 0..5 (qualité) ; pas d'avance REC
+            } else if (index == 13 || index == 14) {
+                // blanches 13/14 = nav de mesure (Mes-/Mes+) : le mode harmo est par row+mesure.
+                const int nb = juce::jmax(1, static_cast<int>(pat.numBars));
+                editBar_ = juce::jlimit(0, nb - 1, editBar_ + (index == 13 ? -1 : 1));
+                updateKeysForPage();   // rafraîchit les labels R1:A… de la nouvelle mesure
             }
-            // blanches 13..15 : inactives.
+            // blanche 15 : inactive.
             break;
         }
         case PatternScreenModel::Page::Global:
@@ -2379,7 +2385,11 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             } else {
                 for (int i = 0; i < 7; ++i)  piano_.setWhiteKeyLabel(i, kR[i]);        // 0..6 = degrés
                 for (int i = 7; i < 13; ++i) piano_.setWhiteKeyLabel(i, kTri[i - 7]);  // 7..12 = triades
-                for (int i = 13; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});          // 13..15 = vides
+                // 13/14 = nav de mesure (si multi-mesures), 15 = vide.
+                const bool multi = static_cast<int>(proc_.engine().pattern().numBars) > 1;
+                piano_.setWhiteKeyLabel(13, multi ? juce::String("Mes-") : juce::String());
+                piano_.setWhiteKeyLabel(14, multi ? juce::String("Mes+") : juce::String());
+                piano_.setWhiteKeyLabel(15, {});
             }
             for (int i = 0; i < 11; ++i) piano_.setBlackKeyLabel(i, kExtLbl[i]);
             // (la LED d'extension active est gérée par frame dans refreshPianoKeysFromEngine.)
