@@ -133,7 +133,12 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     lastZoomEnc_ = 500.0;
     zoomEncoder_.onValueChange = [this] { onZoomEncoderChanged(); };
 
+    setupEncoder(masterEncoder_);
+    masterEncoder_.onDragStart   = [this] { configureMasterEncoder(); };
+    masterEncoder_.onValueChange = [this] { onMasterEncoderChanged(); };
+
     applyEncoderConfigForState();
+    configureMasterEncoder();
 
     auto labelStyle = [](juce::Label& l, const juce::String& t) {
         l.setText(t, juce::dontSendNotification);
@@ -144,6 +149,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     labelStyle(valueEncoderLabel_, "Valeur");
     labelStyle(veloEncoderLabel_, "Vélo");
     labelStyle(zoomEncoderLabel_, "Zoom");
+    labelStyle(masterEncoderLabel_, "Master");
 
     // Cahier §10.3 : les touches sont le miroir de l'onglet actif → handlers dispatchés par page.
     for (int i = 0; i < 16; ++i)
@@ -301,6 +307,8 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(veloEncoder_);
     addAndMakeVisible(zoomEncoderLabel_);
     addAndMakeVisible(zoomEncoder_);
+    addAndMakeVisible(masterEncoderLabel_);
+    addAndMakeVisible(masterEncoder_);
     addAndMakeVisible(playBtn_);
     addAndMakeVisible(stopBtn_);
     addAndMakeVisible(recBtn_);
@@ -365,22 +373,31 @@ void NidmiSeqAudioProcessorEditor::paint(juce::Graphics& g) {
 void NidmiSeqAudioProcessorEditor::resized() {
     auto r = getLocalBounds().reduced(8);
 
-    // Au-dessus de l’écran : Play, Stop, Rec, Vue, Export (5 boutons, cahier §11.3).
+    // Au-dessus de l’écran : Play, Stop, Rec, Vue, Export (5 boutons, cahier §11.3) + MASTER à droite.
     {
-        auto        row = r.removeFromTop(42);
+        auto        row = r.removeFromTop(56);
+        // Encodeur MASTER à droite (contextuel) : knob plein-hauteur + label-lecture à gauche.
+        if (row.getWidth() > 60) {
+            auto      mrow = row.removeFromRight(150);
+            const int kd   = juce::jmin(54, mrow.getHeight());
+            masterEncoder_.setBounds(mrow.removeFromRight(kd).withSizeKeepingCentre(kd, kd));
+            masterEncoderLabel_.setBounds(mrow.reduced(2, 0));   // lecture (BPM/Accent/Swing) à gauche du knob
+        }
+        // Boutons transport centrés dans le reste, hauteur ~42 (centrés verticalement).
+        auto        brow = row.reduced(0, 7);
         const int   bw  = 92;
         const int   gap = 6;
         const int   totalW = bw * 5 + gap * 4;
-        row.removeFromLeft(juce::jmax(0, (row.getWidth() - totalW) / 2));
-        playBtn_.setBounds(row.removeFromLeft(bw));
-        row.removeFromLeft(gap);
-        stopBtn_.setBounds(row.removeFromLeft(bw));
-        row.removeFromLeft(gap);
-        recBtn_.setBounds(row.removeFromLeft(bw));
-        row.removeFromLeft(gap);
-        vueBtn_.setBounds(row.removeFromLeft(bw));
-        row.removeFromLeft(gap);
-        exportBtn_.setBounds(row.removeFromLeft(bw));
+        brow.removeFromLeft(juce::jmax(0, (brow.getWidth() - totalW) / 2));
+        playBtn_.setBounds(brow.removeFromLeft(bw));
+        brow.removeFromLeft(gap);
+        stopBtn_.setBounds(brow.removeFromLeft(bw));
+        brow.removeFromLeft(gap);
+        recBtn_.setBounds(brow.removeFromLeft(bw));
+        brow.removeFromLeft(gap);
+        vueBtn_.setBounds(brow.removeFromLeft(bw));
+        brow.removeFromLeft(gap);
+        exportBtn_.setBounds(brow.removeFromLeft(bw));
     }
 
     // Écran TFT émulé (page PATTERN) au centre, encodeurs sur les côtés.
@@ -503,6 +520,10 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
         applyEncoderConfigForState();
     if (!veloEncoder_.isMouseButtonDown())
         configureVeloEncoder();
+    if (!masterEncoder_.isMouseButtonDown())
+        configureMasterEncoder();   // master contextuel : valeur/label à jour (Accent/Swing/BPM)
+    if (masterHudFrames_ > 0)
+        --masterHudFrames_;         // expiration du HUD transitoire
     configurePushButtons();   // labels/état/led des boutons PUSH (Suppr suit le curseur slot)
     if (screenPage_ == PatternScreenModel::Page::PianoRoll)
         zoomEncoderLabel_.setText("Zoom " + juce::String(rollOctaves_) + "oct", juce::dontSendNotification);

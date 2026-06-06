@@ -784,3 +784,60 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
     }
     buildScreenModel();
 }
+
+// --- Encodeur MASTER (contextuel) ------------------------------------------
+// Mode Accent (PATTERN) → montant d'accent ; mode Swing → swing % ; sinon → tempo (BPM).
+
+void NidmiSeqAudioProcessorEditor::configureMasterEncoder() {
+    const auto& pat = proc_.engine().pattern();
+    const bool inPattern = (screenPage_ == PatternScreenModel::Page::Pattern);
+    if (inPattern && padMode_ == PadMode::Accent) {
+        const int v = juce::jlimit(0, 127, static_cast<int>(pat.timing.accentAmount));
+        masterEncoder_.setRange(0.0, 127.0, 1.0);
+        masterEncoder_.setValue(static_cast<double>(v), juce::dontSendNotification);
+        masterEncoderLabel_.setText("Accent " + juce::String(v), juce::dontSendNotification);
+    } else if (inPattern && padMode_ == PadMode::Swing) {
+        const int v = juce::jlimit(50, 75, static_cast<int>(pat.timing.swingPositionPercent));
+        masterEncoder_.setRange(50.0, 75.0, 1.0);
+        masterEncoder_.setValue(static_cast<double>(v), juce::dontSendNotification);
+        masterEncoderLabel_.setText("Swing " + juce::String(v) + "%", juce::dontSendNotification);
+    } else {
+        double lo = 20.0, hi = 300.0;
+        if (auto* pf = dynamic_cast<juce::AudioParameterFloat*>(proc_.apvts().getParameter("bpm"))) {
+            lo = pf->range.start; hi = pf->range.end;
+        }
+        const float bpm = proc_.apvts().getRawParameterValue("bpm") != nullptr
+                              ? proc_.apvts().getRawParameterValue("bpm")->load() : 120.0f;
+        masterEncoder_.setRange(lo, hi, 1.0);
+        masterEncoder_.setValue(static_cast<double>(bpm), juce::dontSendNotification);
+        masterEncoderLabel_.setText("BPM " + juce::String(juce::roundToInt(bpm)), juce::dontSendNotification);
+    }
+}
+
+void NidmiSeqAudioProcessorEditor::onMasterEncoderChanged() {
+    const int v = static_cast<int>(std::lround(masterEncoder_.getValue()));
+    const bool inPattern = (screenPage_ == PatternScreenModel::Page::Pattern);
+    if (inPattern && padMode_ == PadMode::Accent) {
+        SequencerCommand c; c.id = SequencerCommandId::SetPatternAccentAmount;
+        c.a = static_cast<uint8_t>(juce::jlimit(0, 127, v));
+        proc_.controller().postCommand(c);
+        masterHudText_ = "Accent " + juce::String(juce::jlimit(0, 127, v));
+        masterEncoderLabel_.setText(masterHudText_, juce::dontSendNotification);
+    } else if (inPattern && padMode_ == PadMode::Swing) {
+        const int pct = juce::jlimit(50, 75, v);
+        SequencerCommand c; c.id = SequencerCommandId::SetPatternSwing; c.x = true;
+        c.a = static_cast<uint8_t>(pct);
+        proc_.controller().postCommand(c);
+        masterHudText_ = "Swing " + juce::String(pct) + "%";
+        masterEncoderLabel_.setText(masterHudText_, juce::dontSendNotification);
+    } else {
+        // Tempo : édite le paramètre APVTS « bpm » (le processeur l'applique au moteur).
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*>(proc_.apvts().getParameter("bpm"))) {
+            rp->setValueNotifyingHost(rp->convertTo0to1(static_cast<float>(v)));
+            masterHudText_ = "BPM " + juce::String(v);
+            masterEncoderLabel_.setText(masterHudText_, juce::dontSendNotification);
+        }
+    }
+    masterHudFrames_ = 36;   // ~1,2 s d'affichage du HUD à l'écran
+    buildScreenModel();
+}

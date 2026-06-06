@@ -82,6 +82,8 @@ struct PatternScreenModel {
     int   keyPageCount = 1;    // nb total de pages de 16 pas (pour l'indicateur P2/4)
     int   prBottomNote   = -1; // PIANO ROLL : note MIDI du bas de la fenêtre (défilement Oct± ; -1 = auto)
     int   prVisibleSemis = 0;  // PIANO ROLL : nb de demi-tons (lanes) à afficher = octaves×12 (0 = auto)
+    int   padMode      = 0;    // PATTERN : 0=Pas(on/off) 1=Accent 2=Swing (façon Elektron)
+    juce::String masterHud;    // HUD transitoire (valeur réglée par l'encodeur master) ; vide = caché
     int   rowZoom      = 0;    // PATTERN : nb de rows visibles (0 = auto)
     int   stepZoom     = 1;    // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
     Row   rows[16];

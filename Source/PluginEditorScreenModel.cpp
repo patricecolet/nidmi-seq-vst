@@ -81,6 +81,8 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
                            : 0;
     m.rowZoom     = rowZoom_;
     m.stepZoom    = juce::jlimit(1, 8, stepZoom_);
+    m.padMode     = static_cast<int>(padMode_);
+    m.masterHud   = (masterHudFrames_ > 0) ? masterHudText_ : juce::String();   // HUD transitoire
     m.playing     = playing;
     m.tsNum       = pat.numerator;
     m.tsDen       = pat.denominator;
@@ -376,11 +378,17 @@ void NidmiSeqAudioProcessorEditor::refreshPianoKeysFromEngine() {
 
     switch (screenPage_) {
         case PatternScreenModel::Page::Pattern:
+            // Mode Pas = on/off ; mode Accent/Swing = flag du pas (LED des blanches reflète le mode).
             for (int i = 0; i < 16; ++i) {
                 const int s = base + i;
-                piano_.whiteKey(i).setToggleState(
-                    s < rowN && row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).enabled,
-                    juce::dontSendNotification);
+                bool lit = false;
+                if (s < rowN) {
+                    const auto& sd = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s));
+                    lit = (padMode_ == PadMode::Accent) ? sd.accent
+                        : (padMode_ == PadMode::Swing)  ? sd.swingEnable
+                                                        : sd.enabled;
+                }
+                piano_.whiteKey(i).setToggleState(lit, juce::dontSendNotification);
             }
             piano_.setPlayheadStep(livePh);
             break;
@@ -521,8 +529,9 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             // Noires = fonctions directes (Mes a maintenant ses propres touches 5/6 → plus de ⇧Page=Mes).
             piano_.setBlackKeyLabel(0, "R-");
             piano_.setBlackKeyLabel(1, "R+");
-            piano_.setBlackKeyLabel(2, "Pg-");
-            piano_.setBlackKeyLabel(3, "Pg+");
+            // ⇧+2 = mode Accent, ⇧+3 = mode Swing (façon Elektron) ; sinon Pg-/Pg+.
+            piano_.setBlackKeyLabel(2, shiftActive() ? (padMode_ == PadMode::Accent ? "Acc*" : "Acc") : "Pg-");
+            piano_.setBlackKeyLabel(3, shiftActive() ? (padMode_ == PadMode::Swing  ? "Swg*" : "Swg") : "Pg+");
             piano_.setBlackKeyLabel(4, "Sub");
             piano_.setBlackKeyLabel(5, "Mes-");
             piano_.setBlackKeyLabel(6, "Mes+");

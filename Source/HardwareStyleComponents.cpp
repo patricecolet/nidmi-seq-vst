@@ -182,6 +182,8 @@ void PatternScreen::paint(juce::Graphics& g) {
             }
             if (model_.recArmed)
                 crumb += "  REC";
+            if (model_.padMode == 1)      crumb += "  [ACCENT]";   // pads = accent par pas
+            else if (model_.padMode == 2) crumb += "  [SWING]";    // pads = swing par pas
         } else if (model_.page == PatternScreenModel::Page::Harmony) {
             // Indicateur de mesure éditée (le mode harmonique est par row+mesure).
             crumb = "Mes " + juce::String(model_.editBar + 1) + "/" + juce::String(juce::jmax(1, model_.numBars));
@@ -206,6 +208,17 @@ void PatternScreen::paint(juce::Graphics& g) {
         case PatternScreenModel::Page::Auto:      paintAutoPage(g); break;
         case PatternScreenModel::Page::Song:
             paintStubPage(g, "SONG", "arrangement / chain - V1.5"); break;
+    }
+
+    // HUD transitoire de l'encodeur MASTER (valeur réglée : BPM / Accent / Swing).
+    if (model_.masterHud.isNotEmpty()) {
+        auto box = bodyArea_.withSizeKeepingCentre(juce::jmin(180.0f, bodyArea_.getWidth() - 12.0f), 40.0f);
+        g.setColour(kScreenBg.withAlpha(0.86f));
+        g.fillRoundedRectangle(box, 6.0f);
+        g.setColour(kHeaderText);
+        g.drawRoundedRectangle(box.reduced(0.5f), 6.0f, 1.4f);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(22.0f).withStyle("Bold")));
+        g.drawText(model_.masterHud, box, juce::Justification::centred);
     }
 }
 

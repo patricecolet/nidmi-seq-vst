@@ -100,7 +100,21 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
     switch (screenPage_) {
         case PatternScreenModel::Page::Pattern: {
             const int step = stepPage_ * 16 + index;   // fenêtre de page
-            if (step >= n) return;          // PAD : toggle le pas
+            if (step >= n) return;
+            // Mode ACCENT / SWING (façon Elektron) : la blanche toggle le flag du pas (pas le on/off).
+            if (padMode_ == PadMode::Accent || padMode_ == PadMode::Swing) {
+                selectedStep_ = step;
+                const auto& sd = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(step));
+                SequencerCommand c;
+                if (padMode_ == PadMode::Accent) { c.id = SequencerCommandId::SetStepAccent; c.x = !sd.accent; }
+                else                             { c.id = SequencerCommandId::SetStepSwing;  c.x = !sd.swingEnable; }
+                c.a = static_cast<uint8_t>(sr);
+                c.b = static_cast<uint8_t>(step);
+                c.f = static_cast<uint8_t>(editBar_);
+                proc_.controller().postCommand(c);
+                break;
+            }
+            // PAD : toggle le pas.
             // Pas recouvert par un owner antérieur (drill / note longue span>1) : on sélectionne
             // l'owner au lieu de créer un pas par-dessus (cohérent avec le clic souris).
             int owner = -1;
@@ -233,6 +247,24 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
 
     switch (screenPage_) {
         case PatternScreenModel::Page::Pattern: {
+            // ⇧+noire 2 = mode ACCENT, ⇧+noire 3 = mode SWING (façon Elektron) : les blanches
+            // togglent alors le flag du pas. Re-appui sur la même = retour au mode Pas (on/off).
+            // À l'entrée, on garantit un effet audible (montant accent / swing global par défaut).
+            if (shiftActive() && (index == 2 || index == 3)) {
+                const PadMode want = (index == 2) ? PadMode::Accent : PadMode::Swing;
+                padMode_ = (padMode_ == want) ? PadMode::Steps : want;
+                if (padMode_ == PadMode::Accent
+                    && proc_.engine().pattern().timing.accentAmount == 0) {
+                    SequencerCommand c; c.id = SequencerCommandId::SetPatternAccentAmount; c.a = 40;
+                    proc_.controller().postCommand(c);          // défaut audible
+                } else if (padMode_ == PadMode::Swing
+                           && !proc_.engine().pattern().timing.swingEnabled) {
+                    SequencerCommand c; c.id = SequencerCommandId::SetPatternSwing; c.x = true; c.a = 62;
+                    proc_.controller().postCommand(c);          // swing global ON + défaut 62%
+                }
+                updateKeysForPage();
+                break;
+            }
             // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
             // Noire 9 = bascule rel/abs du sub du pas sélectionné (inactif si pas de sub).
             // ⇧+noire 9 = DÉTACHER un sous-pattern partagé (ghost) → copie indépendante.

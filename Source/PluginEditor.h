@@ -93,6 +93,15 @@ private:
     juce::Label  zoomEncoderLabel_;
     double       lastZoomEnc_ = 0.0;   // encodeur Zoom traité en relatif (direction)
 
+    // Encodeur MASTER (5e, contextuel) : montant d'accent (mode Accent) / swing % (mode Swing)
+    // / tempo BPM (défaut). Distinct des 4 encodeurs de vue.
+    juce::Slider masterEncoder_;
+    juce::Label  masterEncoderLabel_;
+    void configureMasterEncoder();     // cale plage/valeur/label selon le contexte
+    void onMasterEncoderChanged();
+    juce::String masterHudText_;       // HUD transitoire à l'écran (valeur réglée par le master)
+    int          masterHudFrames_ = 0; // nb de frames de timer restantes d'affichage du HUD
+
     int rowZoom_     = 0;   // PATTERN : nb de rows visibles (0 = auto selon hauteur)
     int stepZoom_    = 1;   // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
     int rollOctaves_ = 2;   // PIANO ROLL : nb d'octaves visibles (zoom vertical des hauteurs)
@@ -165,6 +174,11 @@ private:
     // le focus entre l'édition des accords et celle de la lane de tonalité.
     enum class HarmonyFocus { Chords = 0, Tonality = 1 };
     HarmonyFocus harmonyFocus_ = HarmonyFocus::Chords;
+
+    // Mode des pads PATTERN (façon Elektron) : les blanches togglent on/off, OU l'accent,
+    // OU le swing du pas, selon le mode. Armé par ⇧+noire 2 (Acc) / ⇧+noire 3 (Swg).
+    enum class PadMode { Steps = 0, Accent = 1, Swing = 2 };
+    PadMode padMode_ = PadMode::Steps;
     int  keyCursor_     = 0;       // marqueur de tonalité édité (0..len, len = marqueur d'ajout)
     void setKeyField(int field, int value);   // field 0=root 1=scale 2=dur (en temps)
 
