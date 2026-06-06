@@ -88,12 +88,18 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     if (auto* bpm = proc_.apvts().getRawParameterValue("bpm"))
         m.bpm = bpm->load();
 
-    // Page GLOBAL : liste des params projet (héritée de l'OLED, désormais rendue sur le TFT).
-    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams);
+    // Page GLOBAL : params projet (OLED) + entrée virtuelle « Canal » de la row sélectionnée.
+    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 1);
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
-    for (int i = 0; i < m.numGlobalParams; ++i) {
+    for (int i = 0; i < kNumOledParams && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
         m.global[static_cast<size_t>(i)].value = formatParamValue(proc_.apvts(), oledParamId(i));
+    }
+    if (m.numGlobalParams > kNumOledParams) {   // dernière ligne = canal MIDI de la row sélectionnée
+        const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const int ch = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
+        m.global[static_cast<size_t>(kNumOledParams)].name  = "Canal R" + juce::String(sr + 1);
+        m.global[static_cast<size_t>(kNumOledParams)].value = juce::String(juce::jlimit(1, 16, ch));
     }
 
     // Filtre harmonique : tonalité effective (même logique que la section HARMONIE plus bas,

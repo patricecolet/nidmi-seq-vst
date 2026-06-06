@@ -10,6 +10,15 @@
 #include <cmath>
 
 void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
+    // Entrée virtuelle « Canal » (après les params OLED) : canal MIDI de la row sélectionnée (1..16).
+    if (oledParamIndex_ == kNumOledParams) {
+        const auto& pat = proc_.engine().pattern();
+        const int   sr  = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const int   ch  = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
+        valueEncoder_.setRange(1.0, 16.0, 1.0);
+        valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, 16, ch)), juce::dontSendNotification);
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -42,6 +51,20 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
 }
 
 void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
+    // Entrée virtuelle « Canal » : pose le canal MIDI (1..16) de la row sélectionnée via SetRowChannel.
+    if (oledParamIndex_ == kNumOledParams) {
+        const auto& pat = proc_.engine().pattern();
+        if (pat.numRows == 0) return;
+        const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+        const int ch = juce::jlimit(1, 16, (int) std::lround(valueEncoder_.getValue()));
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetRowChannel;
+        c.a  = static_cast<uint8_t>(sr);
+        c.b  = static_cast<uint8_t>(ch - 1);   // engine stocke 0..15
+        proc_.controller().postCommand(c);
+        buildScreenModel();
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -64,7 +87,8 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Global) {
-        const int ni = juce::jlimit(0, kNumOledParams - 1, (int) std::lround(navEncoder_.getValue()));
+        // kNumOledParams params APVTS + 1 entrée virtuelle « Canal » (index == kNumOledParams).
+        const int ni = juce::jlimit(0, kNumOledParams, (int) std::lround(navEncoder_.getValue()));
         if (ni != oledParamIndex_) {
             oledParamIndex_ = ni;
             syncValueEncoderFromParam();
@@ -269,7 +293,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     if (screenPage_ == PatternScreenModel::Page::Global) {
         navEncoderLabel_.setText("Param", juce::dontSendNotification);
         valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, kNumOledParams - 1)), 1.0);
+        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams), 1.0);   // +1 = entrée « Canal »
         navEncoder_.setValue(static_cast<double>(oledParamIndex_), juce::dontSendNotification);
         syncValueEncoderFromParam();
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {

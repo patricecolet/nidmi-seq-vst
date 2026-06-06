@@ -411,6 +411,9 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             break;
         }
         case PatternScreenModel::Page::Global:
+            // R-/R+ = change la row sélectionnée (pour éditer son canal MIDI dans la liste GLOBAL).
+            if (index == 0 || index == 1) runFunction(index, /*allowOct*/ false);
+            break;
         case PatternScreenModel::Page::Song:
         default:
             break;
