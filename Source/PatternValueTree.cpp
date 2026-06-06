@@ -55,6 +55,10 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
     h.setProperty("root", p.harmony.rootPc, nullptr);
     h.setProperty("follow", p.harmony.followProgression ? 1 : 0, nullptr);
     h.setProperty("advSub", p.harmony.advanceProgOnSubPatternEnd ? 1 : 0, nullptr);
+    // Tonalité MAÎTRE du projet + suivi maître (sinon perdus au rechargement).
+    h.setProperty("fmaster", p.harmony.followMasterTonality ? 1 : 0, nullptr);
+    h.setProperty("mroot", engine.projectSettings().masterRootPc, nullptr);
+    h.setProperty("mscale", engine.projectSettings().masterScaleId, nullptr);
     root.appendChild(h, nullptr);
 
     juce::ValueTree t("Timing");
@@ -157,6 +161,7 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
         sub.setProperty("ns", sp.numSteps, nullptr);
         sub.setProperty("dur", sp.duration, nullptr);
         sub.setProperty("apoe", sp.advanceProgOnEnd ? 1 : 0, nullptr);
+        sub.setProperty("rel", sp.relativeToHost ? 1 : 0, nullptr);   // mode REL/ABS du sub
         juce::ValueTree sh("Harmony");
         sh.setProperty("en", sp.harmony.harmonyEnabled ? 1 : 0, nullptr);
         sh.setProperty("scale", sp.harmony.scaleId, nullptr);
@@ -177,6 +182,7 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
             ss.setProperty("on", sd.enabled ? 1 : 0, nullptr);
             ss.setProperty("ac", sd.accent ? 1 : 0, nullptr);
             ss.setProperty("sw", sd.swingEnable ? 1 : 0, nullptr);
+            ss.setProperty("span", sd.span, nullptr);   // longueur du sous-pas (1 = normal)
             for (uint8_t k = 0; k < kMaxCCLocksPerStep; ++k) {
                 if (sd.ccLocks[k].ccNumber == kNoCCLock) continue;
                 juce::ValueTree cc("CC");
@@ -247,6 +253,22 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
         c.id = SequencerCommandId::SetAdvanceProgOnSubPatternEnd;
         c.x  = static_cast<int>(h.getProperty("advSub", 0)) != 0;
         SequencerCommandApi::dispatch(engine, c, nowUs);
+        // Tonalité MAÎTRE + suivi maître (absents des anciens projets → défauts conservés).
+        if (h.hasProperty("mroot")) {
+            c.id = SequencerCommandId::SetProjectMasterRootPc;
+            c.a  = static_cast<uint8_t>(static_cast<int>(h.getProperty("mroot", 0)));
+            SequencerCommandApi::dispatch(engine, c, nowUs);
+        }
+        if (h.hasProperty("mscale")) {
+            c.id = SequencerCommandId::SetProjectMasterScaleId;
+            c.a  = static_cast<uint8_t>(static_cast<int>(h.getProperty("mscale", 0)));
+            SequencerCommandApi::dispatch(engine, c, nowUs);
+        }
+        if (h.hasProperty("fmaster")) {
+            c.id = SequencerCommandId::SetPatternFollowMasterTonality;
+            c.x  = static_cast<int>(h.getProperty("fmaster", 0)) != 0;
+            SequencerCommandApi::dispatch(engine, c, nowUs);
+        }
     }
 
     juce::ValueTree t = rootIn.getChildWithName("Timing");
@@ -279,14 +301,17 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
         for (int i = 0; i < cprog.getNumChildren(); ++i) {
             juce::ValueTree cs_vt = cprog.getChild(i);
             if (cs_vt.getType().toString() != "Slot") continue;
+            const int extFull = static_cast<int>(cs_vt.getProperty("ext", 0));   // uint16
             c.id = SequencerCommandId::SetChordSlot;
             c.a  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("i",   0)));
             c.b  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("deg", 1)));
             c.c  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("qua", 0)));
-            c.d  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("ext", 0)));
+            c.d  = static_cast<uint8_t>(extFull & 0xFF);            // extensions : octet bas
+            c.len = static_cast<uint8_t>((extFull >> 8) & 0xFF);    // extensions : octet haut (#9/#11/b13)
             c.e  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("bas", 0)));
             c.f  = static_cast<uint8_t>(static_cast<int>(cs_vt.getProperty("dur", 1)));
             SequencerCommandApi::dispatch(engine, c, nowUs);
+            c.len = 0;   // évite de polluer les commandes suivantes
         }
         const uint8_t len = static_cast<uint8_t>(static_cast<int>(cprog.getProperty("len", 0)));
         c.id = SequencerCommandId::SetChordProgressionLen;
@@ -340,6 +365,11 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
             c.x  = static_cast<int>(sub.getProperty("apoe", 0)) != 0;
             SequencerCommandApi::dispatch(engine, c, nowUs);
 
+            c.id = SequencerCommandId::SetSubPatternRelative;
+            c.a  = newIdx;
+            c.x  = static_cast<int>(sub.getProperty("rel", 0)) != 0;   // mode REL/ABS
+            SequencerCommandApi::dispatch(engine, c, nowUs);
+
             juce::ValueTree sh = sub.getChildWithName("Harmony");
             if (sh.isValid()) {
                 c.id = SequencerCommandId::SetSubPatternHarmony;
@@ -370,6 +400,15 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
                 c.d              = static_cast<uint8_t>(static_cast<int>(ss.getProperty("v", 100)));
                 c.e              = static_cast<uint8_t>(static_cast<int>(ss.getProperty("g", 80)));
                 SequencerCommandApi::dispatch(engine, c, nowUs);
+                // Longueur (span) du sous-pas. Absent => 1 (rétrocompat).
+                const int subSpan = juce::jlimit(1, 16, static_cast<int>(ss.getProperty("span", 1)));
+                if (subSpan > 1) {
+                    c.id = SequencerCommandId::SetSubStepSpan;
+                    c.a  = newIdx;
+                    c.b  = sj;
+                    c.c  = static_cast<uint8_t>(subSpan);
+                    SequencerCommandApi::dispatch(engine, c, nowUs);
+                }
                 if (static_cast<int>(ss.getProperty("on", 0)) == 0) {
                     c.id = SequencerCommandId::ToggleSubStep;
                     c.a  = newIdx;
