@@ -48,7 +48,13 @@ private:
     juce::TextButton playBtn_;
     juce::TextButton stopBtn_;
     juce::TextButton recBtn_;
-    juce::TextButton vueBtn_;
+    // Navigation par FAMILLE de vue (remplace le bouton Vue cyclique). Re-appui = sous-vue suivante.
+    juce::TextButton editionBtn_;    // PATTERN → ROLL → AUTO
+    juce::TextButton harmonieBtn_;   // HARMONY (re-appui = accords ↔ tonalité)
+    juce::TextButton projetBtn_;     // GLOBAL → SONG
+    int  lastEditView_ = 0;          // dernière vue ÉDITION (Pattern=0/Roll=1/Auto=3)
+    int  lastProjView_ = 4;          // dernière vue PROJET (Global=4/Song=5)
+    void selectViewFamily(int family);   // 0=Édition 1=Harmonie 2=Projet
     juce::TextButton exportBtn_;
     juce::TextButton shiftBtn_;
     juce::TextButton muteBtn_;

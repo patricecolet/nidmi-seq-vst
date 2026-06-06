@@ -18,7 +18,9 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     playBtn_.setLookAndFeel(&transportLook_);
     stopBtn_.setLookAndFeel(&transportLook_);
     recBtn_.setLookAndFeel(&transportLook_);
-    vueBtn_.setLookAndFeel(&transportLook_);
+    editionBtn_.setLookAndFeel(&transportLook_);
+    harmonieBtn_.setLookAndFeel(&transportLook_);
+    projetBtn_.setLookAndFeel(&transportLook_);
 
     playBtn_.setButtonText("Play");
     playBtn_.onClick = [this] {
@@ -37,11 +39,19 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     recBtn_.setButtonText("Rec");
     recBtn_.onClick = [this] { recArmed_ = !recArmed_; };
 
-    vueBtn_.setButtonText("Vue");
-    vueBtn_.onClick = [this] {
-        // Cycle des Vues de l'écran TFT (cahier §10.1).
-        setScreenPage((static_cast<int>(screenPage_) + 1) % PatternScreenModel::kNumPages);
-    };
+    // Boutons de FAMILLE de vue (façon Elektron) : accès direct + re-appui = sous-vue suivante.
+    editionBtn_.setButtonText("Edit");
+    editionBtn_.setToggleable(true);
+    editionBtn_.setClickingTogglesState(false);
+    editionBtn_.onClick = [this] { selectViewFamily(0); };
+    harmonieBtn_.setButtonText("Harmonie");   // VUE Harmonie (≠ bouton « Harm » = harmonie ON/OFF)
+    harmonieBtn_.setToggleable(true);
+    harmonieBtn_.setClickingTogglesState(false);
+    harmonieBtn_.onClick = [this] { selectViewFamily(1); };
+    projetBtn_.setButtonText("Projet");
+    projetBtn_.setToggleable(true);
+    projetBtn_.setClickingTogglesState(false);
+    projetBtn_.onClick = [this] { selectViewFamily(2); };
 
     exportBtn_.setLookAndFeel(&transportLook_);
     exportBtn_.setButtonText("Export");
@@ -312,7 +322,9 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(playBtn_);
     addAndMakeVisible(stopBtn_);
     addAndMakeVisible(recBtn_);
-    addAndMakeVisible(vueBtn_);
+    addAndMakeVisible(editionBtn_);
+    addAndMakeVisible(harmonieBtn_);
+    addAndMakeVisible(projetBtn_);
     addAndMakeVisible(exportBtn_);
     addAndMakeVisible(shiftBtn_);
     addAndMakeVisible(muteBtn_);
@@ -341,7 +353,11 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     playBtn_.toFront(false);
     stopBtn_.toFront(false);
     recBtn_.toFront(false);
-    vueBtn_.toFront(false);
+    editionBtn_.toFront(false);
+    harmonieBtn_.toFront(false);
+    projetBtn_.toFront(false);
+    masterEncoder_.toFront(false);
+    masterEncoderLabel_.toFront(false);
     exportBtn_.toFront(false);
     shiftBtn_.toFront(false);
     muteBtn_.toFront(false);
@@ -357,7 +373,9 @@ NidmiSeqAudioProcessorEditor::~NidmiSeqAudioProcessorEditor() {
     playBtn_.setLookAndFeel(nullptr);
     stopBtn_.setLookAndFeel(nullptr);
     recBtn_.setLookAndFeel(nullptr);
-    vueBtn_.setLookAndFeel(nullptr);
+    editionBtn_.setLookAndFeel(nullptr);
+    harmonieBtn_.setLookAndFeel(nullptr);
+    projetBtn_.setLookAndFeel(nullptr);
     exportBtn_.setLookAndFeel(nullptr);
     shiftBtn_.setLookAndFeel(nullptr);
     muteBtn_.setLookAndFeel(nullptr);
@@ -383,11 +401,11 @@ void NidmiSeqAudioProcessorEditor::resized() {
             masterEncoder_.setBounds(mrow.removeFromRight(kd).withSizeKeepingCentre(kd, kd));
             masterEncoderLabel_.setBounds(mrow.reduced(2, 0));   // lecture (BPM/Accent/Swing) à gauche du knob
         }
-        // Boutons transport centrés dans le reste, hauteur ~42 (centrés verticalement).
+        // Boutons transport centrés dans le reste, hauteur ~42 (Play/Stop/Rec/Export).
         auto        brow = row.reduced(0, 7);
         const int   bw  = 92;
         const int   gap = 6;
-        const int   totalW = bw * 5 + gap * 4;
+        const int   totalW = bw * 4 + gap * 3;
         brow.removeFromLeft(juce::jmax(0, (brow.getWidth() - totalW) / 2));
         playBtn_.setBounds(brow.removeFromLeft(bw));
         brow.removeFromLeft(gap);
@@ -395,11 +413,10 @@ void NidmiSeqAudioProcessorEditor::resized() {
         brow.removeFromLeft(gap);
         recBtn_.setBounds(brow.removeFromLeft(bw));
         brow.removeFromLeft(gap);
-        vueBtn_.setBounds(brow.removeFromLeft(bw));
-        brow.removeFromLeft(gap);
         exportBtn_.setBounds(brow.removeFromLeft(bw));
     }
 
+    // Rangée « Vues » (familles, façon Elektron) : Édition / Harmonie / Projet.
     // Écran TFT émulé (page PATTERN) au centre, encodeurs sur les côtés.
     // Cahier §10.1 (rév. 2026-05) : l'écran montre la grille ; encodeurs + touches pilotent.
     {
@@ -430,18 +447,23 @@ void NidmiSeqAudioProcessorEditor::resized() {
         screen_.setBounds(block.reduced(6, 2));
     }
 
-    // Rangée « contrôles » : Mute (row) + Shift (2des fonctions) + Harm (harmonie ON/OFF). 32 px.
+    // Rangée du bas : familles de Vue (Édition/Harmonie/Projet) + contrôles (Mute/Shift/Harm). 32 px.
     {
         auto      row = r.removeFromTop(32);
         const int bw  = 70;
         const int gap = 6;
-        const int totalW = bw * 3 + gap * 2;
+        const int totalW = bw * 6 + gap * 5;
         row.removeFromLeft(juce::jmax(0, (row.getWidth() - totalW) / 2));
-        muteBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
-        row.removeFromLeft(gap);
-        shiftBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
-        row.removeFromLeft(gap);
-        harmBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));
+        auto place = [&](juce::TextButton& b) {
+            b.setBounds(row.removeFromLeft(bw).reduced(0, 2));
+            row.removeFromLeft(gap);
+        };
+        place(editionBtn_);
+        place(harmonieBtn_);
+        place(projetBtn_);
+        place(muteBtn_);
+        place(shiftBtn_);
+        harmBtn_.setBounds(row.removeFromLeft(bw).reduced(0, 2));   // dernier (sans gap final)
     }
 
     piano_.setBounds(r);
@@ -459,7 +481,16 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     stopBtn_.setEnabled(manualTransportOk);
     recBtn_.setEnabled(true);
     recBtn_.setButtonText(recArmed_ ? "REC●" : "Rec");
-    vueBtn_.setEnabled(true);
+    // LED des boutons de FAMILLE : la famille de la vue courante est allumée.
+    {
+        const int pg = static_cast<int>(screenPage_);
+        const bool edit = (pg == 0 || pg == 1 || pg == 3);   // Pattern/Roll/Auto
+        const bool harm = (pg == 2);
+        const bool proj = (pg == 4 || pg == 5);              // Global/Song
+        editionBtn_.setToggleState(edit, juce::dontSendNotification);
+        harmonieBtn_.setToggleState(harm, juce::dontSendNotification);
+        projetBtn_.setToggleState(proj, juce::dontSendNotification);
+    }
     shiftBtn_.setEnabled(true);
     shiftBtn_.setToggleState(shiftHeld_, juce::dontSendNotification);
 

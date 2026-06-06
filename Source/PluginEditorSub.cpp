@@ -25,10 +25,33 @@ void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
     }
     // On reste dans le sub en changeant de Vue (PATTERN = on/off, ROLL = hauteurs…).
     screenPage_ = newPage;
+    // Mémorise la dernière vue par famille (retour direct quand on re-sélectionne la famille).
+    if (pageIndex == 0 || pageIndex == 1 || pageIndex == 3) lastEditView_ = pageIndex;
+    else if (pageIndex == 4 || pageIndex == 5)              lastProjView_ = pageIndex;
     applyEncoderConfigForState();
     configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
+}
+
+// Sélection par FAMILLE de vue (bouton dédié) : entre dans la famille (dernière vue utilisée),
+// re-appui = sous-vue suivante de la famille. Famille : 0=Édition{Pat,Roll,Auto} 1=Harmonie 2=Projet{Glob,Song}.
+void NidmiSeqAudioProcessorEditor::selectViewFamily(int family) {
+    const int cur = static_cast<int>(screenPage_);
+    if (family == 1) {                       // Harmonie : vue unique (re-appui = focus, géré par setScreenPage)
+        setScreenPage(static_cast<int>(PatternScreenModel::Page::Harmony));
+        return;
+    }
+    static const int kEdit[3] = {0, 1, 3};   // Pattern, PianoRoll, Auto
+    static const int kProj[2] = {4, 5};      // Global, Song
+    const int*  fam = (family == 0) ? kEdit : kProj;
+    const int   n   = (family == 0) ? 3 : 2;
+    int idx = -1;
+    for (int i = 0; i < n; ++i) if (fam[i] == cur) idx = i;
+    if (idx >= 0)                            // déjà dans la famille → sous-vue suivante (cycle)
+        setScreenPage(fam[(idx + 1) % n]);
+    else                                     // hors famille → dernière vue utilisée de la famille
+        setScreenPage((family == 0) ? lastEditView_ : lastProjView_);
 }
 
 int NidmiSeqAudioProcessorEditor::activeSubIdx() const {
