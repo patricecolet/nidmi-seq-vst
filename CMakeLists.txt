@@ -46,6 +46,11 @@ target_sources(NidmiSeq
         Source/PluginEditorSub.cpp
         Source/PluginEditorAuto.cpp
         Source/HardwareStyleComponents.cpp
+        Source/ScreenPatternView.cpp
+        Source/ScreenRollView.cpp
+        Source/ScreenHarmonyView.cpp
+        Source/ScreenAutoGlobalView.cpp
+        Source/PianoKeysPanel.cpp
         Source/HostTimeMapper.cpp
         Source/VstSequencerController.cpp
         Source/PatternValueTree.cpp
