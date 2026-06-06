@@ -39,6 +39,8 @@ struct PatternScreenModel {
         bool          enabled[16] = {};
         unsigned char note[16]    = {};     // note brute (absolue, ou offset centré sur 64 si relatif)
         unsigned char velocity[16] = {};    // vélocité par sous-pas (0..127) — lane vélo du sub-roll
+        unsigned char span[16]    = {};     // longueur en sous-pas couverts (1 = normal ; >1 masque les suivants)
+        unsigned char gate[16]    = {};     // gate % par sous-pas (fraction du span pour la longueur jouée)
         bool          relative    = false;  // mode : sous-pas relatifs à la note hôte (ancre)
         int           duration    = 1;      // span : nombre de pas hôtes couverts (1..64)
     };

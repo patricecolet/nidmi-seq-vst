@@ -20,6 +20,30 @@ constexpr int kNumOledParams = static_cast<int>(std::size(kOledParamIds));
 
 const char* kRoman[7]         = {"I", "II", "III", "IV", "V", "VI", "VII"};
 
+// « Longueur » unifiée d'une note en QUARTS de (sous-)pas : 1=¼, 4=1 pas, etc.
+// Conversion bidirectionnelle avec le stockage moteur (span entier + gate %).
+//   durée = span × gate% = q/4 pas.
+juce::String lengthQuartersLabel(int q) {
+    const int whole = q / 4, rem = q % 4;
+    static const char* kFrac[4] = {"", juce::CharPointer_UTF8("\xc2\xbc"),
+                                       juce::CharPointer_UTF8("\xc2\xbd"),
+                                       juce::CharPointer_UTF8("\xc2\xbe")};   // ¼ ½ ¾
+    if (whole == 0 && rem == 0) return "0";
+    return (whole > 0 ? juce::String(whole) : juce::String()) + kFrac[rem] + " pas";
+}
+// (span, gate%) -> quarts arrondis.
+int lengthToQuarters(int span, int gate) {
+    return juce::jmax(1, static_cast<int>(std::lround(span * gate / 25.0)));
+}
+// quarts -> span entier (ceil) borné à maxSpan.
+int quartersToSpan(int q, int maxSpan) {
+    return juce::jlimit(1, juce::jmax(1, maxSpan), (q + 3) / 4);
+}
+// quarts + span -> gate% (1..100).
+int quartersToGate(int q, int span) {
+    return juce::jlimit(1, 100, static_cast<int>(std::lround(q * 25.0 / juce::jmax(1, span))));
+}
+
 // Type de division musicale donné par N pas dans une mesure tsNum/tsDen.
 // Ex. 4/4 : N=16 -> "1/16", N=12 -> "1/8T", N=20 -> "5:tps". Vide si non interprétable.
 juce::String divisionLabel(int n, int tsNum, int tsDen) {
@@ -737,7 +761,16 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
     if (inSub_) {
         const int subIdx = activeSubIdx();
         if (subIdx < 0) return;
-        if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
+        if (screenPage_ == PatternScreenModel::Page::PianoRoll && subRollDivN_) {
+            // Bascule →N : la rotation règle le nombre de divisions du sous-pattern.
+            const int n = juce::jlimit(1, 16, (int) std::lround(valueEncoder_.getValue()));
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetSubPatternSteps;
+            c.a  = static_cast<uint8_t>(subIdx);
+            c.b  = static_cast<uint8_t>(n);
+            proc_.controller().postCommand(c);
+            buildScreenModel();
+        } else if (screenPage_ == PatternScreenModel::Page::PianoRoll) {
             const auto& sp = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)];
             const int   sn = juce::jlimit(1, 16, static_cast<int>(sp.numSteps));
             const int   ss = juce::jlimit(0, sn - 1, subStep_);
@@ -1043,7 +1076,12 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         navEncoderLabel_.setText("Sous-pas " + juce::String(ss + 1), juce::dontSendNotification);
         navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, sn - 1)), 1.0);
         navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
-        if (screenPage_ == PatternScreenModel::Page::PianoRoll && subIdx >= 0) {
+        if (screenPage_ == PatternScreenModel::Page::PianoRoll && subIdx >= 0 && subRollDivN_) {
+            // HAUT-GAUCHE bascule sur N : nombre de divisions du sous-pattern (1..16).
+            valueEncoderLabel_.setText("Sub N " + juce::String(sn), juce::dontSendNotification);
+            valueEncoder_.setRange(1.0, 16.0, 1.0);
+            valueEncoder_.setValue(static_cast<double>(sn), juce::dontSendNotification);
+        } else if (screenPage_ == PatternScreenModel::Page::PianoRoll && subIdx >= 0) {
             const auto& sd = sp.steps[static_cast<size_t>(ss)];
             if (sp.relativeToHost) {
                 // Intervalle (offset centré sur 64) → stable quand l'ancre bouge.
@@ -1229,11 +1267,14 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
     const juce::String arrow = juce::CharPointer_UTF8("\xe2\x86\x92");
 
     if (inSub_) {
-        // Drill-in sub : Enc1 = Sortir (action). Enc2 = contenu du sub (N ou note) en
-        // rotation directe — le span du pas hôte se règle dans la vue normale, pas ici.
+        // Drill-in : push HAUT-DROITE = Sortir. En ROLL, push HAUT-GAUCHE = →N (bascule
+        // Note <-> nombre de divisions du sous-pattern). En strip (PATTERN), N est en rotation directe.
         setAction(0, juce::String(juce::CharPointer_UTF8("\xe2\x86\x91")) + " Sortir", true);
-        hide(1);
-        setToggle(2, arrow + "Gate", subVeloGate_);   // Enc3 : Vélo <-> Gate du sous-pas
+        if (screenPage_ == PatternScreenModel::Page::PianoRoll)
+            setToggle(1, arrow + "N", subRollDivN_);  // HAUT-GAUCHE : Note <-> divisions
+        else
+            hide(1);
+        setToggle(2, arrow + "Long", subVeloGate_);   // Enc3 : Vélo <-> Longueur (span+gate unifiés)
         hide(3);
         return;
     }
@@ -1279,6 +1320,9 @@ void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
     // elles-mêmes l'UI et sortent tôt ; les bascules tombent dans le refresh commun.
     if (inSub_) {
         if (idx == 0) { exitSub(); return; }          // Enc1 = Sortir du sub
+        else if (idx == 1 && screenPage_ == PatternScreenModel::Page::PianoRoll) {
+            subRollDivN_ = !subRollDivN_;             // HAUT-GAUCHE = →N (Note <-> divisions)
+        }
         else if (idx == 2) { subVeloGate_ = !subVeloGate_; }   // Enc3 = →Gate (Vélo/Gate du sous-pas)
         else return;                                  // autres push inertes
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
@@ -1344,9 +1388,12 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
         const int   ss = juce::jlimit(0, sn - 1, subStep_);
         const auto& sd = sp.steps[static_cast<size_t>(ss)];
         if (subVeloGate_) {
-            veloEncoder_.setRange(1.0, 100.0, 1.0);
-            veloEncoder_.setValue(static_cast<double>(sd.gate), juce::dontSendNotification);
-            veloEncoderLabel_.setText("Gate " + juce::String(sd.gate), juce::dontSendNotification);
+            // « Longueur » unifiée (remplace gate) : en quarts de sous-pas, bornée au sub.
+            const int maxQ = juce::jmax(1, (sn - ss) * 4);
+            const int q    = juce::jlimit(1, maxQ, lengthToQuarters(juce::jmax(1, (int) sd.span), sd.gate));
+            veloEncoder_.setRange(1.0, static_cast<double>(maxQ), 1.0);
+            veloEncoder_.setValue(static_cast<double>(q), juce::dontSendNotification);
+            veloEncoderLabel_.setText("Long " + lengthQuartersLabel(q), juce::dontSendNotification);
         } else {
             veloEncoder_.setRange(0.0, 127.0, 1.0);
             veloEncoder_.setValue(static_cast<double>(sd.velocity), juce::dontSendNotification);
@@ -1401,14 +1448,34 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         const int   ss = juce::jlimit(0, sn - 1, subStep_);
         const auto& sd = sp.steps[static_cast<size_t>(ss)];
         const int   v  = (int) std::lround(veloEncoder_.getValue());
-        SequencerCommand c;
-        c.id = SequencerCommandId::SetSubStep;
-        c.a  = static_cast<uint8_t>(subIdx);
-        c.b  = static_cast<uint8_t>(ss);
-        c.c  = sd.note;                                                  // note préservée
-        c.d  = subVeloGate_ ? sd.velocity : static_cast<uint8_t>(juce::jlimit(0, 127, v));
-        c.e  = subVeloGate_ ? static_cast<uint8_t>(juce::jlimit(1, 100, v)) : sd.gate;
-        proc_.controller().postCommand(c);
+        if (subVeloGate_) {
+            // « Longueur » : v = quarts → span (couvre/masque) + gate (fraction du span).
+            const int span = quartersToSpan(v, sn - ss);
+            const int gate = quartersToGate(v, span);
+            SequencerCommand cs;
+            cs.id = SequencerCommandId::SetSubStepSpan;
+            cs.a  = static_cast<uint8_t>(subIdx);
+            cs.b  = static_cast<uint8_t>(ss);
+            cs.c  = static_cast<uint8_t>(span);
+            proc_.controller().postCommand(cs);
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetSubStep;
+            c.a  = static_cast<uint8_t>(subIdx);
+            c.b  = static_cast<uint8_t>(ss);
+            c.c  = sd.note;                                              // note préservée
+            c.d  = sd.velocity;                                         // vélo préservée
+            c.e  = static_cast<uint8_t>(gate);                          // gate dérivé de la longueur
+            proc_.controller().postCommand(c);
+        } else {
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetSubStep;
+            c.a  = static_cast<uint8_t>(subIdx);
+            c.b  = static_cast<uint8_t>(ss);
+            c.c  = sd.note;                                              // note préservée
+            c.d  = static_cast<uint8_t>(juce::jlimit(0, 127, v));       // Vélo
+            c.e  = sd.gate;                                             // gate préservé
+            proc_.controller().postCommand(c);
+        }
         buildScreenModel();
         return;
     }
@@ -1804,6 +1871,8 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             sv.enabled[static_cast<size_t>(s)]  = sp.steps[static_cast<size_t>(s)].enabled;
             sv.note[static_cast<size_t>(s)]     = sp.steps[static_cast<size_t>(s)].note;
             sv.velocity[static_cast<size_t>(s)] = sp.steps[static_cast<size_t>(s)].velocity;
+            sv.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jmax(1, static_cast<int>(sp.steps[static_cast<size_t>(s)].span)));
+            sv.gate[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 100, static_cast<int>(sp.steps[static_cast<size_t>(s)].gate)));
         }
     }
     m.inSub      = inSub_;

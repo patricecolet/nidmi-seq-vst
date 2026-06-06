@@ -884,7 +884,17 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
                        juce::Justification::centredLeft);
         }
     }
-    // Colonnes (sous-pas) + curseur + blocs de notes.
+    // Sous-pas RECOUVERTS par la longueur (span) d'un sous-pas antérieur : masqués (même
+    // règle que le moteur / le ROLL principal). Le pas sélectionné reste éditable (colonne).
+    bool subCovered[16] = {};
+    for (int k = 0; k < sn; ++k)
+        for (int o = k - 1; o >= 0; --o) {
+            if (!sv.enabled[static_cast<size_t>(o)]) continue;
+            const int osp = juce::jlimit(1, sn - o, static_cast<int>(sv.span[static_cast<size_t>(o)]));
+            if (o + osp > k) { subCovered[k] = true; break; }
+        }
+
+    // Colonnes (sous-pas) + curseur + blocs de notes (largeur ∝ longueur = span × gate).
     for (int k = 0; k < sn; ++k) {
         const float x = plot.getX() + static_cast<float>(k) * cellW;
         if (k == model_.subStep) {
@@ -893,12 +903,16 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
         }
         g.setColour(kScreenBorder);
         g.drawLine(x, plot.getY(), x, plot.getBottom(), 0.4f);
-        if (sv.enabled[static_cast<size_t>(k)]) {
+        if (sv.enabled[static_cast<size_t>(k)] && !subCovered[k]) {
             const int lane = topNote - displayPitch(k);
             if (lane >= 0 && lane < visible) {
-                juce::Rectangle<float> blk(x, plot.getY() + static_cast<float>(lane) * laneH, cellW, laneH);
+                // Longueur jouée : span sous-pas × gate% → largeur du bloc (min 1 cellule visible).
+                const int   span     = juce::jlimit(1, sn - k, static_cast<int>(sv.span[static_cast<size_t>(k)]));
+                const float gateFrac = juce::jlimit(0.1f, 1.0f, static_cast<float>(sv.gate[static_cast<size_t>(k)]) / 100.0f);
+                const float w        = juce::jmax(2.0f, cellW * static_cast<float>(span) * gateFrac);
+                juce::Rectangle<float> blk(x, plot.getY() + static_cast<float>(lane) * laneH, w, laneH);
                 g.setColour(kCellOn);
-                g.fillRoundedRectangle(blk.reduced(1.0f), 2.0f);
+                g.fillRoundedRectangle(blk.reduced(1.0f, 1.0f), 2.0f);
             }
         }
     }

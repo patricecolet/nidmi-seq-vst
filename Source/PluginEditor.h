@@ -173,6 +173,7 @@ private:
     bool veloGate_       = false;   // PATTERN Enc3 : rotation édite Gate au lieu de Vélo
     bool rollVeloGate_   = false;   // ROLL Enc3 : rotation édite Gate au lieu de Vélo
     bool subVeloGate_    = false;   // DRILL-IN Enc3 : rotation édite Gate au lieu de Vélo du sous-pas
+    bool subRollDivN_    = false;   // DRILL-IN ROLL push HAUT-GAUCHE : rotation édite N (divisions) au lieu de la Note
     bool zoomNumBars_    = false;   // PATTERN Enc4 : rotation édite NumBars au lieu de Row
     void setChordField(int field, int value);   // field 0=deg 1=qual 2=ext 3=bass 4=dur
     int  sharedHarmonyMode() const;             // mode commun aux rows liées (-1 = mixte) — affichage seul
