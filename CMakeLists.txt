@@ -39,6 +39,12 @@ target_sources(NidmiSeq
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/PluginEditorScreenModel.cpp
+        Source/PluginEditorEncoders.cpp
+        Source/PluginEditorInput.cpp
+        Source/PluginEditorHarmony.cpp
+        Source/PluginEditorSub.cpp
+        Source/PluginEditorAuto.cpp
         Source/HardwareStyleComponents.cpp
         Source/HostTimeMapper.cpp
         Source/VstSequencerController.cpp

@@ -1,0 +1,150 @@
+#include "PluginEditor.h"
+#include "PluginProcessor.h"
+
+#include "EditorHelpers.h"
+#include "MidiExporter.h"
+
+#include <nidmi_seq/ScaleBank.h>
+#include <nidmi_seq/HarmonyEngine.h>
+
+#include <cmath>
+
+void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
+    pageIndex   = juce::jlimit(0, PatternScreenModel::kNumPages - 1, pageIndex);
+    const auto newPage = static_cast<PatternScreenModel::Page>(pageIndex);
+    // Re-appui sur HARMONIE (déjà active, hors sub) = bascule le focus accords ↔ tonalité.
+    if (newPage == PatternScreenModel::Page::Harmony
+        && screenPage_ == PatternScreenModel::Page::Harmony && !inSub_) {
+        harmonyFocus_ = (harmonyFocus_ == HarmonyFocus::Chords) ? HarmonyFocus::Tonality
+                                                                : HarmonyFocus::Chords;
+        applyEncoderConfigForState();
+        configurePushButtons();
+        updateKeysForPage();
+        buildScreenModel();
+        return;
+    }
+    // On reste dans le sub en changeant de Vue (PATTERN = on/off, ROLL = hauteurs…).
+    screenPage_ = newPage;
+    applyEncoderConfigForState();
+    configurePushButtons();
+    updateKeysForPage();
+    buildScreenModel();
+}
+
+int NidmiSeqAudioProcessorEditor::activeSubIdx() const {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return -1;
+    const int r = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
+    const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    if (subHostStep_ < 0 || subHostStep_ >= n)
+        return -1;
+    const uint8_t idx = pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(subHostStep_)).subPatIdx;
+    return (idx == kNoSubPattern) ? -1 : static_cast<int>(idx);
+}
+
+int NidmiSeqAudioProcessorEditor::selectedStepSubIdx() const {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return -1;
+    const int r = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    if (selectedStep_ < 0 || selectedStep_ >= n)
+        return -1;
+    const uint8_t idx = pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(selectedStep_)).subPatIdx;
+    return (idx == kNoSubPattern) ? -1 : static_cast<int>(idx);
+}
+
+int NidmiSeqAudioProcessorEditor::relevantSubIdx() const {
+    return inSub_ ? activeSubIdx() : selectedStepSubIdx();
+}
+
+void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0)
+        return;
+    const int   r  = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const int   n  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    const int   s  = juce::jlimit(0, n - 1, selectedStep_);
+    const auto& sd = pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s));
+
+    if (sd.subPatIdx == kNoSubPattern) {
+        // Prédit le 1er sub libre (alloc choisit le premier numSteps==0), puis alloc + assign.
+        int fi = -1;
+        for (int i = 0; i < 16; ++i)
+            if (pat.subPatterns[static_cast<size_t>(i)].numSteps == 0) { fi = i; break; }
+        if (fi < 0)
+            return;  // pool de subs plein
+        SequencerCommand a; a.id = SequencerCommandId::AllocSubPattern; a.a = 4; a.b = 1;  // N=4, durée=1
+        proc_.controller().postCommand(a);
+        SequencerCommand c; c.id = SequencerCommandId::SetStepSubPattern;
+        c.a = static_cast<uint8_t>(r); c.b = static_cast<uint8_t>(s); c.c = static_cast<uint8_t>(fi);
+        c.f = static_cast<uint8_t>(editBar_);   // sub attaché au pas de la mesure éditée
+        proc_.controller().postCommand(c);
+        if (!sd.enabled) {   // le pas hôte doit être actif pour déclencher le sub
+            SequencerCommand t; t.id = SequencerCommandId::ToggleStep;
+            t.a = static_cast<uint8_t>(r); t.b = static_cast<uint8_t>(s); t.f = static_cast<uint8_t>(editBar_);
+            proc_.controller().postCommand(t);
+        }
+    }
+    inSub_ = true; subHostRow_ = r; subHostStep_ = s; subStep_ = 0;
+    applyEncoderConfigForState();
+    configureVeloEncoder();
+    configurePushButtons();
+    updateKeysForPage();
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::exitSub() {
+    inSub_ = false;
+    applyEncoderConfigForState();
+    configureVeloEncoder();
+    configurePushButtons();
+    updateKeysForPage();
+    buildScreenModel();
+}
+
+int NidmiSeqAudioProcessorEditor::subHostNote() const {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0) return 60;
+    const int r = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
+    const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    const int s = juce::jlimit(0, n - 1, subHostStep_);
+    return pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).note;
+}
+
+void NidmiSeqAudioProcessorEditor::postSubStepPitch(int subStepIndex, int absolutePitch) {
+    const int subIdx = activeSubIdx();
+    if (subIdx < 0) return;
+    const auto& sp = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)];
+    const int   sn = juce::jlimit(1, 16, static_cast<int>(sp.numSteps));
+    if (subStepIndex < 0 || subStepIndex >= sn) return;
+    const auto& sd = sp.steps[static_cast<size_t>(subStepIndex)];
+    // En relatif : stocke l'offset centré sur 64 (note jouée = hôte + offset).
+    int store = juce::jlimit(0, 127, absolutePitch);
+    if (sp.relativeToHost)
+        store = juce::jlimit(0, 127, 64 + (absolutePitch - subHostNote()));
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetSubStep;
+    c.a  = static_cast<uint8_t>(subIdx);
+    c.b  = static_cast<uint8_t>(subStepIndex);
+    c.c  = static_cast<uint8_t>(store);
+    c.d  = sd.velocity > 0 ? sd.velocity : 100;
+    c.e  = sd.gate > 0 ? sd.gate : 80;
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::toggleSubMode() {
+    // Cible : en drill-in le sub édité, sinon le sub du pas SÉLECTIONNÉ (PATTERN/ROLL).
+    const int subIdx = relevantSubIdx();
+    if (subIdx < 0) return;   // pas de sub pertinent → inactif
+    const bool now = proc_.engine().pattern().subPatterns[static_cast<size_t>(subIdx)].relativeToHost;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetSubPatternRelative;
+    c.a  = static_cast<uint8_t>(subIdx);
+    c.x  = !now;
+    proc_.controller().postCommand(c);
+    applyEncoderConfigForState();
+    buildScreenModel();
+}
