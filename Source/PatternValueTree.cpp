@@ -86,6 +86,21 @@ juce::ValueTree buildFromEngine(const SequencerEngine& engine) {
     }
     root.appendChild(cprog, nullptr);
 
+    // Lane de TONALITÉ (marqueurs root+gamme+durée en temps).
+    juce::ValueTree kprog("KeyProgression");
+    kprog.setProperty("len", p.keyProgression.len, nullptr);
+    kprog.setProperty("idx", p.keyProgression.idx, nullptr);
+    for (uint8_t i = 0; i < p.keyProgression.len; ++i) {
+        const KeySlot& ks = p.keyProgression.slots[i];
+        juce::ValueTree ks_vt("KSlot");
+        ks_vt.setProperty("i",   i,                              nullptr);
+        ks_vt.setProperty("rt",  static_cast<int>(ks.rootPc),    nullptr);
+        ks_vt.setProperty("sc",  static_cast<int>(ks.scaleId),   nullptr);
+        ks_vt.setProperty("dur", static_cast<int>(ks.durationBeats), nullptr);
+        kprog.appendChild(ks_vt, nullptr);
+    }
+    root.appendChild(kprog, nullptr);
+
     juce::ValueTree rows("Rows");
     for (uint8_t r = 0; r < p.numRows; ++r) {
         juce::ValueTree row("R");
@@ -276,6 +291,24 @@ void applyToEngine(SequencerEngine& engine, const juce::ValueTree& rootIn, int64
         const uint8_t len = static_cast<uint8_t>(static_cast<int>(cprog.getProperty("len", 0)));
         c.id = SequencerCommandId::SetChordProgressionLen;
         c.a  = len;
+        SequencerCommandApi::dispatch(engine, c, nowUs);
+    }
+
+    // Lane de TONALITÉ.
+    juce::ValueTree kprog = rootIn.getChildWithName("KeyProgression");
+    if (kprog.isValid()) {
+        for (int i = 0; i < kprog.getNumChildren(); ++i) {
+            juce::ValueTree ks_vt = kprog.getChild(i);
+            if (ks_vt.getType().toString() != "KSlot") continue;
+            c.id = SequencerCommandId::SetKeySlot;
+            c.a  = static_cast<uint8_t>(static_cast<int>(ks_vt.getProperty("i",   0)));
+            c.b  = static_cast<uint8_t>(static_cast<int>(ks_vt.getProperty("rt",  0)));
+            c.c  = static_cast<uint8_t>(static_cast<int>(ks_vt.getProperty("sc",  0)));
+            c.f  = static_cast<uint8_t>(static_cast<int>(ks_vt.getProperty("dur", 4)));
+            SequencerCommandApi::dispatch(engine, c, nowUs);
+        }
+        c.id = SequencerCommandId::SetKeyProgressionLen;
+        c.a  = static_cast<uint8_t>(static_cast<int>(kprog.getProperty("len", 0)));
         SequencerCommandApi::dispatch(engine, c, nowUs);
     }
 

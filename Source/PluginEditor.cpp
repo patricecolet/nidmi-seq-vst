@@ -499,8 +499,20 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
 
 void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
     pageIndex   = juce::jlimit(0, PatternScreenModel::kNumPages - 1, pageIndex);
+    const auto newPage = static_cast<PatternScreenModel::Page>(pageIndex);
+    // Re-appui sur HARMONIE (déjà active, hors sub) = bascule le focus accords ↔ tonalité.
+    if (newPage == PatternScreenModel::Page::Harmony
+        && screenPage_ == PatternScreenModel::Page::Harmony && !inSub_) {
+        harmonyFocus_ = (harmonyFocus_ == HarmonyFocus::Chords) ? HarmonyFocus::Tonality
+                                                                : HarmonyFocus::Chords;
+        applyEncoderConfigForState();
+        configurePushButtons();
+        updateKeysForPage();
+        buildScreenModel();
+        return;
+    }
     // On reste dans le sub en changeant de Vue (PATTERN = on/off, ROLL = hauteurs…).
-    screenPage_ = static_cast<PatternScreenModel::Page>(pageIndex);
+    screenPage_ = newPage;
     applyEncoderConfigForState();
     configurePushButtons();
     updateKeysForPage();
@@ -689,13 +701,19 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
             applyEncoderConfigForState();  // recharge Enc1 selon le champ actif (Note/Vélo/Gate)
         }
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // HARMONIE : Enc2 = Slot (jusqu'à len = slot d'ajout) — sans branche Shift.
-        // Le cycle de mode par row se fait désormais par ⇧+blanche N.
-        const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
-        const int cur = juce::jlimit(0, juce::jmin(31, len), (int) std::lround(navEncoder_.getValue()));
-        if (cur != harmonyCursor_) {
-            harmonyCursor_ = cur;
-            applyEncoderConfigForState();  // recharge Enc1 avec le champ du nouveau slot
+        if (harmonyFocus_ == HarmonyFocus::Tonality) {
+            // Focus TONALITÉ : le curseur navigue les marqueurs (jusqu'à len = marqueur d'ajout).
+            const int klen = juce::jlimit(0, 16, static_cast<int>(proc_.engine().pattern().keyProgression.len));
+            const int kc   = juce::jlimit(0, juce::jmin(15, klen), (int) std::lround(navEncoder_.getValue()));
+            if (kc != keyCursor_) { keyCursor_ = kc; applyEncoderConfigForState(); }
+        } else {
+            // Focus ACCORDS : Enc curseur = Slot (jusqu'à len = slot d'ajout).
+            const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
+            const int cur = juce::jlimit(0, juce::jmin(31, len), (int) std::lround(navEncoder_.getValue()));
+            if (cur != harmonyCursor_) {
+                harmonyCursor_ = cur;
+                applyEncoderConfigForState();  // recharge Enc1 avec le champ du nouveau slot
+            }
         }
     } else if (screenPage_ == PatternScreenModel::Page::Auto) {
         const auto& pat = proc_.engine().pattern();
@@ -800,8 +818,10 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // Enc2 = Degré, ou Bass si push →Bass actif.
-        setChordField(harmValBass_ ? 3 : 0, (int) std::lround(valueEncoder_.getValue()));
+        if (harmonyFocus_ == HarmonyFocus::Tonality)
+            setKeyField(0, (int) std::lround(valueEncoder_.getValue()));   // Tonique du marqueur
+        else
+            setChordField(harmValBass_ ? 3 : 0, (int) std::lround(valueEncoder_.getValue()));
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Auto) {
@@ -860,6 +880,47 @@ void NidmiSeqAudioProcessorEditor::setChordField(int field, int value) {
     c.d  = static_cast<uint8_t>(ext & 0xFF);
     c.len = static_cast<uint8_t>((ext >> 8) & 0xFF);
     c.e  = static_cast<uint8_t>(static_cast<int8_t>(bass));
+    c.f  = static_cast<uint8_t>(dur);
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+// Édite un marqueur de la lane de TONALITÉ. field : 0=root, 1=scale, 2=durée (temps).
+// Curseur sur le marqueur d'ajout (cur >= len) → crée d'abord le marqueur (seed = clé maître).
+void NidmiSeqAudioProcessorEditor::setKeyField(int field, int value) {
+    const auto& kp  = proc_.engine().pattern().keyProgression;
+    const int   len = juce::jlimit(0, 16, static_cast<int>(kp.len));
+    const int   cur = juce::jlimit(0, 15, keyCursor_);
+    const int   nScale = juce::jmax(1, static_cast<int>(scalebank::Count));
+
+    // Valeurs par défaut d'un nouveau marqueur = tonalité maître + durée = 1 mesure.
+    const auto& ps  = proc_.engine().projectSettings();
+    int root  = static_cast<int>(ps.masterRootPc);
+    int scale = static_cast<int>(ps.masterScaleId);
+    int dur   = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
+    if (cur < len) {
+        const auto& k = kp.slots[static_cast<size_t>(cur)];
+        root = k.rootPc; scale = k.scaleId; dur = k.durationBeats;
+    } else if (len > 0) {                       // ajout : copie le dernier marqueur
+        const auto& k = kp.slots[static_cast<size_t>(len - 1)];
+        root = k.rootPc; scale = k.scaleId; dur = k.durationBeats;
+    }
+    switch (field) {
+        case 0:  root  = ((value % 12) + 12) % 12;          break;   // Tonique (wrap 12)
+        case 1:  scale = ((value % nScale) + nScale) % nScale; break;// Gamme (wrap)
+        default: dur   = juce::jlimit(1, 64, value);         break;  // Durée (temps)
+    }
+    if (cur >= len) {                            // étend la lane d'abord
+        SequencerCommand cl;
+        cl.id = SequencerCommandId::SetKeyProgressionLen;
+        cl.a  = static_cast<uint8_t>(cur + 1);
+        proc_.controller().postCommand(cl);
+    }
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetKeySlot;
+    c.a  = static_cast<uint8_t>(cur);
+    c.b  = static_cast<uint8_t>(root);
+    c.c  = static_cast<uint8_t>(scale);
     c.f  = static_cast<uint8_t>(dur);
     proc_.controller().postCommand(c);
     buildScreenModel();
@@ -1057,6 +1118,35 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             valueEncoder_.setRange(0.0, 127.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(sd.note), juce::dontSendNotification);
         }
+    } else if (screenPage_ == PatternScreenModel::Page::Harmony
+               && harmonyFocus_ == HarmonyFocus::Tonality) {
+        // Focus TONALITÉ : Enc1=Marqueur, Enc2=Tonique, Enc3=Durée(temps), Enc4=Gamme (relatif).
+        static const char* kPc[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+        const auto& kp  = proc_.engine().pattern().keyProgression;
+        const auto& ps  = proc_.engine().projectSettings();
+        const int   klen = juce::jlimit(0, 16, static_cast<int>(kp.len));
+        const int   kc   = juce::jlimit(0, juce::jmin(15, klen), keyCursor_);
+        int root = static_cast<int>(ps.masterRootPc), scale = static_cast<int>(ps.masterScaleId);
+        int dur  = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
+        if (kc < klen) {
+            const auto& k = kp.slots[static_cast<size_t>(kc)];
+            root = k.rootPc; scale = k.scaleId; dur = k.durationBeats;
+        } else if (klen > 0) {
+            const auto& k = kp.slots[static_cast<size_t>(klen - 1)];
+            root = k.rootPc; scale = k.scaleId; dur = k.durationBeats;
+        }
+        navEncoderLabel_.setText("Marqueur " + juce::String(kc + 1), juce::dontSendNotification);
+        navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, klen)), 1.0);
+        navEncoder_.setValue(static_cast<double>(kc), juce::dontSendNotification);
+        valueEncoderLabel_.setText(juce::String("Tonique ") + kPc[juce::jlimit(0, 11, root)],
+                                   juce::dontSendNotification);
+        valueEncoder_.setRange(0.0, 11.0, 1.0);
+        valueEncoder_.setValue(static_cast<double>(juce::jlimit(0, 11, root)), juce::dontSendNotification);
+        veloEncoderLabel_.setText("Duree " + juce::String(dur) + " tps", juce::dontSendNotification);
+        veloEncoder_.setRange(1.0, 64.0, 1.0);
+        veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
+        zoomEncoderLabel_.setText(juce::String("Gamme ") + scalebank::getScale(static_cast<uint8_t>(scale)).name,
+                                  juce::dontSendNotification);
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const auto& prog = proc_.engine().pattern().chordProgression;
         const int   len  = juce::jlimit(0, 32, static_cast<int>(prog.len));
@@ -1147,6 +1237,16 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         hide(3);
         return;
     }
+    if (screenPage_ == PatternScreenModel::Page::Harmony
+        && harmonyFocus_ == HarmonyFocus::Tonality) {
+        // Focus TONALITÉ : Enc1 push = Suppr le marqueur ; Tonique/Durée/Gamme en rotation directe.
+        const int klen = juce::jlimit(0, 16, static_cast<int>(proc_.engine().pattern().keyProgression.len));
+        setAction(0, "Suppr", keyCursor_ < klen);
+        hide(1);
+        hide(2);
+        hide(3);
+        return;
+    }
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
         const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
         const bool realSlot = harmonyCursor_ < len;   // Suppr seulement sur un slot existant
@@ -1194,6 +1294,17 @@ void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
         else if (idx == 1) { patternValSpan_ = !patternValSpan_; }  // Enc2 = →Span (comme PATTERN)
         else if (idx == 2) { rollVeloGate_   = !rollVeloGate_; }    // Enc3 = →Gate
         else return;
+    } else if (screenPage_ == PatternScreenModel::Page::Harmony
+               && harmonyFocus_ == HarmonyFocus::Tonality) {
+        // Focus TONALITÉ : Enc1 push = Suppr le marqueur courant. Autres push inertes.
+        if (idx != 0) return;
+        const int klen = juce::jlimit(0, 16, static_cast<int>(proc_.engine().pattern().keyProgression.len));
+        if (keyCursor_ >= klen) return;   // marqueur d'ajout : rien à supprimer
+        SequencerCommand c;
+        c.id = SequencerCommandId::DeleteKeySlot;
+        c.a  = static_cast<uint8_t>(keyCursor_);
+        proc_.controller().postCommand(c);
+        keyCursor_ = juce::jlimit(0, juce::jmax(0, klen - 1), keyCursor_);
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         switch (idx) {
             case 0: {   // Enc1 PUSH = Suppr le slot courant (action immédiate, non toggle).
@@ -1302,9 +1413,12 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         return;
     }
 
-    // HARMONIE : Enc3 = Durée du slot (la qualité est posée par les blanches 8..13).
+    // HARMONIE : Enc3 = Durée (du slot d'accord, ou du marqueur de tonalité selon le focus).
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        setChordField(4, (int) std::lround(veloEncoder_.getValue()));
+        if (harmonyFocus_ == HarmonyFocus::Tonality)
+            setKeyField(2, (int) std::lround(veloEncoder_.getValue()));    // Durée du marqueur (temps)
+        else
+            setChordField(4, (int) std::lround(veloEncoder_.getValue()));
         return;
     }
 
@@ -1339,6 +1453,15 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
     if (roll) {
         // PIANO ROLL : zoom = octaves visibles, jusqu'à toute la plage MIDI (~11 octaves).
         rollOctaves_ = juce::jlimit(1, 11, rollOctaves_ - dir);
+    } else if (screenPage_ == PatternScreenModel::Page::Harmony
+               && harmonyFocus_ == HarmonyFocus::Tonality) {
+        // Focus TONALITÉ : Enc4 = Gamme du marqueur courant (relatif). Tonique = Enc2, durée = Enc3.
+        const auto& kp = proc_.engine().pattern().keyProgression;
+        const int   kc = juce::jlimit(0, 15, keyCursor_);
+        const int   curScale = (kc < static_cast<int>(kp.len))
+                                   ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].scaleId)
+                                   : static_cast<int>(proc_.engine().projectSettings().masterScaleId);
+        setKeyField(1, curScale + dir);
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         {
             // HARMONIE : Enc4 = Tonique (push →Gamme = Gamme). Relatif, wrap modulo 12.
@@ -1602,10 +1725,16 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     // effectiveHarmony() est privé côté core → on recompose root/scale manuellement.
     const auto& psHarm   = proc_.engine().projectSettings();
     const auto& phHarm   = pat.harmony;
-    const int   effRootB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterRootPc)
+    int         effRootB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterRootPc)
                                                        : static_cast<int>(phHarm.rootPc);
-    const int   effScaleB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterScaleId)
+    int         effScaleB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterScaleId)
                                                         : static_cast<int>(phHarm.scaleId);
+    // Lane de tonalité : si elle a des marqueurs, la clé courante (marqueur en lecture, ou
+    // slot 0 à l'arrêt) remplace la tonalité maître pour la résolution affichée.
+    if (pat.keyProgression.len > 0) {
+        effRootB  = static_cast<int>(pat.keyProgression.current().rootPc);
+        effScaleB = static_cast<int>(pat.keyProgression.current().scaleId);
+    }
     const bool  harmActive = phHarm.harmonyEnabled;
     const bool  progActive = phHarm.followProgression && pat.chordProgression.len > 0;
     const ChordSlot currentChord = pat.chordProgression.current();
@@ -1705,10 +1834,14 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     // followMasterTonality → root/scale = master ; sinon réglages du pattern.
     const auto& ps     = proc_.engine().projectSettings();
     const auto& ph     = pat.harmony;
-    const int effRoot  = ph.followMasterTonality ? static_cast<int>(ps.masterRootPc)
-                                                 : static_cast<int>(ph.rootPc);
-    const int effScale = ph.followMasterTonality ? static_cast<int>(ps.masterScaleId)
-                                                 : static_cast<int>(ph.scaleId);
+    int effRoot  = ph.followMasterTonality ? static_cast<int>(ps.masterRootPc)
+                                           : static_cast<int>(ph.rootPc);
+    int effScale = ph.followMasterTonality ? static_cast<int>(ps.masterScaleId)
+                                           : static_cast<int>(ph.scaleId);
+    if (pat.keyProgression.len > 0) {   // lane de tonalité : clé courante prioritaire
+        effRoot  = static_cast<int>(pat.keyProgression.current().rootPc);
+        effScale = static_cast<int>(pat.keyProgression.current().scaleId);
+    }
     m.harmonyRootPc        = juce::jlimit(0, 11, effRoot);
     m.harmonyScaleId       = juce::jlimit(0, 11, effScale);
     m.harmonyEnabled       = ph.harmonyEnabled;
@@ -1731,6 +1864,20 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             harmony::degreePitchClass(static_cast<uint8_t>(cs.degree),
                                       static_cast<uint8_t>(effScale),
                                       static_cast<uint8_t>(effRoot)));
+    }
+
+    // Lane de TONALITÉ : marqueurs + focus.
+    const auto& kp  = pat.keyProgression;
+    m.keyLen        = juce::jlimit(0, 16, static_cast<int>(kp.len));
+    m.keyCurrent    = (playing && kp.len > 0) ? static_cast<int>(kp.idx) : -1;
+    m.keyCursor     = juce::jlimit(0, 15, keyCursor_);
+    m.harmonyFocus  = static_cast<int>(harmonyFocus_);
+    for (int i = 0; i < m.keyLen; ++i) {
+        const auto& ks = kp.slots[static_cast<size_t>(i)];
+        auto&       kv = m.keyLane[static_cast<size_t>(i)];
+        kv.rootPc        = ks.rootPc;
+        kv.scaleId       = ks.scaleId;
+        kv.durationBeats = ks.durationBeats;
     }
 
     // Page AUTO : P-locks CC de la row sélectionnée, slot actif.

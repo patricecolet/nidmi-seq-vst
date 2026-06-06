@@ -214,9 +214,11 @@ juce::String chordSuffix(int quality, int extensions) {
 }
 
 struct HarmLayout {
-    juce::Rectangle<float> info, slotBand, rowsBand, detail, hint;  // info / slots / Rows / détail / hint
+    juce::Rectangle<float> info, keyBand, slotBand, rowsBand, detail, hint;  // info / tonalité / accords / Rows / détail / hint
     float slotW = 10.0f;
     int   slotsToShow = 1;
+    float keyW = 10.0f;
+    int   keysToShow = 1;
 };
 
 HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle<float> body) {
@@ -233,9 +235,14 @@ HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle<float>
     // Bande "Rows" (marqueurs lié/délié) juste sous les slots.
     L.rowsBand  = b.removeFromBottom(16.0f);
     b.removeFromBottom(4.0f);
+    // Bande TONALITÉ (marqueurs root+gamme) au-dessus des accords.
+    L.keyBand   = b.removeFromTop(18.0f);
+    b.removeFromTop(4.0f);
     L.slotBand  = b;   // le reste = bande de slots d'accords
     L.slotsToShow = juce::jlimit(1, 32, juce::jmax(m.progLen, m.harmonyCursor + 1));
     L.slotW  = L.slotBand.getWidth() / static_cast<float>(L.slotsToShow);
+    L.keysToShow = juce::jlimit(1, 16, juce::jmax(m.keyLen, m.keyCursor + 1));
+    L.keyW   = L.keyBand.getWidth() / static_cast<float>(L.keysToShow);
     return L;
 }
 
@@ -1183,6 +1190,11 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         g.fillRoundedRectangle(inner, 3.0f);
         g.setColour(cur ? kPlayhead : kScreenBorder);
         g.drawRoundedRectangle(inner.reduced(0.8f), 3.0f, cur ? 1.5f : 0.6f);
+        // Focus ACCORDS : liseré blanc sur la chip sélectionnée (la lane éditée).
+        if (sel && model_.harmonyFocus == 0) {
+            g.setColour(kSelStep);
+            g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.6f);
+        }
 
         if (used) {
             const auto&  c         = model_.chord[static_cast<size_t>(i)];
@@ -1206,9 +1218,51 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         }
     }
 
-    // Ligne de détail du slot sélectionné : inclut le nom d'accord réel.
+    // Bande TONALITÉ (marqueurs root+gamme). Préfixe "Ton" à gauche si la place existe.
+    {
+        const bool focusKey = (model_.harmonyFocus == 1);
+        for (int i = 0; i < L.keysToShow; ++i) {
+            juce::Rectangle<float> chip(L.keyBand.getX() + static_cast<float>(i) * L.keyW,
+                                        L.keyBand.getY(), L.keyW, L.keyBand.getHeight());
+            const auto inner = chip.reduced(3.0f, 1.5f);
+            const bool used  = (i < model_.keyLen);
+            const bool cur   = (i == model_.keyCurrent);
+            const bool sel   = (i == model_.keyCursor);
+            g.setColour(sel ? kSelRowBg : kCellOff);
+            g.fillRoundedRectangle(inner, 3.0f);
+            g.setColour(cur ? kPlayhead : kScreenBorder);
+            g.drawRoundedRectangle(inner.reduced(0.8f), 3.0f, cur ? 1.5f : 0.6f);
+            if (sel && focusKey) {   // focus TONALITÉ : liseré blanc sur le marqueur édité
+                g.setColour(kSelStep);
+                g.drawRoundedRectangle(inner.reduced(0.4f), 3.0f, 1.6f);
+            }
+            if (used) {
+                const auto& k = model_.keyLane[static_cast<size_t>(i)];
+                const juce::String name = pitchClassName(k.rootPc) + " " + scaleNameShort(k.scaleId);
+                g.setColour(sel ? kHeaderText : kRowLabel);
+                g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
+                g.drawText(name, inner, juce::Justification::centred);
+            } else {
+                g.setColour(kCellGrid);
+                g.setFont(juce::Font(juce::FontOptions().withHeight(14.0f)));
+                g.drawText("+", inner, juce::Justification::centred);
+            }
+        }
+    }
+
+    // Ligne de détail : selon le focus, marqueur de tonalité OU slot d'accord.
     juce::String detail;
-    if (model_.harmonyCursor < model_.progLen) {
+    if (model_.harmonyFocus == 1) {
+        if (model_.keyCursor < model_.keyLen) {
+            const auto& k = model_.keyLane[static_cast<size_t>(model_.keyCursor)];
+            detail = "Tonalite " + juce::String(model_.keyCursor + 1) + "/" + juce::String(model_.keyLen)
+                   + "   " + pitchClassName(k.rootPc) + " " + scaleNameShort(k.scaleId)
+                   + "   duree " + juce::String(k.durationBeats) + " tps";
+        } else {
+            detail = "Tonalite " + juce::String(model_.keyCursor + 1)
+                   + " vide - tourne Enc4 (Tonique/Gamme) pour l'ajouter";
+        }
+    } else if (model_.harmonyCursor < model_.progLen) {
         const auto&  c      = model_.chord[static_cast<size_t>(model_.harmonyCursor)];
         const juce::String suffix = chordSuffix(c.quality, c.extensions);
         const juce::String ext    = extensionsShort(c.extensions);   // tensions seules (détail)
@@ -1245,9 +1299,11 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     // Hint bas (ligne fine dédiée) : raccourcis Shift de la Vue HARMONIE.
     g.setColour(kCellGrid);
     g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f)));
-    g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7"))
-                   + "+blanche N : cycle mode row N (CHR/A/B1/B2)   "
-                   + "bouton Harm : Harmonie ON/OFF",
+    g.drawText((model_.harmonyFocus == 1
+                    ? juce::String("TONALITE  Enc2=Tonique Enc3=Duree Enc4=Gamme  push=Suppr   ")
+                    : juce::String(juce::CharPointer_UTF8("\xe2\x87\xa7"))
+                          + "+blanche N : cycle mode row   ")
+                   + "re-appui HARMONIE : accords <-> tonalite",
                L.hint, juce::Justification::centredLeft);
 }
 

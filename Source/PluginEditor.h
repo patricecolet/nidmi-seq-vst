@@ -161,6 +161,13 @@ private:
     bool harmVeloDur_   = false;   // Enc3 : rotation édite Durée au lieu de la Qualité
     bool harmZoomScale_ = false;   // Enc4 : rotation édite Gamme au lieu de la Tonique
 
+    // Lane de TONALITÉ (2e bande dans HARMONIE). Re-appui sur le bouton HARMONIE bascule
+    // le focus entre l'édition des accords et celle de la lane de tonalité.
+    enum class HarmonyFocus { Chords = 0, Tonality = 1 };
+    HarmonyFocus harmonyFocus_ = HarmonyFocus::Chords;
+    int  keyCursor_     = 0;       // marqueur de tonalité édité (0..len, len = marqueur d'ajout)
+    void setKeyField(int field, int value);   // field 0=root 1=scale 2=dur (en temps)
+
     // Bascules push d'encodeur pour les autres vues (remplacent les anciens combos ⇧Enc).
     bool patternValSpan_ = false;   // PATTERN Enc2 : rotation édite Span au lieu de N
     bool veloGate_       = false;   // PATTERN Enc3 : rotation édite Gate au lieu de Vélo

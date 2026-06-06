@@ -112,6 +112,14 @@ struct PatternScreenModel {
     int           harmonyCursor = 0;   // slot édité
     ChordSlotView chord[32];
 
+    // Lane de TONALITÉ (2e bande dans HARMONIE).
+    struct KeySlotView { int rootPc = 0; int scaleId = 0; int durationBeats = 4; };
+    KeySlotView   keyLane[16];
+    int           keyLen        = 0;   // nb de marqueurs de tonalité
+    int           keyCurrent    = -1;  // marqueur en cours de lecture
+    int           keyCursor     = 0;   // marqueur édité
+    int           harmonyFocus  = 0;   // 0 = édite les accords, 1 = édite la tonalité
+
     // Tonalité effective + suivi (la vue HARMONIE hérite/affiche l'état réel du pattern).
     int  harmonyRootPc          = 0;   // pitch-class de la tonique effective
     int  harmonyScaleId         = 0;   // id de gamme effectif (index ScaleBank)
