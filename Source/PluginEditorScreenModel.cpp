@@ -155,8 +155,6 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             dst.subIdx[static_cast<size_t>(s)]   = (sd.subPatIdx == kNoSubPattern)
                                                        ? static_cast<signed char>(-1)
                                                        : static_cast<signed char>(sd.subPatIdx);
-            dst.subShared[static_cast<size_t>(s)] = (sd.subPatIdx != kNoSubPattern)
-                                                    && proc_.engine().subPatternRefCount(sd.subPatIdx) > 1;
             dst.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 64, static_cast<int>(sd.span)));
             if (bound) {
                 const uint8_t pn = harmony::resolveDegreeToMidi(
@@ -542,13 +540,7 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
                                         : stepClip_.scope == ClipScope::Mesure ? juce::String("PstMes")
                                         : stepClip_.scope == ClipScope::Row    ? juce::String("PstRow")
                                                                                : juce::String("Paste"));
-            {
-                const int sub9 = selectedStepSubIdx();
-                const bool shared = sub9 >= 0 && proc_.engine().subPatternRefCount(static_cast<uint8_t>(sub9)) > 1;
-                piano_.setBlackKeyLabel(9, sub9 < 0 ? juce::String()
-                                            : (shiftActive() && shared) ? juce::String("Detach")
-                                            : juce::String("Mode"));   // ⇧+partagé = détacher, sinon rel/abs
-            }
+            piano_.setBlackKeyLabel(9, (selectedStepSubIdx() >= 0) ? "Mode" : juce::String());  // rel/abs sub
             piano_.setBlackKeyLabel(10, "Clear");
             break;
         }

@@ -279,17 +279,7 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn.brighter(0.25f).withAlpha(0.9f));
             g.fillRoundedRectangle(mc.reduced(0.8f, 1.0f), 1.5f);
         }
-        // Marqueur de STATUT du sub au coin bas-gauche de la zone : magenta = indépendant,
-        // cyan = partagé (alias/ghost). Toujours présent (cohérent avec la vue PATTERN).
-        {
-            const float gs = juce::jmin(7.0f, zoneW * 0.5f);
-            const float gx = x0 + 0.5f;
-            const float gy = L.plot.getBottom() - 0.5f;
-            juce::Path gtri;
-            gtri.addTriangle(gx, gy, gx + gs, gy, gx, gy - gs);
-            g.setColour(row.subShared[static_cast<size_t>(s)] ? kGhost : kSubSolo);
-            g.fillPath(gtri);
-        }
+        // (Plus de marqueur ghost/partagé : copies pleines → subs indépendants.)
     }
 
     // Lane vélo (bas) : histogramme de la vélocité par pas (visualisation + clic).

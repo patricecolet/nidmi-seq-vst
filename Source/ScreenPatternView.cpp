@@ -209,18 +209,8 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
                         g.fillEllipse(fill.getRight() - 4.0f, fill.getY() + 1.0f, 3.0f, 3.0f);
                     }
                 }
-                // Marqueur de STATUT du sub au coin BAS-GAUCHE (miroir du triangle « snappé » ambre
-                // en haut-gauche) : MAGENTA = sub indépendant (propre à ce pas), CYAN = sub partagé
-                // (alias/ghost référencé par ≥2 pas). Toujours présent dès qu'un pas porte un sub.
-                if (hasSub) {
-                    const float gs = juce::jmin(8.0f, fill.getWidth() * 0.55f);
-                    const float gx = fill.getX() + 0.5f;
-                    const float gy = fill.getBottom() - 0.5f;
-                    juce::Path gtri;
-                    gtri.addTriangle(gx, gy, gx + gs, gy, gx, gy - gs);
-                    g.setColour((row.subShared[static_cast<size_t>(s)] ? kGhost : kSubSolo).withAlpha(subAlpha));
-                    g.fillPath(gtri);
-                }
+                // (Plus de marqueur ghost/partagé : les copies sont pleines → tout sub est
+                //  indépendant ; le contenu du sub est déjà rendu par les mini-blocs.)
                 // Presse-papier (copié/coupé) en attente. Le GRAIN (clipScope) fixe l'étendue :
                 // PAS = cellule ancre seule ; ROW = toute la row source (bande) ; MESURE = toute
                 // la grille. Bande = voile bleu translucide ; la cellule ANCRE garde un liseré pour

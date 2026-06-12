@@ -267,25 +267,9 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             }
             // Blanches = pas (pas de hauteur à jouer) → noire SEULE = la fonction. Oct± inactif.
             // Noire 9 = bascule rel/abs du sub du pas sélectionné (inactif si pas de sub).
-            // ⇧+noire 9 = DÉTACHER un sous-pattern partagé (ghost) → copie indépendante.
             // Noires libres 7/8/10 = presse-papier de pas : 7=Copy (⇧=Cut) 8=Paste 10=Clear.
             if (index == 9) {
-                if (shiftActive()) {
-                    const int sub = selectedStepSubIdx();
-                    if (sub >= 0 && proc_.engine().subPatternRefCount(static_cast<uint8_t>(sub)) > 1) {
-                        const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
-                        const int n  = juce::jmax(1, static_cast<int>(pat.rows[static_cast<size_t>(sr)].numSteps));
-                        const int ss = juce::jlimit(0, n - 1, selectedStep_);
-                        SequencerCommand c;
-                        c.id = SequencerCommandId::DetachStepSubPattern;
-                        c.a  = static_cast<uint8_t>(sr);
-                        c.b  = static_cast<uint8_t>(ss);
-                        c.f  = static_cast<uint8_t>(editBar_);
-                        proc_.controller().postCommand(c);
-                    }
-                } else {
-                    toggleSubMode();
-                }
+                toggleSubMode();   // rel/abs du sub (les copies sont pleines → plus de détach)
                 break;
             }
             if (index == 7 || index == 8 || index == 10) {
