@@ -137,6 +137,15 @@ struct PatternScreenModel {
     int autoCc       = 74;    // numéro de CC du slot actif (affichage)
     int autoSlotCc[8] = {-1, -1, -1, -1, -1, -1, -1, -1};  // CC# par slot (-1 = inactif)
     int autoValue[64];        // valeur du slot actif par pas (-1 = pas de lock)
+
+    // Page SONG (chaîne / arrangement de la part polyrythmique).
+    struct SongSlotView { int op = 0; int p1 = 0; int p2 = 0; };
+    SongSlotView songSlots[64];
+    int  songLen        = 0;    // nb de slots dans la chaîne
+    int  songCursor     = 0;    // slot édité (0..songLen ; == songLen => ligne « + »)
+    bool songMode       = false; // true = enchaîne la chaîne ; false = boucle le pattern actif
+    int  songActive     = 1;    // pattern actif de la banque (1-based pour affichage)
+    int  songPlaying    = -1;   // slot/pattern en cours de lecture (réservé ; -1 si arrêté)
 };
 
 /// Écran TFT ~320×240 émulé, à pages.
@@ -182,6 +191,7 @@ private:
     void paintMeasureBand(juce::Graphics& g);   // bandeau de mesures (PATTERN/HARMONIE)
     void paintAutoPage(juce::Graphics& g);
     void paintGlobalPage(juce::Graphics& g);
+    void paintSongPage(juce::Graphics& g);
     void paintStubPage(juce::Graphics& g, const juce::String& title, const juce::String& subtitle);
     void mouseDown(const juce::MouseEvent& e) override;
     void recomputeLayout();

@@ -19,6 +19,22 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, 16, ch)), juce::dontSendNotification);
         return;
     }
+    // Entrée virtuelle « Pattern » : pattern actif de la banque (1..kMaxPatterns).
+    if (oledParamIndex_ == kNumOledParams + 1) {
+        const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
+        valueEncoder_.setRange(1.0, static_cast<double>(kMaxPatterns), 1.0);
+        valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxPatterns), ap)),
+                               juce::dontSendNotification);
+        return;
+    }
+    // Entrée virtuelle « Mesures » : nombre de mesures du pattern (1..kMaxBars).
+    if (oledParamIndex_ == kNumOledParams + 2) {
+        const int nb = static_cast<int>(proc_.engine().patternNumBars());
+        valueEncoder_.setRange(1.0, static_cast<double>(kMaxBars), 1.0);
+        valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxBars), nb)),
+                               juce::dontSendNotification);
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -65,6 +81,32 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         buildScreenModel();
         return;
     }
+    // Entrée virtuelle « Pattern » : bascule le pattern actif de la banque.
+    if (oledParamIndex_ == kNumOledParams + 1) {
+        const int idx = juce::jlimit(1, static_cast<int>(kMaxPatterns),
+                                     (int) std::lround(valueEncoder_.getValue())) - 1;
+        SequencerCommand c;
+        c.id = SequencerCommandId::SelectPattern;
+        c.a  = static_cast<uint8_t>(idx);
+        proc_.controller().postCommand(c);
+        // Le contenu de l'éditeur (PATTERN/ROLL/HARMONIE) suit le pattern actif :
+        // on remet le curseur dans les bornes et on rafraîchit.
+        selectedStep_ = 0;
+        buildScreenModel();
+        return;
+    }
+    // Entrée virtuelle « Mesures » : nombre de mesures du pattern (1..kMaxBars).
+    if (oledParamIndex_ == kNumOledParams + 2) {
+        const int nb = juce::jlimit(1, static_cast<int>(kMaxBars),
+                                    (int) std::lround(valueEncoder_.getValue()));
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetPatternNumBars;
+        c.a  = static_cast<uint8_t>(nb);
+        proc_.controller().postCommand(c);
+        editBar_ = juce::jlimit(0, nb - 1, editBar_);
+        buildScreenModel();
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -77,6 +119,7 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
 }
 
 void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
+    encSyncCooldown_ = 8;   // laisse la FIFO draîner avant que le timer re-synchronise
     if (inSub_) {   // Enc2 = curseur de sous-pas
         const int subIdx = activeSubIdx();
         const int sn = (subIdx >= 0)
@@ -87,8 +130,8 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Global) {
-        // kNumOledParams params APVTS + 1 entrée virtuelle « Canal » (index == kNumOledParams).
-        const int ni = juce::jlimit(0, kNumOledParams, (int) std::lround(navEncoder_.getValue()));
+        // kNumOledParams params APVTS + Canal (kNumOledParams) + Pattern (+1) + Mesures (+2).
+        const int ni = juce::jlimit(0, kNumOledParams + 2, (int) std::lround(navEncoder_.getValue()));
         if (ni != oledParamIndex_) {
             oledParamIndex_ = ni;
             syncValueEncoderFromParam();
@@ -138,6 +181,11 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
             const int sl = juce::jlimit(0, 7, (int) std::lround(navEncoder_.getValue()));
             if (sl != autoSlot_) { autoSlot_ = sl; applyEncoderConfigForState(); }
         }
+    } else if (screenPage_ == PatternScreenModel::Page::Song) {
+        // Enc2 = curseur de slot de chaîne (0..len ; len = ligne « + » d'ajout).
+        const int len = static_cast<int>(proc_.engine().chainProgram().len);
+        const int cur = juce::jlimit(0, len, (int) std::lround(navEncoder_.getValue()));
+        if (cur != songCursor_) { songCursor_ = cur; applyEncoderConfigForState(); }
     } else {
         return;  // onglets en ossature : encodeurs inertes pour l'instant.
     }
@@ -145,6 +193,7 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
 }
 
 void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
+    encSyncCooldown_ = 8;
     if (inSub_) {
         const int subIdx = activeSubIdx();
         if (subIdx < 0) return;
@@ -252,6 +301,12 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
             postAutoCcNumber(v);
         return;
     }
+    if (screenPage_ == PatternScreenModel::Page::Song) {
+        // Enc1 = type d'instruction (op) du slot sous le curseur.
+        songSetSlotOp((int) std::lround(valueEncoder_.getValue()));
+        applyEncoderConfigForState();   // P1/P2 dépendent de l'op → recharge Enc3/Enc4
+        return;
+    }
     // onglets en ossature : pas d'édition via Enc1 pour l'instant.
 }
 
@@ -293,7 +348,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     if (screenPage_ == PatternScreenModel::Page::Global) {
         navEncoderLabel_.setText("Param", juce::dontSendNotification);
         valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams), 1.0);   // +1 = entrée « Canal »
+        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 2), 1.0);   // +Canal +Pattern +Mesures
         navEncoder_.setValue(static_cast<double>(oledParamIndex_), juce::dontSendNotification);
         syncValueEncoderFromParam();
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
@@ -422,6 +477,50 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             navEncoder_.setValue(static_cast<double>(juce::jlimit(0, 7, autoSlot_)), juce::dontSendNotification);
             valueEncoder_.setRange(0.0, 127.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(effectiveAutoCc()), juce::dontSendNotification);
+        }
+    } else if (screenPage_ == PatternScreenModel::Page::Song) {
+        static const char* kOpShort[12] = {
+            "Play", "Repeat", "EndRep", "Segno", "D.S.", "D.S.alCoda",
+            "Coda", "ToCoda", "D.C.", "D.C.alCoda", "Fine", "End"};
+        const auto& chain = proc_.engine().chainProgram();
+        const int   len   = static_cast<int>(chain.len);
+        const int   cur   = juce::jlimit(0, len, songCursor_);
+        // Enc2 = curseur de slot (0..len ; len = ligne d'ajout).
+        navEncoderLabel_.setText((cur >= len) ? juce::String("Slot +")
+                                              : ("Slot " + juce::String(cur + 1)),
+                                 juce::dontSendNotification);
+        navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, len)), 1.0);
+        navEncoder_.setValue(static_cast<double>(cur), juce::dontSendNotification);
+        if (cur < len) {
+            const auto& s   = chain.slots[static_cast<size_t>(cur)];
+            const int   op  = juce::jlimit(0, 11, static_cast<int>(s.op));
+            // Enc1 = type (op).
+            valueEncoderLabel_.setText(juce::String("Type ") + kOpShort[op], juce::dontSendNotification);
+            valueEncoder_.setRange(0.0, static_cast<double>(static_cast<int>(ChainOp::Count) - 1), 1.0);
+            valueEncoder_.setValue(static_cast<double>(op), juce::dontSendNotification);
+            // Enc3 = param1 (sens dépendant de l'op).
+            if (op == static_cast<int>(ChainOp::PlayPattern)) {
+                veloEncoderLabel_.setText("Pattern P" + juce::String(s.param1 + 1), juce::dontSendNotification);
+                veloEncoder_.setRange(0.0, static_cast<double>(kMaxPatterns - 1), 1.0);
+                veloEncoder_.setValue(static_cast<double>(juce::jlimit(0, kMaxPatterns - 1, static_cast<int>(s.param1))),
+                                      juce::dontSendNotification);
+                zoomEncoderLabel_.setText("Repet x" + juce::String(juce::jmax(1, static_cast<int>(s.param2))),
+                                          juce::dontSendNotification);
+            } else if (op == static_cast<int>(ChainOp::RepeatBegin)) {
+                veloEncoderLabel_.setText("Count x" + juce::String(juce::jmax(1, static_cast<int>(s.param1))),
+                                          juce::dontSendNotification);
+                veloEncoder_.setRange(1.0, 16.0, 1.0);
+                veloEncoder_.setValue(static_cast<double>(juce::jlimit(1, 16, static_cast<int>(s.param1))),
+                                      juce::dontSendNotification);
+                zoomEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
+            } else {
+                veloEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
+                zoomEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
+            }
+        } else {
+            valueEncoderLabel_.setText("+ ajouter", juce::dontSendNotification);
+            veloEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
+            zoomEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
         }
     } else {
         // Onglets en ossature : encodeurs inertes, libellés neutres.
@@ -566,6 +665,9 @@ void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
 }
 
 void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
+    // SONG : Enc3 (param1) est entièrement géré par applyEncoderConfigForState.
+    if (screenPage_ == PatternScreenModel::Page::Song)
+        return;
     // Dans un sub : Enc3 = Vélo (ou Gate via push) du sous-pas courant.
     // (L'ancre se règle dans PATTERN/ROLL, accès rapide par push ↑Sortir.)
     if (inSub_) {
@@ -625,6 +727,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
 }
 
 void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
+    encSyncCooldown_ = 8;
     // Dans un sub : Enc3 = Vélo (ou Gate via push) du sous-pas courant.
     // SetSubStep(subIdx, subStep, note, vélo, gate) : on relit la note + le champ
     // non édité pour ne changer QUE vélo (ou gate).
@@ -677,6 +780,12 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
         return;
     }
 
+    // SONG : Enc3 = param1 du slot (idx pattern si Play, count si Repeat ; ignoré sinon).
+    if (screenPage_ == PatternScreenModel::Page::Song) {
+        songSetSlotP1((int) std::lround(veloEncoder_.getValue()));
+        return;
+    }
+
     // Tourne = Vélo ; bascule push →Gate (par vue) = Gate. Seulement sur un pas actif.
     const bool gate = (screenPage_ == PatternScreenModel::Page::PianoRoll) ? rollVeloGate_ : veloGate_;
     const auto& pat = proc_.engine().pattern();
@@ -691,6 +800,7 @@ void NidmiSeqAudioProcessorEditor::onVeloEncoderChanged() {
 }
 
 void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
+    encSyncCooldown_ = 8;
     // Encodeur relatif progressif. En ROLL = zoom octaves (cran ample) ; ailleurs = Row (plus réactif).
     const bool   roll  = (screenPage_ == PatternScreenModel::Page::PianoRoll);
     const double kStep = roll ? 60.0 : 30.0;
@@ -776,6 +886,14 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
             proc_.controller().postCommand(c);
             editBar_ = juce::jlimit(0, nb - 1, editBar_);
         }
+    } else if (screenPage_ == PatternScreenModel::Page::Song) {
+        // SONG : Enc4 = param2 du slot (répétitions du PlayPattern). Relatif.
+        const auto& chain = proc_.engine().chainProgram();
+        const int   cur   = songCursor_;
+        if (cur >= 0 && cur < static_cast<int>(chain.len)) {
+            const int p2 = static_cast<int>(chain.slots[static_cast<size_t>(cur)].param2);
+            songSetSlotP2(p2 + dir);
+        }
     } else {
         // PATTERN/AUTO : Enc4 = sélection de Row (remplace le zoom).
         const int nr = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numRows));
@@ -791,6 +909,16 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
 void NidmiSeqAudioProcessorEditor::configureMasterEncoder() {
     const auto& pat = proc_.engine().pattern();
     const bool inPattern = (screenPage_ == PatternScreenModel::Page::Pattern);
+    // Push master actif : sélection du pattern de la banque (prioritaire sur BPM/Accent/Swing).
+    if (masterPatternMode_) {
+        const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
+        masterEncoder_.setRange(1.0, static_cast<double>(kMaxPatterns), 1.0);
+        masterEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxPatterns), ap)),
+                                juce::dontSendNotification);
+        masterEncoderLabel_.setText("Pat " + juce::String(ap) + "/" + juce::String(static_cast<int>(kMaxPatterns)),
+                                    juce::dontSendNotification);
+        return;
+    }
     if (inPattern && padMode_ == PadMode::Accent) {
         const int v = juce::jlimit(0, 127, static_cast<int>(pat.timing.accentAmount));
         masterEncoder_.setRange(0.0, 127.0, 1.0);
@@ -815,8 +943,24 @@ void NidmiSeqAudioProcessorEditor::configureMasterEncoder() {
 }
 
 void NidmiSeqAudioProcessorEditor::onMasterEncoderChanged() {
+    encSyncCooldown_ = 8;
     const int v = static_cast<int>(std::lround(masterEncoder_.getValue()));
     const bool inPattern = (screenPage_ == PatternScreenModel::Page::Pattern);
+    // Push master actif : sélection du pattern de la banque.
+    if (masterPatternMode_) {
+        const int idx = juce::jlimit(1, static_cast<int>(kMaxPatterns), v) - 1;
+        SequencerCommand c;
+        c.id = SequencerCommandId::SelectPattern;
+        c.a  = static_cast<uint8_t>(idx);
+        proc_.controller().postCommand(c);
+        selectedStep_   = 0;   // le contenu édité suit le pattern actif
+        masterHudText_  = "Pattern " + juce::String(idx + 1);
+        masterEncoderLabel_.setText("Pat " + juce::String(idx + 1) + "/" + juce::String(static_cast<int>(kMaxPatterns)),
+                                    juce::dontSendNotification);
+        masterHudFrames_ = 36;
+        buildScreenModel();
+        return;
+    }
     if (inPattern && padMode_ == PadMode::Accent) {
         SequencerCommand c; c.id = SequencerCommandId::SetPatternAccentAmount;
         c.a = static_cast<uint8_t>(juce::jlimit(0, 127, v));

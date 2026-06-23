@@ -9,10 +9,13 @@
 // PluginEditor.cpp pour rester accessibles à tous les .cpp découpés.
 // Gardés au scope GLOBAL en `inline` (C++17) pour ne pas toucher les sites d'appel.
 
-inline constexpr const char* kOledParamIds[] = {"bpm",        "numSteps",   "numRows",    "tsNum",
+// NB : « Pas/mesure » (numSteps global) RETIRE — le nb de pas par mesure n'est plus un
+// reglage global : la MESURE est la signature (num/den), et la subdivision est le N PAR ROW
+// (polyrythmie, vue PATTERN). Son defaut derive de la signature (engine.defaultRowSteps()).
+inline constexpr const char* kOledParamIds[] = {"bpm",        "numRows",    "tsNum",
                                                 "tsDen",      "loop",       "useMidiClock", "followHost",
                                                 "useHostBpm"};
-inline constexpr const char* kOledTitles[]   = {"BPM",        "Pas/mesure", "Rangees",    "Mes. num.",
+inline constexpr const char* kOledTitles[]   = {"BPM",        "Rangees",    "Mes. num.",
                                               "Mes. den.",  "Boucle",     "Clk MIDI",   "Suiv. hote",
                                               "BPM hote"};
 static_assert(std::size(kOledParamIds) == std::size(kOledTitles));

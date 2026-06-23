@@ -94,6 +94,87 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
     g.drawText(detail, L.detail, juce::Justification::centredLeft);
 }
 
+// Libellé d'un slot de chaîne (notation « à l'italienne » du ChainVM).
+static juce::String songOpLabel(int op, int p1, int p2) {
+    switch (op) {
+        case 0:  return "Play  P" + juce::String(p1 + 1) + (p2 > 1 ? "  x" + juce::String(p2) : juce::String());
+        case 1:  return "Repeat  x" + juce::String(juce::jmax(1, p1));
+        case 2:  return "End Repeat";
+        case 3:  return "Segno";
+        case 4:  return "D.S. (al Segno)";
+        case 5:  return "D.S. al Coda";
+        case 6:  return "Coda";
+        case 7:  return "To Coda";
+        case 8:  return "D.C. (al Capo)";
+        case 9:  return "D.C. al Coda";
+        case 10: return "Fine";
+        case 11: return "End";
+        default: return "?";
+    }
+}
+
+void PatternScreen::paintSongPage(juce::Graphics& g) {
+    auto area = bodyArea_;
+
+    // Ligne d'état : mode chaîne/boucle + pattern actif de la banque.
+    auto status = area.removeFromTop(20.0f);
+    g.setColour(model_.songMode ? kCellOn : kRowLabel);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
+    g.drawText(model_.songMode ? juce::String(juce::CharPointer_UTF8("\xe2\x96\xb6 CHA\xc3\x8eNE"))
+                               : juce::String(juce::CharPointer_UTF8("\xe2\x97\x8b BOUCLE")),
+               status.reduced(8.0f, 0.0f), juce::Justification::centredLeft);
+    g.setColour(kRowLabel);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f)));
+    g.drawText("Actif: P" + juce::String(model_.songActive),
+               status.reduced(8.0f, 0.0f), juce::Justification::centredRight);
+
+    // Liste des slots + ligne « + » d'ajout, avec défilement pour suivre le curseur.
+    const int total   = juce::jmax(1, model_.songLen + 1);
+    const float lineH = 20.0f;
+    const int   visN  = juce::jmax(1, static_cast<int>(area.getHeight() / lineH));
+    int win = 0;
+    if (total > visN) {
+        win = juce::jlimit(0, total - visN, model_.songCursor - visN / 2);
+    }
+
+    for (int vis = 0; vis < visN; ++vis) {
+        const int i = win + vis;
+        if (i >= total) break;
+        juce::Rectangle<float> line(area.getX(), area.getY() + static_cast<float>(vis) * lineH,
+                                    area.getWidth(), lineH);
+        const bool sel    = (i == model_.songCursor);
+        const bool addRow = (i >= model_.songLen);
+
+        if (sel) {
+            g.setColour(kSelRowBg);
+            g.fillRoundedRectangle(line.reduced(2.0f, 1.0f), 3.0f);
+        }
+        // Numéro de slot.
+        g.setColour(sel ? kHeaderText : kCellGrid);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
+        g.drawText(addRow ? juce::String("  +") : juce::String(i + 1).paddedLeft('0', 2),
+                   line.reduced(8.0f, 0.0f).withWidth(26.0f), juce::Justification::centredLeft);
+        // Contenu.
+        g.setColour(sel ? kHeaderText : kRowLabel);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle(sel ? "Bold" : "")));
+        juce::Rectangle<float> txt = line.reduced(8.0f, 0.0f).withTrimmedLeft(30.0f);
+        if (addRow) {
+            g.setColour(kCellGrid);
+            g.drawText("ajouter un slot", txt, juce::Justification::centredLeft);
+        } else {
+            const auto& s = model_.songSlots[static_cast<size_t>(juce::jlimit(0, 63, i))];
+            g.drawText(songOpLabel(s.op, s.p1, s.p2), txt, juce::Justification::centredLeft);
+        }
+    }
+
+    if (model_.songLen == 0) {
+        g.setColour(kCellGrid);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f)));
+        g.drawText("Enc1=type  Enc3=P#  Enc4=x  |  noires: +ajout  -suppr  Song",
+                   area.removeFromBottom(16.0f).reduced(8.0f, 0.0f), juce::Justification::centredLeft);
+    }
+}
+
 void PatternScreen::paintGlobalPage(juce::Graphics& g) {
     if (model_.numGlobalParams <= 0)
         return;

@@ -90,18 +90,45 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     if (auto* bpm = proc_.apvts().getRawParameterValue("bpm"))
         m.bpm = bpm->load();
 
-    // Page GLOBAL : params projet (OLED) + entrée virtuelle « Canal » de la row sélectionnée.
-    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 1);
+    // Page GLOBAL : params projet (OLED) + « Canal » de la row + « Pattern » actif + « Mesures ».
+    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 3);
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
     for (int i = 0; i < kNumOledParams && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
         m.global[static_cast<size_t>(i)].value = formatParamValue(proc_.apvts(), oledParamId(i));
     }
-    if (m.numGlobalParams > kNumOledParams) {   // dernière ligne = canal MIDI de la row sélectionnée
+    if (m.numGlobalParams > kNumOledParams) {   // ligne = canal MIDI de la row sélectionnée
         const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
         const int ch = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
         m.global[static_cast<size_t>(kNumOledParams)].name  = "Canal R" + juce::String(sr + 1);
         m.global[static_cast<size_t>(kNumOledParams)].value = juce::String(juce::jlimit(1, 16, ch));
+    }
+    if (m.numGlobalParams > kNumOledParams + 1) {   // ligne = pattern actif de la banque
+        const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
+        m.global[static_cast<size_t>(kNumOledParams + 1)].name  = "Pattern";
+        m.global[static_cast<size_t>(kNumOledParams + 1)].value =
+            juce::String(ap) + "/" + juce::String(static_cast<int>(kMaxPatterns));
+    }
+    if (m.numGlobalParams > kNumOledParams + 2) {   // ligne = nombre de mesures du pattern
+        const int nb = static_cast<int>(proc_.engine().patternNumBars());
+        m.global[static_cast<size_t>(kNumOledParams + 2)].name  = "Mesures";
+        m.global[static_cast<size_t>(kNumOledParams + 2)].value =
+            juce::String(nb) + "/" + juce::String(static_cast<int>(kMaxBars));
+    }
+
+    // Page SONG : chaîne (arrangement) depuis l'engine.
+    {
+        const auto& chain = proc_.engine().chainProgram();
+        const int   len   = juce::jlimit(0, 64, static_cast<int>(chain.len));
+        m.songLen    = len;
+        m.songCursor = juce::jlimit(0, len, songCursor_);
+        m.songMode   = proc_.engine().songMode();
+        m.songActive = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
+        for (int i = 0; i < len; ++i) {
+            m.songSlots[static_cast<size_t>(i)].op = static_cast<int>(chain.slots[i].op);
+            m.songSlots[static_cast<size_t>(i)].p1 = chain.slots[i].param1;
+            m.songSlots[static_cast<size_t>(i)].p2 = chain.slots[i].param2;
+        }
     }
 
     // Filtre harmonique : tonalité effective (même logique que la section HARMONIE plus bas,
@@ -544,8 +571,16 @@ void NidmiSeqAudioProcessorEditor::updateKeysForPage() {
             piano_.setBlackKeyLabel(10, "Clear");
             break;
         }
-        case PatternScreenModel::Page::Global:
         case PatternScreenModel::Page::Song:
+            for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
+            piano_.setBlackKeyLabel(0, "Slt-");
+            piano_.setBlackKeyLabel(1, "Slt+");
+            piano_.setBlackKeyLabel(2, "+");
+            piano_.setBlackKeyLabel(3, "Suppr");
+            piano_.setBlackKeyLabel(4, proc_.engine().songMode() ? "Song*" : "Song");
+            for (int i = 5; i < 11; ++i) piano_.setBlackKeyLabel(i, {});
+            break;
+        case PatternScreenModel::Page::Global:
         default:
             for (int i = 0; i < 16; ++i) piano_.setWhiteKeyLabel(i, {});
             piano_.setBlackKeyLabel(0, "R-");

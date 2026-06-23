@@ -206,8 +206,7 @@ void PatternScreen::paint(juce::Graphics& g) {
         case PatternScreenModel::Page::PianoRoll: paintPianoRollPage(g); break;
         case PatternScreenModel::Page::Harmony:   paintHarmonyPage(g); break;
         case PatternScreenModel::Page::Auto:      paintAutoPage(g); break;
-        case PatternScreenModel::Page::Song:
-            paintStubPage(g, "SONG", "arrangement / chain - V1.5"); break;
+        case PatternScreenModel::Page::Song:      paintSongPage(g); break;
     }
 
     // HUD transitoire de l'encodeur MASTER (valeur réglée : BPM / Accent / Swing).

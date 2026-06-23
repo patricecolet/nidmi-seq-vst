@@ -105,6 +105,17 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         proc_.controller().postCommand(c);
     };
 
+    // Push du MASTER : bascule l'encodeur BPM en sélection de pattern de la banque.
+    masterPushBtn_.setLookAndFeel(&transportLook_);
+    masterPushBtn_.setButtonText("BPM");
+    masterPushBtn_.setToggleable(true);
+    masterPushBtn_.setClickingTogglesState(false);
+    masterPushBtn_.onClick = [this] {
+        masterPatternMode_ = !masterPatternMode_;
+        configureMasterEncoder();
+        buildScreenModel();
+    };
+
     // Brique PUSH générique : 4 petits boutons, un sous chaque encodeur (cf. convention
     // pushBtn_[i] dans PluginEditor.h). Style transport, toggle géré manuellement
     // (configurePushButtons pose label/état/led ; onPushButton route l'action).
@@ -319,6 +330,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(zoomEncoder_);
     addAndMakeVisible(masterEncoderLabel_);
     addAndMakeVisible(masterEncoder_);
+    addAndMakeVisible(masterPushBtn_);
     addAndMakeVisible(playBtn_);
     addAndMakeVisible(stopBtn_);
     addAndMakeVisible(recBtn_);
@@ -357,6 +369,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     harmonieBtn_.toFront(false);
     projetBtn_.toFront(false);
     masterEncoder_.toFront(false);
+    masterPushBtn_.toFront(false);
     masterEncoderLabel_.toFront(false);
     exportBtn_.toFront(false);
     shiftBtn_.toFront(false);
@@ -399,7 +412,10 @@ void NidmiSeqAudioProcessorEditor::resized() {
             auto      mrow = row.removeFromRight(150);
             const int kd   = juce::jmin(54, mrow.getHeight());
             masterEncoder_.setBounds(mrow.removeFromRight(kd).withSizeKeepingCentre(kd, kd));
-            masterEncoderLabel_.setBounds(mrow.reduced(2, 0));   // lecture (BPM/Accent/Swing) à gauche du knob
+            auto      lab  = mrow.reduced(2, 0);
+            // À gauche du knob : label de lecture (haut) + bouton push BPM/Pat (bas).
+            masterPushBtn_.setBounds(lab.removeFromBottom(juce::jmin(22, lab.getHeight() / 2)));
+            masterEncoderLabel_.setBounds(lab);
         }
         // Boutons transport centrés dans le reste, hauteur ~42 (Play/Stop/Rec/Export).
         auto        brow = row.reduced(0, 7);
@@ -547,12 +563,23 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     harmBtn_.setToggleState(harmOn, juce::dontSendNotification);
     harmBtn_.setButtonText(harmOn ? "Harm ON" : "Harm");
 
-    if (!navEncoder_.isMouseButtonDown() && !valueEncoder_.isMouseButtonDown())
-        applyEncoderConfigForState();
-    if (!veloEncoder_.isMouseButtonDown())
-        configureVeloEncoder();
-    if (!masterEncoder_.isMouseButtonDown())
-        configureMasterEncoder();   // master contextuel : valeur/label à jour (Accent/Swing/BPM)
+    // Push master : LED + libellé (BPM par défaut / Pat = sélection de pattern).
+    masterPushBtn_.setToggleState(masterPatternMode_, juce::dontSendNotification);
+    masterPushBtn_.setButtonText(masterPatternMode_ ? "Pat" : "BPM");
+
+    // Re-synchro périodique des encodeurs sur l'état moteur — SUSPENDUE quelques frames après
+    // une rotation (encSyncCooldown_) : sinon le timer relit une valeur pas encore drainée par
+    // la FIFO et fait « revenir en arrière » l'encodeur (durée d'un slot d'accord, etc.).
+    if (encSyncCooldown_ > 0) {
+        --encSyncCooldown_;
+    } else {
+        if (!navEncoder_.isMouseButtonDown() && !valueEncoder_.isMouseButtonDown())
+            applyEncoderConfigForState();
+        if (!veloEncoder_.isMouseButtonDown())
+            configureVeloEncoder();
+        if (!masterEncoder_.isMouseButtonDown())
+            configureMasterEncoder();   // master contextuel : valeur/label à jour (Accent/Swing/BPM)
+    }
     if (masterHudFrames_ > 0)
         --masterHudFrames_;         // expiration du HUD transitoire
     configurePushButtons();   // labels/état/led des boutons PUSH (Suppr suit le curseur slot)

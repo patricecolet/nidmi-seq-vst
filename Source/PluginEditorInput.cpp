@@ -217,6 +217,98 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
     buildScreenModel();
 }
 
+// --- Page SONG : édition de la chaîne (arrangement) -------------------------
+// Toutes les mutations passent par CommandFifo (SetChainSlot / SetChainLen).
+
+void NidmiSeqAudioProcessorEditor::songSetSlotOp(int op) {
+    const auto& chain = proc_.engine().chainProgram();
+    const int   len   = static_cast<int>(chain.len);
+    const int   cur   = songCursor_;
+    if (cur < 0 || cur >= len) return;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetChainSlot;
+    c.a  = static_cast<uint8_t>(cur);
+    c.b  = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(ChainOp::Count) - 1, op));
+    c.c  = chain.slots[static_cast<size_t>(cur)].param1;
+    c.d  = chain.slots[static_cast<size_t>(cur)].param2;
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::songSetSlotP1(int p1) {
+    const auto& chain = proc_.engine().chainProgram();
+    const int   len   = static_cast<int>(chain.len);
+    const int   cur   = songCursor_;
+    if (cur < 0 || cur >= len) return;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetChainSlot;
+    c.a  = static_cast<uint8_t>(cur);
+    c.b  = static_cast<uint8_t>(chain.slots[static_cast<size_t>(cur)].op);
+    c.c  = static_cast<uint8_t>(juce::jlimit(0, 255, p1));
+    c.d  = chain.slots[static_cast<size_t>(cur)].param2;
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::songSetSlotP2(int p2) {
+    const auto& chain = proc_.engine().chainProgram();
+    const int   len   = static_cast<int>(chain.len);
+    const int   cur   = songCursor_;
+    if (cur < 0 || cur >= len) return;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetChainSlot;
+    c.a  = static_cast<uint8_t>(cur);
+    c.b  = static_cast<uint8_t>(chain.slots[static_cast<size_t>(cur)].op);
+    c.c  = chain.slots[static_cast<size_t>(cur)].param1;
+    c.d  = static_cast<uint8_t>(juce::jlimit(1, 16, p2));
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::songAddSlot() {
+    const int len = static_cast<int>(proc_.engine().chainProgram().len);
+    if (len >= static_cast<int>(kMaxChainSlots)) return;
+    // Nouveau slot par défaut : joue le pattern ACTIF une fois (PlayPattern, repeats=1).
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetChainSlot;
+    c.a  = static_cast<uint8_t>(len);
+    c.b  = static_cast<uint8_t>(ChainOp::PlayPattern);
+    c.c  = proc_.engine().activePatternIndex();
+    c.d  = 1;
+    proc_.controller().postCommand(c);
+    c    = SequencerCommand{};
+    c.id = SequencerCommandId::SetChainLen;
+    c.a  = static_cast<uint8_t>(len + 1);
+    proc_.controller().postCommand(c);
+    songCursor_ = len;     // place le curseur sur le slot créé
+    applyEncoderConfigForState();
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::songDeleteSlot() {
+    const auto& chain = proc_.engine().chainProgram();
+    const int   len   = static_cast<int>(chain.len);
+    const int   cur   = songCursor_;
+    if (cur < 0 || cur >= len) return;
+    // Décale les slots suivants d'un cran vers le haut, puis raccourcit la chaîne.
+    for (int i = cur; i < len - 1; ++i) {
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetChainSlot;
+        c.a  = static_cast<uint8_t>(i);
+        c.b  = static_cast<uint8_t>(chain.slots[static_cast<size_t>(i + 1)].op);
+        c.c  = chain.slots[static_cast<size_t>(i + 1)].param1;
+        c.d  = chain.slots[static_cast<size_t>(i + 1)].param2;
+        proc_.controller().postCommand(c);
+    }
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetChainLen;
+    c.a  = static_cast<uint8_t>(len - 1);
+    proc_.controller().postCommand(c);
+    songCursor_ = juce::jlimit(0, len - 1, cur);
+    applyEncoderConfigForState();
+    buildScreenModel();
+}
+
 void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
     // Dans un sub : noire 0 = sortir, noire 9 = bascule mode relatif/absolu.
     // La noire 9 porte le mode rel/abs PARTOUT (cohérence "même touche") ; la noire 1 est libérée.
@@ -430,7 +522,21 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
             // R-/R+ = change la row sélectionnée (pour éditer son canal MIDI dans la liste GLOBAL).
             if (index == 0 || index == 1) runFunction(index, /*allowOct*/ false);
             break;
-        case PatternScreenModel::Page::Song:
+        case PatternScreenModel::Page::Song: {
+            // 0/1 = curseur de slot ± ; 2 = ajouter ; 3 = supprimer ; 4 = Song ON/OFF (chaîne vs boucle).
+            const int len = static_cast<int>(proc_.engine().chainProgram().len);
+            if (index == 0)      { songCursor_ = juce::jmax(0, songCursor_ - 1); applyEncoderConfigForState(); }
+            else if (index == 1) { songCursor_ = juce::jmin(len, songCursor_ + 1); applyEncoderConfigForState(); }
+            else if (index == 2) { songAddSlot(); }
+            else if (index == 3) { songDeleteSlot(); }
+            else if (index == 4) {
+                SequencerCommand c;
+                c.id = SequencerCommandId::SetSongMode;
+                c.x  = !proc_.engine().songMode();
+                proc_.controller().postCommand(c);
+            }
+            break;
+        }
         default:
             break;
     }

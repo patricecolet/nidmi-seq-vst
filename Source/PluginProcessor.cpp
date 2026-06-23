@@ -164,13 +164,10 @@ void NidmiSeqAudioProcessor::syncParametersToEngine(int64_t nowUs) {
 
     SequencerCommand c;
 
-    if (steps != lastNumSteps_) {
-        lastNumSteps_ = steps;
-        c.id          = SequencerCommandId::SetSteps;
-        c.a           = static_cast<uint8_t>(juce::jlimit(1, 64, steps));
-        SequencerCommandApi::dispatch(engine_, c, nowUs);
-        clock_.reset(nowUs);
-    }
+    // « numSteps » global RETIRE du modele d'usage : le nb de pas par mesure est le N PAR ROW
+    // (polyrythmie) ou son defaut derive de la signature. On ne pousse plus SetSteps (qui
+    // ecraserait toutes les rows) depuis ce parametre legacy. (void) pour eviter un warning.
+    (void) steps;
     if (rows != lastNumRows_) {
         lastNumRows_ = rows;
         c.id         = SequencerCommandId::SetNumRows;
@@ -404,6 +401,9 @@ juce::AudioProcessorEditor* NidmiSeqAudioProcessor::createEditor() {
 void NidmiSeqAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::ValueTree root("NidmiRoot");
     root.appendChild(apvts_.copyState(), nullptr);
+    // Le pattern actif fait foi (bank_[active] peut être périmé entre deux switches) :
+    // on le resynchronise dans la banque avant de tout sérialiser.
+    engine_.syncActiveToBank();
     root.appendChild(PatternValueTree::buildFromEngine(engine_), nullptr);
     if (auto xml = root.createXml())
         copyXmlToBinary(*xml, destData);

@@ -103,6 +103,10 @@ private:
     // / tempo BPM (défaut). Distinct des 4 encodeurs de vue.
     juce::Slider masterEncoder_;
     juce::Label  masterEncoderLabel_;
+    // Push du master (émulé par un bouton) : bascule l'encodeur en SÉLECTION DE PATTERN
+    // (tourner = pattern actif de la banque). Prioritaire sur le rôle contextuel (BPM/Accent/Swing).
+    juce::TextButton masterPushBtn_;
+    bool         masterPatternMode_ = false;
     void configureMasterEncoder();     // cale plage/valeur/label selon le contexte
     void onMasterEncoderChanged();
     juce::String masterHudText_;       // HUD transitoire à l'écran (valeur réglée par le master)
@@ -205,6 +209,21 @@ private:
     int  effectiveAutoCc() const;                 // CC# du slot actif (existant) ou défaut
     void postAutoValueAt(int step, int value);    // écrit/maj un P-lock CC
     void postAutoCcNumber(int ccNumber);          // change le CC# du slot actif
+
+    // Après une rotation d'encodeur, le timer suspend la re-synchro des encodeurs pendant
+    // quelques frames : la commande d'édition transite par la FIFO (drainée sur le thread
+    // audio) et le moteur ne reflète la nouvelle valeur qu'au bloc suivant. Sans ce délai,
+    // le timer relit l'ancienne valeur et fait « revenir en arrière » l'encodeur (bug visible
+    // sur la durée d'un slot d'accord non joué). 0 = pas de cooldown.
+    int  encSyncCooldown_ = 0;
+
+    // Page SONG : slot de chaîne édité (0..len, len = ligne « + » d'ajout).
+    int  songCursor_     = 0;
+    void songAddSlot();                           // ajoute un slot PlayPattern à la fin
+    void songDeleteSlot();                        // supprime le slot sous le curseur (décale)
+    void songSetSlotOp(int op);                   // change l'op du slot sous le curseur
+    void songSetSlotP1(int p1);                   // change param1 (idx pattern / count)
+    void songSetSlotP2(int p2);                   // change param2 (répétitions)
 
     // Clavier (cahier §10.3) : les touches sont le MIROIR de l'onglet actif.
     //  PATTERN    : blanches = pas (toggle), noires = R-/R+.
