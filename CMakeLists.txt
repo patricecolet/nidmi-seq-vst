@@ -57,6 +57,7 @@ target_sources(NidmiSeq
         Source/CommandFifo.cpp
         Source/MidiClockTransport.cpp
         Source/MidiExporter.cpp
+        Source/DeviceProfile.cpp
 )
 
 target_include_directories(NidmiSeq PRIVATE

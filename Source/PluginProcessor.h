@@ -51,6 +51,11 @@ public:
 
     VstSequencerController& controller() { return controller_; }
 
+    // Profil d'appareil : index dans le registre DeviceProfile. Purement
+    // cosmetique (nommage des CC dans l'UI), serialise avec le projet.
+    int  deviceProfileIndex() const noexcept      { return deviceProfileIndex_; }
+    void setDeviceProfileIndex(int i) noexcept    { deviceProfileIndex_ = i; }
+
     bool pushCommand(const SequencerCommand& cmd);
     void applyPatternTree(const juce::ValueTree& tree);
 
@@ -85,6 +90,8 @@ private:
     MidiClockTransport     midiClock_;
     CommandFifo            commandFifo_;
     VstSequencerController controller_;
+
+    int deviceProfileIndex_ = 0;   // 0 = « Aucun » (numeros de CC bruts)
 
     double sampleRate_ = 44100.0;
 

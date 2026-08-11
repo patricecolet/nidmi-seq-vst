@@ -30,6 +30,9 @@ struct PatternScreenModel {
         bool          harmonyBound   = false; // row soumise à l'harmonie (mode != Chromatic && harmonie active)
         juce::String  divLabel;             // valeur musicale du pas (1/16, 1/8T, 5:tps…), vide si non réductible
         int           stepMs        = 0;    // durée réelle d'un pas en ms (barDuration/numSteps), 0 = inconnu
+        bool          isCC          = false; // row d'automation CC (kind == RowKind::CC)
+        int           ccNumber      = 74;    // destination si isCC
+        juce::String  ccLabel;              // nom du CC selon le profil actif, vide si aucun
     };
 
     // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché + l'édition.
@@ -97,6 +100,8 @@ struct PatternScreenModel {
     int     subHostNote = 60;      // note du pas hôte (ancre du piano-roll relatif)
 
     // Page GLOBAL.
+    juce::String ccSlotLabel[8];            // libellé des 8 slots de P-lock (page AUTO)
+
     int         numGlobalParams = 0;
     int         globalCursor    = 0;
     GlobalParam global[16];

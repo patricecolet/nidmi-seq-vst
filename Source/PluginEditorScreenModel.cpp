@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "DeviceProfile.h"
 #include "PluginProcessor.h"
 
 #include "EditorHelpers.h"
@@ -87,11 +88,13 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     m.tsNum       = pat.numerator;
     m.tsDen       = pat.denominator;
 
+    const DeviceProfile& prof = DeviceProfile::byIndex(proc_.deviceProfileIndex());
+
     if (auto* bpm = proc_.apvts().getRawParameterValue("bpm"))
         m.bpm = bpm->load();
 
     // Page GLOBAL : params projet (OLED) + « Canal » de la row + « Pattern » actif + « Mesures ».
-    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 3);
+    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 4);
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
     for (int i = 0; i < kNumOledParams && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
@@ -114,6 +117,11 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.global[static_cast<size_t>(kNumOledParams + 2)].name  = "Mesures";
         m.global[static_cast<size_t>(kNumOledParams + 2)].value =
             juce::String(nb) + "/" + juce::String(static_cast<int>(kMaxBars));
+    }
+
+    if (m.numGlobalParams > kNumOledParams + 3) {   // ligne = profil d'appareil
+        m.global[static_cast<size_t>(kNumOledParams + 3)].name  = "Profil";
+        m.global[static_cast<size_t>(kNumOledParams + 3)].value = prof.name();
     }
 
     // Page SONG : chaîne (arrangement) depuis l'engine.
@@ -170,6 +178,9 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         dst.divLabel    = divisionLabel(n, pat.numerator, pat.denominator);
         const double stepUs = barUs / static_cast<double>(juce::jmax(1, n));
         dst.stepMs      = static_cast<int>(stepUs / 1000.0 + 0.5);
+        dst.isCC        = (row.kind == RowKind::CC);
+        dst.ccNumber    = static_cast<int>(row.ccNumber);
+        dst.ccLabel     = dst.isCC ? prof.label(dst.ccNumber) : juce::String();
         // Row soumise à l'harmonie : harmonie active globale ET mode != Chromatic.
         const bool bound = harmActive && row.harmonyModeAt(static_cast<uint8_t>(editBar_)) != RowHarmonyMode::Chromatic;
         dst.harmonyBound = bound;
@@ -304,7 +315,8 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
                 const auto& lk = arow.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).ccLocks[static_cast<size_t>(i)];
                 if (lk.ccNumber != 0xFF) { cc = lk.ccNumber; break; }
             }
-            m.autoSlotCc[i] = cc;
+            m.autoSlotCc[i]    = cc;
+            m.ccSlotLabel[i]   = (cc >= 0) ? prof.shortLabel(cc) : juce::String();
         }
         int activeCc = -1;
         for (int s = 0; s < an; ++s) {

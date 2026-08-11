@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "DeviceProfile.h"
 #include "PluginProcessor.h"
 
 #include "EditorHelpers.h"
@@ -32,6 +33,13 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         const int nb = static_cast<int>(proc_.engine().patternNumBars());
         valueEncoder_.setRange(1.0, static_cast<double>(kMaxBars), 1.0);
         valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxBars), nb)),
+                               juce::dontSendNotification);
+        return;
+    }
+    // Entree virtuelle « Profil » : profil d'appareil (nommage des CC).
+    if (oledParamIndex_ == kNumOledParams + 3) {
+        valueEncoder_.setRange(0.0, static_cast<double>(DeviceProfile::count() - 1), 1.0);
+        valueEncoder_.setValue(static_cast<double>(proc_.deviceProfileIndex()),
                                juce::dontSendNotification);
         return;
     }
@@ -107,6 +115,14 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         buildScreenModel();
         return;
     }
+    // Entrée virtuelle « Profil » : purement cosmetique, aucun passage par le
+    // CommandFifo puisque le moteur n'est pas touche.
+    if (oledParamIndex_ == kNumOledParams + 3) {
+        proc_.setDeviceProfileIndex(juce::jlimit(0, DeviceProfile::count() - 1,
+                                                 (int) std::lround(valueEncoder_.getValue())));
+        buildScreenModel();
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -131,7 +147,7 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
     }
     if (screenPage_ == PatternScreenModel::Page::Global) {
         // kNumOledParams params APVTS + Canal (kNumOledParams) + Pattern (+1) + Mesures (+2).
-        const int ni = juce::jlimit(0, kNumOledParams + 2, (int) std::lround(navEncoder_.getValue()));
+        const int ni = juce::jlimit(0, kNumOledParams + 3, (int) std::lround(navEncoder_.getValue()));
         if (ni != oledParamIndex_) {
             oledParamIndex_ = ni;
             syncValueEncoderFromParam();
@@ -348,7 +364,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     if (screenPage_ == PatternScreenModel::Page::Global) {
         navEncoderLabel_.setText("Param", juce::dontSendNotification);
         valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 2), 1.0);   // +Canal +Pattern +Mesures
+        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 3), 1.0);   // +Canal +Pattern +Mesures +Profil
         navEncoder_.setValue(static_cast<double>(oledParamIndex_), juce::dontSendNotification);
         syncValueEncoderFromParam();
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
@@ -472,7 +488,9 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             valueEncoder_.setValue(static_cast<double>(v), juce::dontSendNotification);
         } else {
             navEncoderLabel_.setText("Slot " + juce::String(juce::jlimit(0, 7, autoSlot_) + 1), juce::dontSendNotification);
-            valueEncoderLabel_.setText("CC " + juce::String(effectiveAutoCc()), juce::dontSendNotification);
+            valueEncoderLabel_.setText(
+                DeviceProfile::byIndex(proc_.deviceProfileIndex()).label(effectiveAutoCc()),
+                juce::dontSendNotification);
             navEncoder_.setRange(0.0, 7.0, 1.0);
             navEncoder_.setValue(static_cast<double>(juce::jlimit(0, 7, autoSlot_)), juce::dontSendNotification);
             valueEncoder_.setRange(0.0, 127.0, 1.0);

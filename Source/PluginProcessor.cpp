@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "DeviceProfile.h"
 #include "PatternValueTree.h"
 #include "PluginEditor.h"
 
@@ -400,6 +401,10 @@ juce::AudioProcessorEditor* NidmiSeqAudioProcessor::createEditor() {
 
 void NidmiSeqAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::ValueTree root("NidmiRoot");
+    // Le profil est stocke par NOM et non par index : ajouter un profil au
+    // registre ne doit pas renommer les CC d'un projet deja enregistre.
+    root.setProperty("deviceProfile",
+                     DeviceProfile::byIndex(deviceProfileIndex_).name(), nullptr);
     root.appendChild(apvts_.copyState(), nullptr);
     // Le pattern actif fait foi (bank_[active] peut être périmé entre deux switches) :
     // on le resynchronise dans la banque avant de tout sérialiser.
@@ -416,6 +421,10 @@ void NidmiSeqAudioProcessor::setStateInformation(const void* data, int sizeInByt
     juce::ValueTree root = juce::ValueTree::fromXml(*xml);
     if (!root.isValid())
         return;
+
+    if (root.hasProperty("deviceProfile"))
+        deviceProfileIndex_ =
+            DeviceProfile::indexOfName(root.getProperty("deviceProfile").toString());
 
     for (int i = 0; i < root.getNumChildren(); ++i) {
         juce::ValueTree c = root.getChild(i);

@@ -29,8 +29,14 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
         g.fillRoundedRectangle(inner, 3.0f);
         g.setColour(on ? kScreenBg : (used ? kRowLabel : kCellGrid));
         g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle(on ? "Bold" : "")));
-        g.drawText(used ? ("CC" + juce::String(model_.autoSlotCc[i])) : juce::String("S" + juce::String(i + 1)),
-                   inner, juce::Justification::centred);
+        // Nom court du profil s'il en donne un, sinon « CC74 ».
+        juce::String slotText = juce::String("S") + juce::String(i + 1);
+        if (used) {
+            slotText = model_.ccSlotLabel[i].isNotEmpty()
+                         ? model_.ccSlotLabel[i]
+                         : ("CC" + juce::String(model_.autoSlotCc[i]));
+        }
+        g.drawText(slotText, inner, juce::Justification::centred);
     }
 
     // Sélecteur de champ (Valeur / CC#).

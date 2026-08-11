@@ -250,7 +250,12 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
             info += juce::String::fromUTF8(" \xc2\xb7 ") + row.divLabel;   // « · »
         if (row.stepMs > 0)
             info += juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(row.stepMs) + "ms";
-        info += "  c" + juce::String(row.channel) + " " + harmonyModeShort(row.harmonyMode);
+        info += "  c" + juce::String(row.channel);
+        // Une row CC ne suit pas l'harmonie : on montre sa destination plutot
+        // que son mode harmonique, qui n'a aucun effet.
+        info += " " + (row.isCC ? (row.ccLabel.isNotEmpty() ? row.ccLabel
+                                                            : ("CC" + juce::String(row.ccNumber)))
+                                : juce::String(harmonyModeShort(row.harmonyMode)));
         if (row.muted)
             info += " M";
         g.setColour(row.muted ? kMutedText : kRowLabel);
