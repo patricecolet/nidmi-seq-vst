@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "CommandFifo.h"
 #include "HostTimeMapper.h"
 #include "MidiClockTransport.h"
@@ -54,7 +56,10 @@ public:
     // Profil d'appareil : index dans le registre DeviceProfile. Purement
     // cosmetique (nommage des CC dans l'UI), serialise avec le projet.
     int  deviceProfileIndex() const noexcept      { return deviceProfileIndex_; }
-    void setDeviceProfileIndex(int i) noexcept    { deviceProfileIndex_ = i; }
+
+    // Hors thread audio uniquement : reconstruit la table de remappage, ce qui
+    // peut declencher la lecture du dossier de profils.
+    void setDeviceProfileIndex(int i);
 
     bool pushCommand(const SequencerCommand& cmd);
     void applyPatternTree(const juce::ValueTree& tree);
@@ -92,6 +97,18 @@ private:
     VstSequencerController controller_;
 
     int deviceProfileIndex_ = 0;   // 0 = « Aucun » (numeros de CC bruts)
+
+    // Remappage « learn » : CC entrant -> CC du profil, -1 si aucun.
+    //
+    // Ecrite sur le thread message quand le profil change, lue sur le thread
+    // audio. Un std::atomic par entree plutot qu'un verrou : le thread audio ne
+    // doit ni bloquer ni allouer, et au pire un CC part vers l'ancienne ou la
+    // nouvelle cible pendant le basculement — sans consequence.
+    //
+    // Surtout, ne PAS interroger DeviceProfile depuis processBlock :
+    // byIndex() appelle ensureLoaded(), donc potentiellement une lecture disque.
+    std::atomic<int8_t> learnMap_[128];
+    void rebuildLearnMap();
 
     double sampleRate_ = 44100.0;
 

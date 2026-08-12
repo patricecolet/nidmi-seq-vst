@@ -70,7 +70,12 @@ NidmiSeqAudioProcessor::NidmiSeqAudioProcessor()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
     , apvts_(*this, nullptr, "PARAMS", createParameterLayout())
-    , controller_(*this) {}
+    , controller_(*this) {
+    // Indispensable : un tableau de std::atomic est INDETERMINE a la
+    // construction. Sans cet appel, processBlock lirait des cibles au hasard et
+    // remapperait des CC des le premier bloc.
+    rebuildLearnMap();
+}
 
 NidmiSeqAudioProcessor::~NidmiSeqAudioProcessor() = default;
 
@@ -250,6 +255,28 @@ MidiExporter::Result NidmiSeqAudioProcessor::exportMidi(const juce::File& destFi
     return MidiExporter::exportToFile(engine_, destFile, mode);
 }
 
+// Plafond de CC remappes par bloc. 32 couvre tout usage reel : a 64 echantillons
+// de bloc, cela ferait plus de 20 000 CC par seconde sur un seul canal.
+static constexpr int kMaxRemapPerBlock = 32;
+
+void NidmiSeqAudioProcessor::setDeviceProfileIndex(int i) {
+    deviceProfileIndex_ = i;
+    rebuildLearnMap();
+}
+
+void NidmiSeqAudioProcessor::rebuildLearnMap() {
+    int8_t tmp[128];
+    std::fill(std::begin(tmp), std::end(tmp), static_cast<int8_t>(-1));
+
+    const DeviceProfile& prof = DeviceProfile::byIndex(deviceProfileIndex_);
+    for (const auto& p : prof.params())
+        if (p.learn >= 0 && p.learn < 128 && p.cc >= 0 && p.cc < 128)
+            tmp[p.learn] = static_cast<int8_t>(p.cc);
+
+    for (int i = 0; i < 128; ++i)
+        learnMap_[i].store(tmp[i], std::memory_order_relaxed);
+}
+
 void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                          juce::MidiBuffer& midiMessages) {
     juce::ScopedNoDenormals noDenormals;
@@ -284,8 +311,47 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     if (useMidiClock)
         midiR = midiClock_.processIncoming(midiMessages, numSamples, blockStartGlobal);
 
+    // « Learn » : un CC entrant est remappe vers le CC que le profil associe au
+    // parametre. Sur un synthe sans sortie MIDI — le Kobol — c'est le seul sens
+    // possible du MIDI learn : lier un potard de notre controleur.
+    //
+    // Capture AVANT le clear, qui jette tout l'entrant, et reinjection apres.
+    // Tableau sur la pile : aucune allocation sur le thread audio. Au-dela de
+    // kMaxRemapPerBlock le surplus est ignore plutot que de deborder — un bloc
+    // qui porterait autant de CC est deja pathologique.
+    struct Remap { int sample; uint8_t channel, cc, value; };
+    Remap     remaps[kMaxRemapPerBlock];
+    int       numRemaps = 0;
+
+    // Lecture des OCTETS BRUTS, sans construire de juce::MidiMessage :
+    // getMessage() alloue pour un SysEx, et le thread audio ne doit jamais
+    // allouer. Un Control Change fait exactement 3 octets, statut 0xBn.
+    for (const auto meta : midiMessages) {
+        if (meta.numBytes != 3)
+            continue;
+        const auto* d = meta.data;
+        if ((d[0] & 0xF0) != 0xB0)
+            continue;
+        const int src = d[1] & 0x7F;
+        const int dst = learnMap_[static_cast<size_t>(src)].load(std::memory_order_relaxed);
+        if (dst < 0)
+            continue;
+        if (numRemaps >= kMaxRemapPerBlock)
+            break;
+        remaps[numRemaps++] = { meta.samplePosition,
+                                static_cast<uint8_t>((d[0] & 0x0F) + 1),   // canal 1..16
+                                static_cast<uint8_t>(dst),
+                                static_cast<uint8_t>(d[2] & 0x7F) };
+    }
+
     midiMessages.clear();
     buffer.clear();
+
+    for (int i = 0; i < numRemaps; ++i)
+        midiMessages.addEvent(juce::MidiMessage::controllerEvent(remaps[i].channel,
+                                                                 remaps[i].cc,
+                                                                 remaps[i].value),
+                              remaps[i].sample);
 
     const int64_t blockUs =
         sampleRate_ > 0.0 ? static_cast<int64_t>(static_cast<double>(numSamples) * 1.0e6 / sampleRate_)
@@ -422,9 +488,11 @@ void NidmiSeqAudioProcessor::setStateInformation(const void* data, int sizeInByt
     if (!root.isValid())
         return;
 
-    if (root.hasProperty("deviceProfile"))
+    if (root.hasProperty("deviceProfile")) {
         deviceProfileIndex_ =
             DeviceProfile::indexOfName(root.getProperty("deviceProfile").toString());
+        rebuildLearnMap();
+    }
 
     for (int i = 0; i < root.getNumChildren(); ++i) {
         juce::ValueTree c = root.getChild(i);
