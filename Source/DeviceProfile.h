@@ -1,49 +1,57 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <vector>
 
 // Profil d'appareil : donne un nom aux numéros de CC.
 //
-// Le séquenceur émet des CC bruts ; un profil sert uniquement à l'affichage,
-// pour lire « VCF Cutoff » plutôt que « CC 74 » sur les rows CC, les P-locks
-// et les destinations de macro. Aucun effet sur le MIDI émis.
+// Les profils sont des FICHIERS JSON lus au démarrage, pas une table
+// compilée : ajouter un synthé n'exige aucune recompilation. Le même format
+// servira à l'éditeur de panneau, qui lira les mêmes fichiers.
 //
-// Le profil actif est une propriété du processeur, sérialisée avec le projet.
+// Emplacement : ~/Documents/NiDMI/Profiles/*.json
+// Le dossier est créé au premier lancement, avec le profil Kobol dedans en
+// guise d'exemple.
+//
+// Le profil ne modifie AUCUN message MIDI : il ne sert qu'à l'affichage.
 
 struct DeviceParam {
-    int         cc;
-    const char* shortName;   // ≤ 7 caractères : les pastilles de la page AUTO
-                             // font ~28 px de large en police 10
-    const char* name;
-    const char* group;       // VCF, VCA, VCO, LFO, Mod
-    bool        wired;       // le firmware sort-il réellement ce paramètre ?
+    int          cc      = 0;
+    juce::String shortName;   // ≤ 7 caractères : zones étroites (pastilles 10 px)
+    juce::String name;
+    juce::String group;       // VCF, VCA, VCO, LFO, Mod…
+    bool         wired = true;  // a un effet audible aujourd'hui
 };
 
 class DeviceProfile {
 public:
-    DeviceProfile(juce::String name, const DeviceParam* params, int count)
-        : name_(std::move(name)), params_(params), count_(count) {}
+    DeviceProfile() = default;
+    DeviceProfile(juce::String name, std::vector<DeviceParam> params)
+        : name_(std::move(name)), params_(std::move(params)) {}
 
     const juce::String& name() const noexcept { return name_; }
-    bool  isEmpty()            const noexcept { return count_ == 0; }
+    bool  isEmpty()            const noexcept { return params_.empty(); }
 
-    // nullptr si ce CC n'est pas décrit par le profil.
     const DeviceParam* find(int cc) const noexcept;
 
-    // « VCF Cutoff » si connu, « CC 74 » sinon.
-    juce::String label(int cc) const;
+    juce::String label(int cc) const;        // « VCF Cutoff », sinon « CC 74 »
+    juce::String shortLabel(int cc) const;   // « Cutoff »,     sinon « 74 »
 
-    // « Cutoff » si connu, « 74 » sinon. Pour les zones étroites.
-    juce::String shortLabel(int cc) const;
-
-    // Registre. L'index 0 est toujours le profil vide (« Aucun ») : le
-    // comportement historique, numéros de CC bruts.
+    // Registre. L'index 0 est toujours « Aucun » : numéros de CC bruts.
     static int                  count() noexcept;
     static const DeviceProfile& byIndex(int index) noexcept;
     static int                  indexOfName(const juce::String& name) noexcept;
 
+    // Relit le dossier. Appelé une fois au premier accès ; rappeler pour
+    // prendre en compte un fichier ajouté sans redémarrer.
+    static void reload();
+
+    static juce::File profilesDirectory();
+
+    // Ce que la dernière lecture a trouvé ou rejeté, pour l'affichage.
+    static juce::String lastScanSummary();
+
 private:
-    juce::String       name_;
-    const DeviceParam* params_;
-    int                count_;
+    juce::String             name_ { "Aucun" };
+    std::vector<DeviceParam> params_;
 };

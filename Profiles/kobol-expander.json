@@ -1,0 +1,26 @@
+{
+  "name": "Kobol Expander",
+  "parameters": [
+    { "cc":  74, "short": "Cutoff",  "name": "VCF Cutoff",              "group": "VCF", "wired": true  },
+    { "cc":  71, "short": "Reso",    "name": "VCF Resonance",           "group": "VCF", "wired": false },
+    { "cc":  73, "short": "VcfAtk",  "name": "VCF Attack",              "group": "VCF", "wired": false },
+    { "cc":  75, "short": "VcfDec",  "name": "VCF Decay",               "group": "VCF", "wired": false },
+    { "cc": 102, "short": "VcfSus",  "name": "VCF Sustain",             "group": "VCF", "wired": false },
+    { "cc": 103, "short": "AdsCtl",  "name": "VCF ADS Ctrl",            "group": "VCF", "wired": false },
+    { "cc": 105, "short": "VcaAtk",  "name": "VCA Attack",              "group": "VCA", "wired": false },
+    { "cc": 106, "short": "VcaDec",  "name": "VCA Decay",               "group": "VCA", "wired": false },
+    { "cc": 107, "short": "VcaSus",  "name": "VCA Sustain",             "group": "VCA", "wired": false },
+    { "cc": 109, "short": "Vol2",    "name": "VCO2 Volume",             "group": "VCO", "wired": false },
+    { "cc": 108, "short": "Vol1",    "name": "VCO1 Volume",             "group": "VCO", "wired": false },
+    { "cc": 112, "short": "Wave1",   "name": "VCO1 Waveform",           "group": "VCO", "wired": false },
+    { "cc": 113, "short": "Wave2",   "name": "VCO2 Waveform",           "group": "VCO", "wired": false },
+    { "cc":  76, "short": "LfoRate", "name": "LFO Rate",                "group": "LFO", "wired": true  },
+    { "cc":   1, "short": "Mod",     "name": "Mod Wheel",               "group": "Mod", "wired": false },
+    { "cc":   5, "short": "Porta",   "name": "Portamento Time",         "group": "Mod", "wired": true  },
+    { "cc":  65, "short": "PortSw",  "name": "Portamento On/Off",       "group": "Mod", "wired": true  },
+    { "cc": 114, "short": "VelCutN", "name": "Velocite > Cutoff (on)",  "group": "Mod", "wired": true  },
+    { "cc": 115, "short": "VelCutF", "name": "Velocite > Cutoff (off)", "group": "Mod", "wired": true  },
+    { "cc": 116, "short": "VelVca",  "name": "Velocite > VCA",          "group": "Mod", "wired": false },
+    { "cc": 118, "short": "Gate",    "name": "Gate force",              "group": "Mod", "wired": true  }
+  ]
+}
