@@ -11,6 +11,18 @@
 #include <cmath>
 
 void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
+    // Defauts, que les branches ci-dessous peuvent surcharger.
+    valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
+
+    // La sensibilite globale (180 px pour toute la course) suppose une plage
+    // fine. Sur une entree a peu de crans elle rend l'encodeur inutilisable :
+    // avec 2 profils il fallait tirer 180 px pour en changer, contre 12 px par
+    // cran sur « Rangees ». On tire 30 px par cran, borne a la valeur globale.
+    const auto scaleDrag = [this](int steps) {
+        valueEncoder_.setMouseDragSensitivity(juce::jlimit(60, 180, steps * 30));
+    };
+    scaleDrag(6);   // neutre : 180 px, comportement d'origine
+
     // Entrée virtuelle « Canal » (après les params OLED) : canal MIDI de la row sélectionnée (1..16).
     if (oledParamIndex_ == kNumOledParams) {
         const auto& pat = proc_.engine().pattern();
@@ -38,9 +50,14 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
     }
     // Entree virtuelle « Profil » : profil d'appareil (nommage des CC).
     if (oledParamIndex_ == kNumOledParams + 3) {
-        valueEncoder_.setRange(0.0, static_cast<double>(DeviceProfile::count() - 1), 1.0);
-        valueEncoder_.setValue(static_cast<double>(proc_.deviceProfileIndex()),
-                               juce::dontSendNotification);
+        const int n   = juce::jmax(1, DeviceProfile::count());
+        const int idx = juce::jlimit(0, n - 1, proc_.deviceProfileIndex());
+        valueEncoder_.setRange(0.0, static_cast<double>(n - 1), 1.0);
+        valueEncoder_.setValue(static_cast<double>(idx), juce::dontSendNotification);
+        scaleDrag(n - 1);
+        // Le nom sur l'encodeur : sans lui on ne voit pas ce qu'on selectionne,
+        // la page GLOBAL etant derriere le panneau des encodeurs.
+        valueEncoderLabel_.setText(DeviceProfile::byIndex(idx).name(), juce::dontSendNotification);
         return;
     }
     auto&       ap    = proc_.apvts();
