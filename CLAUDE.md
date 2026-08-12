@@ -84,7 +84,13 @@ Not "step = fraction of a quarter note", but "the bar is divided into N equal st
 - **Chromatic**: raw MIDI.
 
 ### 3. Hardware-first ergonomics
-OLED 256×64, 2 encoders (Enc1 = value / Enc2 = cursor), 16 white keys (steps) + 11 black (functions) + Shift. The VST is a prototype for ESP32-S3 hardware. See `CAHIER_DES_CHARGES_V1.md` for the full spec.
+Colour graphic TFT **~320×240 (SPI), non-touch**, **4 push encoders** (Enc1 value / Enc2 cursor / Enc3 velocity / Enc4 zoom), 16 white keys (steps) + 11 black (functions) + Shift. The VST is a prototype for ESP32-S3 hardware. See `CAHIER_DES_CHARGES_V1.md` §10.1–10.2 for the full spec.
+
+> Revision 2026-05 **supersedes** the original OLED 256×64 mono / 2-encoder
+> spec. The old mono "2 rows × 4 columns / 8 params" layout survives only as a
+> special case (GLOBAL page), not as the general display constraint. Do not
+> quote the OLED figures as a limit — they are obsolete. The screen only
+> *displays* state; all editing goes through keys and encoders.
 
 ## Architecture
 
