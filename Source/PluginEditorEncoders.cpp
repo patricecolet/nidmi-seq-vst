@@ -24,7 +24,7 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
     scaleDrag(6);   // neutre : 180 px, comportement d'origine
 
     // Entrée virtuelle « Canal » (après les params OLED) : canal MIDI de la row sélectionnée (1..16).
-    if (oledParamIndex_ == kNumOledParams) {
+    if (oledParamIndex_ == kGlobalRowChannel) {
         const auto& pat = proc_.engine().pattern();
         const int   sr  = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
         const int   ch  = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
@@ -33,7 +33,7 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         return;
     }
     // Entrée virtuelle « Pattern » : pattern actif de la banque (1..kMaxPatterns).
-    if (oledParamIndex_ == kNumOledParams + 1) {
+    if (oledParamIndex_ == kGlobalRowPattern) {
         const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
         valueEncoder_.setRange(1.0, static_cast<double>(kMaxPatterns), 1.0);
         valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxPatterns), ap)),
@@ -41,15 +41,26 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         return;
     }
     // Entrée virtuelle « Mesures » : nombre de mesures du pattern (1..kMaxBars).
-    if (oledParamIndex_ == kNumOledParams + 2) {
+    if (oledParamIndex_ == kGlobalRowBars) {
         const int nb = static_cast<int>(proc_.engine().patternNumBars());
         valueEncoder_.setRange(1.0, static_cast<double>(kMaxBars), 1.0);
         valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, static_cast<int>(kMaxBars), nb)),
                                juce::dontSendNotification);
         return;
     }
+    // Entree virtuelle « Mode » : Pattern (le pattern actif reboucle) ou Song
+    // (la chaine ChainVM avance au bord de boucle). La bascule existait deja,
+    // mais seulement page SONG touche 4 — introuvable sans le savoir.
+    if (oledParamIndex_ == kGlobalRowMode) {
+        valueEncoder_.setRange(0.0, 1.0, 1.0);
+        valueEncoder_.setValue(proc_.engine().songMode() ? 1.0 : 0.0, juce::dontSendNotification);
+        scaleDrag(1);
+        valueEncoderLabel_.setText(proc_.engine().songMode() ? "Song" : "Pattern",
+                                   juce::dontSendNotification);
+        return;
+    }
     // Entree virtuelle « Profil » : profil d'appareil (nommage des CC).
-    if (oledParamIndex_ == kNumOledParams + 3) {
+    if (oledParamIndex_ == kGlobalRowProfile) {
         const int n   = juce::jmax(1, DeviceProfile::count());
         const int idx = juce::jlimit(0, n - 1, proc_.deviceProfileIndex());
         valueEncoder_.setRange(0.0, static_cast<double>(n - 1), 1.0);
@@ -62,7 +73,7 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
     }
     // Lignes d'action : rien a tourner, tout se joue au push. On neutralise
     // l'encodeur plutot que de le laisser sur la valeur de la ligne precedente.
-    if (oledParamIndex_ == kNumOledParams + 4 || oledParamIndex_ == kNumOledParams + 5) {
+    if (oledParamIndex_ == kGlobalRowResetMappings || oledParamIndex_ == kGlobalRowResetValues) {
         valueEncoder_.setRange(0.0, 1.0, 1.0);
         valueEncoder_.setValue(0.0, juce::dontSendNotification);
         valueEncoderLabel_.setText("Push", juce::dontSendNotification);
@@ -101,7 +112,7 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
 
 void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
     // Entrée virtuelle « Canal » : pose le canal MIDI (1..16) de la row sélectionnée via SetRowChannel.
-    if (oledParamIndex_ == kNumOledParams) {
+    if (oledParamIndex_ == kGlobalRowChannel) {
         const auto& pat = proc_.engine().pattern();
         if (pat.numRows == 0) return;
         const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
@@ -115,7 +126,7 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         return;
     }
     // Entrée virtuelle « Pattern » : bascule le pattern actif de la banque.
-    if (oledParamIndex_ == kNumOledParams + 1) {
+    if (oledParamIndex_ == kGlobalRowPattern) {
         const int idx = juce::jlimit(1, static_cast<int>(kMaxPatterns),
                                      (int) std::lround(valueEncoder_.getValue())) - 1;
         SequencerCommand c;
@@ -129,7 +140,7 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         return;
     }
     // Entrée virtuelle « Mesures » : nombre de mesures du pattern (1..kMaxBars).
-    if (oledParamIndex_ == kNumOledParams + 2) {
+    if (oledParamIndex_ == kGlobalRowBars) {
         const int nb = juce::jlimit(1, static_cast<int>(kMaxBars),
                                     (int) std::lround(valueEncoder_.getValue()));
         SequencerCommand c;
@@ -140,12 +151,24 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         buildScreenModel();
         return;
     }
+    // Entree virtuelle « Mode » : passe par le CommandFifo, le moteur est touche.
+    if (oledParamIndex_ == kGlobalRowMode) {
+        const bool want = (std::lround(valueEncoder_.getValue()) >= 1);
+        if (want != proc_.engine().songMode()) {
+            SequencerCommand c;
+            c.id = SequencerCommandId::SetSongMode;
+            c.x  = want;
+            proc_.controller().postCommand(c);
+        }
+        buildScreenModel();
+        return;
+    }
     // Lignes d'action : la rotation est inerte, seul le push agit.
-    if (oledParamIndex_ == kNumOledParams + 4 || oledParamIndex_ == kNumOledParams + 5)
+    if (oledParamIndex_ == kGlobalRowResetMappings || oledParamIndex_ == kGlobalRowResetValues)
         return;
     // Entrée virtuelle « Profil » : purement cosmetique, aucun passage par le
     // CommandFifo puisque le moteur n'est pas touche.
-    if (oledParamIndex_ == kNumOledParams + 3) {
+    if (oledParamIndex_ == kGlobalRowProfile) {
         proc_.setDeviceProfileIndex(juce::jlimit(0, DeviceProfile::count() - 1,
                                                  (int) std::lround(valueEncoder_.getValue())));
         buildScreenModel();
@@ -174,8 +197,8 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Global) {
-        // kNumOledParams params APVTS + Canal (kNumOledParams) + Pattern (+1) + Mesures (+2).
-        const int ni = juce::jlimit(0, kNumOledParams + 5, (int) std::lround(navEncoder_.getValue()));
+        // kNumOledParams params APVTS + Canal (kGlobalRowChannel) + Pattern (+1) + Mesures (+2).
+        const int ni = juce::jlimit(0, kGlobalRowCount - 1, (int) std::lround(navEncoder_.getValue()));
         if (ni != oledParamIndex_) {
             oledParamIndex_ = ni;
             syncValueEncoderFromParam();
@@ -392,7 +415,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     if (screenPage_ == PatternScreenModel::Page::Global) {
         navEncoderLabel_.setText("Param", juce::dontSendNotification);
         valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 5), 1.0);   // +Canal +Pattern +Mesures +Profil +2 resets
+        navEncoder_.setRange(0.0, static_cast<double>(kGlobalRowCount - 1), 1.0);   // +Canal +Pattern +Mesures +Profil +2 resets
         navEncoder_.setValue(static_cast<double>(oledParamIndex_), juce::dontSendNotification);
         syncValueEncoderFromParam();
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
@@ -655,12 +678,12 @@ void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
     // sous le curseur. Les deux resets sont volontairement separes — effacer ses
     // assignations de controleur n'a rien a voir avec reinitialiser le son.
     if (!inSub_ && screenPage_ == PatternScreenModel::Page::Global && idx == 1) {
-        if (oledParamIndex_ == kNumOledParams + 4) {
+        if (oledParamIndex_ == kGlobalRowResetMappings) {
             proc_.resetLearnMappings();
             buildScreenModel();
             return;
         }
-        if (oledParamIndex_ == kNumOledParams + 5) {
+        if (oledParamIndex_ == kGlobalRowResetValues) {
             proc_.sendDefaultValues();
             buildScreenModel();
             return;

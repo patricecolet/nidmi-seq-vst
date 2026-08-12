@@ -21,6 +21,20 @@ inline constexpr const char* kOledTitles[]   = {"BPM",        "Rangees",    "Mes
 static_assert(std::size(kOledParamIds) == std::size(kOledTitles));
 inline constexpr int kNumOledParams = static_cast<int>(std::size(kOledParamIds));
 
+// Entrees VIRTUELLES de la page GLOBAL, a la suite des params APVTS. Nommees
+// plutot que « kNumOledParams + 3 » dissemine dans trois fichiers : inserer une
+// ligne au milieu decalait silencieusement toutes les suivantes.
+enum GlobalRow : int {
+    kGlobalRowChannel = kNumOledParams,   // canal MIDI de la row selectionnee
+    kGlobalRowPattern,                    // pattern actif de la banque
+    kGlobalRowBars,                       // nombre de mesures du pattern
+    kGlobalRowMode,                       // Pattern <-> Song
+    kGlobalRowProfile,                    // profil d'appareil
+    kGlobalRowResetMappings,              // action, au push
+    kGlobalRowResetValues,                // action, au push
+    kGlobalRowCount                       // nombre total de lignes de la page
+};
+
 inline constexpr const char* kRoman[] = {"I", "II", "III", "IV", "V", "VI", "VII"};
 
 // « Longueur » unifiée d'une note en QUARTS de (sous-)pas : 1=¼, 4=1 pas, etc.

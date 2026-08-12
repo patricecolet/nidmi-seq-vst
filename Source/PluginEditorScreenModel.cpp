@@ -94,45 +94,50 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.bpm = bpm->load();
 
     // Page GLOBAL : params projet (OLED) + « Canal » de la row + « Pattern » actif + « Mesures ».
-    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 6);
+    m.numGlobalParams = juce::jlimit(0, 16, static_cast<int>(kGlobalRowCount));
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
-    for (int i = 0; i < kNumOledParams && i < m.numGlobalParams; ++i) {
+    for (int i = 0; i < kGlobalRowChannel && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
         m.global[static_cast<size_t>(i)].value = formatParamValue(proc_.apvts(), oledParamId(i));
     }
-    if (m.numGlobalParams > kNumOledParams) {   // ligne = canal MIDI de la row sélectionnée
+    if (m.numGlobalParams > kGlobalRowChannel) {   // ligne = canal MIDI de la row sélectionnée
         const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
         const int ch = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
-        m.global[static_cast<size_t>(kNumOledParams)].name  = "Canal R" + juce::String(sr + 1);
-        m.global[static_cast<size_t>(kNumOledParams)].value = juce::String(juce::jlimit(1, 16, ch));
+        m.global[static_cast<size_t>(kGlobalRowChannel)].name  = "Canal R" + juce::String(sr + 1);
+        m.global[static_cast<size_t>(kGlobalRowChannel)].value = juce::String(juce::jlimit(1, 16, ch));
     }
-    if (m.numGlobalParams > kNumOledParams + 1) {   // ligne = pattern actif de la banque
+    if (m.numGlobalParams > kGlobalRowPattern) {   // ligne = pattern actif de la banque
         const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
-        m.global[static_cast<size_t>(kNumOledParams + 1)].name  = "Pattern";
-        m.global[static_cast<size_t>(kNumOledParams + 1)].value =
+        m.global[static_cast<size_t>(kGlobalRowPattern)].name  = "Pattern";
+        m.global[static_cast<size_t>(kGlobalRowPattern)].value =
             juce::String(ap) + "/" + juce::String(static_cast<int>(kMaxPatterns));
     }
-    if (m.numGlobalParams > kNumOledParams + 2) {   // ligne = nombre de mesures du pattern
+    if (m.numGlobalParams > kGlobalRowBars) {   // ligne = nombre de mesures du pattern
         const int nb = static_cast<int>(proc_.engine().patternNumBars());
-        m.global[static_cast<size_t>(kNumOledParams + 2)].name  = "Mesures";
-        m.global[static_cast<size_t>(kNumOledParams + 2)].value =
+        m.global[static_cast<size_t>(kGlobalRowBars)].name  = "Mesures";
+        m.global[static_cast<size_t>(kGlobalRowBars)].value =
             juce::String(nb) + "/" + juce::String(static_cast<int>(kMaxBars));
     }
 
-    if (m.numGlobalParams > kNumOledParams + 3) {   // ligne = profil d'appareil
-        m.global[static_cast<size_t>(kNumOledParams + 3)].name  = "Profil";
-        m.global[static_cast<size_t>(kNumOledParams + 3)].value = prof.name();
+    if (m.numGlobalParams > kGlobalRowMode) {   // ligne = Pattern <-> Song
+        m.global[static_cast<size_t>(kGlobalRowMode)].name  = "Mode";
+        m.global[static_cast<size_t>(kGlobalRowMode)].value =
+            proc_.engine().songMode() ? "Song" : "Pattern";
+    }
+    if (m.numGlobalParams > kGlobalRowProfile) {   // ligne = profil d'appareil
+        m.global[static_cast<size_t>(kGlobalRowProfile)].name  = "Profil";
+        m.global[static_cast<size_t>(kGlobalRowProfile)].value = prof.name();
     }
 
     // Deux actions, declenchees par le PUSH de l'encodeur Valeur sur la ligne.
     // Elles ne portent pas de valeur : la colonne de droite dit quoi faire.
-    if (m.numGlobalParams > kNumOledParams + 4) {
-        m.global[static_cast<size_t>(kNumOledParams + 4)].name  = "Reset mappings";
-        m.global[static_cast<size_t>(kNumOledParams + 4)].value = "push";
+    if (m.numGlobalParams > kGlobalRowResetMappings) {
+        m.global[static_cast<size_t>(kGlobalRowResetMappings)].name  = "Reset mappings";
+        m.global[static_cast<size_t>(kGlobalRowResetMappings)].value = "push";
     }
-    if (m.numGlobalParams > kNumOledParams + 5) {
-        m.global[static_cast<size_t>(kNumOledParams + 5)].name  = "Reset valeurs";
-        m.global[static_cast<size_t>(kNumOledParams + 5)].value = "push";
+    if (m.numGlobalParams > kGlobalRowResetValues) {
+        m.global[static_cast<size_t>(kGlobalRowResetValues)].name  = "Reset valeurs";
+        m.global[static_cast<size_t>(kGlobalRowResetValues)].value = "push";
     }
 
     // Page SONG : chaîne (arrangement) depuis l'engine.
