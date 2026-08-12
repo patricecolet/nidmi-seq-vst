@@ -4,7 +4,7 @@
 // Profil d'exemple ecrit au premier lancement
 //
 // Genere depuis la carte MIDI du firmware Kobol :
-//   Documents/Arduino/synth/kobol-expander/midi-cv/midi-map.json
+//   ../synth/kobol-expander/midi-cv/midi-map.json
 //   python3 tools/gen_device_profile.py --write
 //
 // Il sert de graine ET de documentation du format. Une fois sur disque

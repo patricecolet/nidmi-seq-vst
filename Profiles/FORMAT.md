@@ -155,7 +155,7 @@ Ne pas éditer `kobol-expander.json` à la main : il est produit depuis la carte
 MIDI du firmware, qui fait foi pour le firmware **et** pour le plugin.
 
 ```sh
-cd <dépôt synth>/kobol-expander/midi-cv
+cd ~/repo/synth/kobol-expander/midi-cv
 python3 tools/gen_device_profile.py --write
 ```
 
