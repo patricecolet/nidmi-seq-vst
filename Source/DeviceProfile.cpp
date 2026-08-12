@@ -18,32 +18,39 @@
 // n'est pas monté.
 // ─────────────────────────────────────────────────────────────────────
 
-static const DeviceParam kKobolParams[] = {
-    //  cc   court      nom complet             groupe  câblé
-    {  74, "Cutoff",  "VCF Cutoff",             "VCF",  true  },
-    {  71, "Reso",    "VCF Resonance",          "VCF",  false },
-    {  73, "VcfAtk",  "VCF Attack",             "VCF",  false },
-    {  75, "VcfDec",  "VCF Decay",              "VCF",  false },
-    { 102, "VcfSus",  "VCF Sustain",            "VCF",  false },
-    { 103, "AdsCtl",  "VCF ADS Ctrl",           "VCF",  false },
-    { 105, "VcaAtk",  "VCA Attack",             "VCA",  false },
-    { 106, "VcaDec",  "VCA Decay",              "VCA",  false },
-    { 107, "VcaSus",  "VCA Sustain",            "VCA",  false },
-    { 108, "Vol1",    "VCO1 Volume",            "VCO",  false },
-    { 109, "Vol2",    "VCO2 Volume",            "VCO",  false },
-    { 112, "Wave1",   "VCO1 Waveform",          "VCO",  false },
-    { 113, "Wave2",   "VCO2 Waveform",          "VCO",  false },
-    {  76, "LfoRate", "LFO Rate",               "LFO",  false },
+// >>> GENERE DEPUIS midi-map.json — NE PAS EDITER A LA MAIN
+//
+//   cd <depot synth>/kobol-expander/midi-cv
+//   python3 tools/gen_device_profile.py --write
+//
+// La source est midi-map.json, qui fait foi pour le firmware aussi.
+// wired = le parametre a-t-il un effet AUDIBLE aujourd'hui.
 
-    // Modulations calculées par le firmware : pas de sortie CV propre.
-    {   1, "Mod",     "Mod Wheel",              "Mod",  true  },
-    {   5, "Porta",   "Portamento Time",        "Mod",  true  },
-    {  65, "PortSw",  "Portamento On/Off",      "Mod",  true  },
-    { 114, "VelCutN", "Velocite > Cutoff (on)", "Mod",  true  },
-    { 115, "VelCutF", "Velocite > Cutoff (off)","Mod",  true  },
-    { 116, "VelVca",  "Velocite > VCA",         "Mod",  true  },
-    { 118, "Gate",    "Gate force",             "Mod",  true  },
+static const DeviceParam kKobolParams[] = {
+    //  cc   court      nom complet                groupe  cable
+    {  74, "Cutoff",  "VCF Cutoff",              "VCF",   true  },
+    {  71, "Reso",    "VCF Resonance",           "VCF",   false },
+    {  73, "VcfAtk",  "VCF Attack",              "VCF",   false },
+    {  75, "VcfDec",  "VCF Decay",               "VCF",   false },
+    { 102, "VcfSus",  "VCF Sustain",             "VCF",   false },
+    { 103, "AdsCtl",  "VCF ADS Ctrl",            "VCF",   false },
+    { 105, "VcaAtk",  "VCA Attack",              "VCA",   false },
+    { 106, "VcaDec",  "VCA Decay",               "VCA",   false },
+    { 107, "VcaSus",  "VCA Sustain",             "VCA",   false },
+    { 109, "Vol2",    "VCO2 Volume",             "VCO",   false },
+    { 108, "Vol1",    "VCO1 Volume",             "VCO",   false },
+    { 112, "Wave1",   "VCO1 Waveform",           "VCO",   false },
+    { 113, "Wave2",   "VCO2 Waveform",           "VCO",   false },
+    {  76, "LfoRate", "LFO Rate",                "LFO",   true  },
+    {   1, "Mod",     "Mod Wheel",               "Mod",   false },
+    {   5, "Porta",   "Portamento Time",         "Mod",   true  },
+    {  65, "PortSw",  "Portamento On/Off",       "Mod",   true  },
+    { 114, "VelCutN", "Velocite > Cutoff (on)",  "Mod",   true  },
+    { 115, "VelCutF", "Velocite > Cutoff (off)", "Mod",   true  },
+    { 116, "VelVca",  "Velocite > VCA",          "Mod",   false },
+    { 118, "Gate",    "Gate force",              "Mod",   true  },
 };
+// <<< FIN DU BLOC GENERE
 
 // ─────────────────────────────────────────────────────────────────────
 
