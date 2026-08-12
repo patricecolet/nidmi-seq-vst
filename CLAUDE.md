@@ -173,6 +173,26 @@ Switching modes resets transport edges, the internal time accumulator, the clock
 
 `followHost`, `useHostBpm`, `useMidiClock`, `bpm`, `loop`, `numSteps` (1–64), `numRows` (1–16), `tsNum` (1–16), `tsDen` (choice `{1,2,4,8,16}`), **`masterRoot`** (choice of 12 pitch classes), **`masterScale`** (choice of 12 scale names). Changes are diffed against `lastXxx_` members and converted to `SequencerCommand`s.
 
+## MIDI interop: two time models, by design
+
+Nested tuplets have **no representation in a MIDI file** — the engine samples
+`step = (barElapsed × N) / barDuration`, a SMF is a flat list of timestamps.
+`MidiExporter` therefore has two modes: `Bake` (flattened, any DAW reads it) and
+`Full` (Bake **+ `0xFF 0x7F` Sequencer-Specific Meta** carrying the whole project
+as a serialised `ValueTree`). Export is implemented; **import is not** — the
+round-trip is half built.
+
+The spec (`CAHIER_DES_CHARGES_V1.md` §9.4, revision 2026-08) keeps a **parallel
+MIDI clip player** alongside the tuplet engine, as `RowKind::MidiClip`: same
+transport and bar anchor, different "what plays now" function, original timing
+preserved instead of quantised. Its blocker is memory, not concept —
+`PatternRow` is a fixed `StepData steps[kMaxBars][kMaxSteps]` (~6 KB/row) and a
+variable-length clip needs storage outside that array.
+
+**This intention was lost once already**: only the "convert on import" half
+survived into the spec. Do not quietly drop it again when reasoning about MIDI
+interop.
+
 ## When adding source files
 
 `CMakeLists.txt` lists sources explicitly in `target_sources(NidmiSeq PRIVATE …)`. Add new `.cpp` files there; headers under `Source/` are picked up via the include directory.

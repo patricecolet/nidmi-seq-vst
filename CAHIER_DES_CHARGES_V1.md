@@ -387,6 +387,80 @@ Pas de MIDI file I/O en V1 hardware. Projets sauvegardés en flash (LittleFS ou 
 
 ---
 
+### 9.4 Lecture MIDI parallèle (révision 2026-08)
+
+> **Révision 2026-08 — reprise d'une intention perdue.** L'architecture d'origine
+> prévoyait **deux modèles temporels côte à côte** : le moteur à tuplets pour
+> l'édition, et **un lecteur de séquence MIDI en parallèle** capable
+> d'import/export de fichiers. Seule la moitié « conversion » avait survécu dans
+> ce document (§9.2 et roadmap V1.5c, « import de clip MIDI *comme pattern* »).
+> La présente section rétablit l'autre moitié.
+
+#### Pourquoi deux modèles et non un
+
+Un fichier MIDI est une **liste d'événements horodatés**. Le moteur NiDMI est un
+**échantillonneur relatif à la mesure** : `step = (barElapsed × N) / barDuration`.
+Les tuplets emboîtés que produit ce calcul n'ont **pas de représentation** dans un
+fichier MIDI — d'où l'export « Bake », qui les aplatit.
+
+La conversion à l'import fait la perte symétrique : un groove non quantifié,
+importé, se retrouve redressé sur la grille. Acceptable pour une idée à
+retravailler, destructeur pour une boucle jouée à la main ou une piste reçue d'un
+tiers.
+
+| | Convertir (§9.2) | Lire en parallèle (§9.4) |
+|---|---|---|
+| Timing d'origine | quantifié au N choisi | **conservé tel quel** |
+| Édition par pas | oui | non — le clip est opaque |
+| Polyrythmie NiDMI | s'applique | ne s'applique pas |
+| Usage | idée à retravailler | boucle jouée, piste tierce |
+
+Les deux sont **complémentaires**, pas concurrents : à l'import, l'utilisateur
+choisit.
+
+#### Comment elles coexistent : un type de row, pas un second moteur
+
+Aucun second ordonnanceur n'est nécessaire. `SequencerEngine::tick(nowUs)` fournit
+déjà l'ancre de mesure et le temps courant ; un lecteur d'événements bruts se
+résume à « émettre ce dont l'horodatage est passé ». **Seule diffère la fonction
+« qu'est-ce qui joue maintenant »**, pas le transport.
+
+`RowKind` porte déjà `Note` et `CC`. On ajoute :
+
+```
+enum class RowKind : uint8_t { Note = 0, CC = 1, MidiClip = 2 };
+```
+
+Une row `MidiClip` :
+- ignore `numSteps`, `harmonyMode`, `steps[][]`, les P-locks et les sub-patterns ;
+- respecte `channel`, `muted`, et le transport (start/stop/loop de mesure) ;
+- boucle sur sa propre longueur, exprimée en mesures, réalignée au downbeat comme
+  les autres rows.
+
+La polyrythmie des rows voisines continue de tourner sans rien savoir d'elle.
+
+#### Contrainte mémoire — le vrai obstacle
+
+`PatternRow` est un **tableau fixe** : `StepData steps[kMaxBars][kMaxSteps]`, soit
+≈ 6 Ko par row occupés en permanence, vides ou non, ≈ 96 Ko pour 16 rows. Un clip
+à nombre d'événements variable **n'entre pas dans ce moule**.
+
+Il faut donc un stockage **hors** du tableau fixe : un pool d'événements indexé
+par row, alloué à l'import. Sur ESP32-S3 la PSRAM l'absorbe ; sur la cible VST la
+question ne se pose pas. À dimensionner avant d'écrire quoi que ce soit — c'est
+ce point, et non le concept, qui décide de la faisabilité hardware.
+
+#### Ordre de travail
+
+1. **Import du blob** (§9.2) — l'écriture existe déjà (`MidiExporter` mode `Full`,
+   `0xFF 0x7F`), seule la lecture manque. Referme le round-trip et donne la
+   sauvegarde de projet portable annoncée en §9.1. Ne préjuge de rien.
+2. **`RowKind::MidiClip`** — le lecteur parallèle, une fois le pool d'événements
+   dimensionné.
+
+---
+
+
 ## 10. UI hardware-style
 
 ### 10.0 Vocabulaire (révision 2026-05)
@@ -512,6 +586,8 @@ Core refactor + VST UI hardware-style complète (écran TFT à Vues, tuplet-firs
 ### V1.5
 - **Arpégiateur** : mode des touches, arpège calé sur le N de la row → arp polyrythmique natif (cf. §10.3).
 - **Couche arrangement (type MPC, MIDI-only)** : patterns = clips. (a) **matrice de lancement** de patterns sur les touches (style Session, colle au hardware) ; (b) **arrangeur linéaire** de patterns sur une timeline de mesures (s'appuie sur la banque + ChainVM) ; (c) **import de clip MIDI** comme pattern. Câblage de la ChainVM au moteur.
+- **Import du blob NiDMI** (§9.2) : l'export `Full` écrit déjà le `Sequencer-Specific Meta` ; seule la lecture manque. Referme le round-trip.
+- **`RowKind::MidiClip`** (§9.4) : lecture MIDI parallèle, timing d'origine conservé. Subordonné au dimensionnement du pool d'événements.
 - LFOs par row.
 - Macros : destinations étendues ou scènes multiples.
 - Hardware : chargement MIDI depuis SD.
