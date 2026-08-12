@@ -206,7 +206,8 @@ interop.
 - `setSteps(N)` (legacy) sets every row to N. For polyrhythmic patterns, use `setRowSteps(row, N)` per row.
 - When writing tests that call `tick(nowUs)` multiple times, **nowUs must be monotonic**. Driver resets its accumulator if it detects a time jump backwards.
 - Only **one** subpattern plays at a time globally in V1 (engine has a single `RunningSubPattern`). Multi-row parallel subpatterns require V2 refactor.
-- `ChainVM` (song mode) is implemented but **not yet wired** to the engine ; multi-pattern runtime integration is deferred to V1.5.
+- `ChainVM` (song mode) **is wired**: `SetSongMode` command, `advanceChainAtPatternLoop()` at the pattern loop edge (or at cadence resolution when the pattern has a chord progression), serialised in `PatternValueTree`, covered by the core tests (196 pass). Toggle lives on the SONG page, key index 4. What is still deferred to V2 is **simultaneous multi-pattern playback** — only one pattern plays at a time.
+- Default MIDI channel is **one per row** (row 0 → ch 1, … row 15 → ch 16), set in the `Pattern` constructor. `PatternRow`'s own default is 0, so without it every row spoke on channel 1 — useless for a multitrack sequencer driving several machines.
 
 ## Reference documents
 
