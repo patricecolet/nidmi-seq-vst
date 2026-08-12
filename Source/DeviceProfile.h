@@ -21,6 +21,24 @@ struct DeviceParam {
     juce::String name;
     juce::String group;       // VCF, VCA, VCO, LFO, Mod…
     bool         wired = true;  // a un effet audible aujourd'hui
+
+    // ---- format v2 : panneau ----
+    juce::String section;     // section du panneau = une page sur le materiel
+    juce::String type { "knob" };   // knob | switch | selector
+    bool  hasPos = false;     // false = pas de controle physique (modulation)
+    float x = 0.0f, y = 0.0f; // centre, normalise 0..1 sur le panneau
+    float size = 0.045f;      // diametre, fraction de la LARGEUR du panneau
+
+    // CC entrant remappe vers ce parametre. -1 = aucun.
+    // Seul moyen de « MIDI learn » sur un synthe sans sortie MIDI : on ne peut
+    // pas decouvrir sa carte, seulement lier un potard de notre controleur.
+    int learn = -1;
+};
+
+// Zone du panneau. Sur le materiel, une section = une page d'encodeurs.
+struct DeviceSection {
+    juce::String id, name;
+    float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;   // normalises 0..1
 };
 
 class DeviceProfile {
@@ -29,10 +47,22 @@ public:
     DeviceProfile(juce::String name, std::vector<DeviceParam> params)
         : name_(std::move(name)), params_(std::move(params)) {}
 
+    void setPanel(juce::String image, float aspect, std::vector<DeviceSection> sections) {
+        image_ = std::move(image); aspect_ = aspect; sections_ = std::move(sections);
+    }
+
     const juce::String& name() const noexcept { return name_; }
     bool  isEmpty()            const noexcept { return params_.empty(); }
 
     const DeviceParam* find(int cc) const noexcept;
+
+    // Parametre dont le champ learn vaut ce CC entrant. nullptr si aucun.
+    const DeviceParam* findByLearn(int incomingCc) const noexcept;
+
+    const juce::String&               imageFile() const noexcept { return image_; }
+    float                             aspect()    const noexcept { return aspect_; }
+    const std::vector<DeviceSection>& sections()  const noexcept { return sections_; }
+    const std::vector<DeviceParam>&   params()    const noexcept { return params_; }
 
     juce::String label(int cc) const;        // « VCF Cutoff », sinon « CC 74 »
     juce::String shortLabel(int cc) const;   // « Cutoff »,     sinon « 74 »
@@ -52,6 +82,9 @@ public:
     static juce::String lastScanSummary();
 
 private:
-    juce::String             name_ { "Aucun" };
-    std::vector<DeviceParam> params_;
+    juce::String               name_ { "Aucun" };
+    std::vector<DeviceParam>   params_;
+    juce::String               image_;
+    float                      aspect_ = 0.0f;
+    std::vector<DeviceSection> sections_;
 };
