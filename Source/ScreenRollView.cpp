@@ -100,7 +100,7 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
         auto lane = velLane.reduced(2.0f);
         g.setColour(kRowLabel);
         g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
-        g.drawText("Vélo",
+        g.drawText(juce::String(juce::CharPointer_UTF8("V\xc3\xa9lo")),
                    juce::Rectangle<float>(bodyArea_.getX(), lane.getY(), 24.0f, lane.getHeight()),
                    juce::Justification::centredLeft);
         g.setColour(kScreenBorder);
@@ -286,7 +286,7 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     {
         g.setColour(kRowLabel);
         g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
-        g.drawText("Vélo",
+        g.drawText(juce::String(juce::CharPointer_UTF8("V\xc3\xa9lo")),
                    juce::Rectangle<float>(bodyArea_.getX(), F.lane.getY(), 24.0f, F.lane.getHeight()),
                    juce::Justification::centredLeft);
         g.setColour(kScreenBorder);

@@ -33,6 +33,7 @@ struct PatternScreenModel {
         bool          isCC          = false; // row d'automation CC (kind == RowKind::CC)
         int           ccNumber      = 74;    // destination si isCC
         juce::String  ccLabel;              // nom du CC selon le profil actif, vide si aucun
+        juce::String  ccShort;              // idem, forme courte pour la zone d'info (96 px)
     };
 
     // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché + l'édition.

@@ -465,7 +465,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             valueEncoder_.setRange(-12.0, 12.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(bass), juce::dontSendNotification);
         } else {
-            valueEncoderLabel_.setText("Degré " + juce::String(kRoman[juce::jlimit(0, 6, deg - 1)]),
+            valueEncoderLabel_.setText(juce::String(juce::CharPointer_UTF8("Degr\xc3\xa9 ")) + juce::String(kRoman[juce::jlimit(0, 6, deg - 1)]),
                                        juce::dontSendNotification);
             valueEncoder_.setRange(1.0, 7.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(deg), juce::dontSendNotification);
@@ -705,7 +705,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
         } else {
             veloEncoder_.setRange(0.0, 127.0, 1.0);
             veloEncoder_.setValue(static_cast<double>(sd.velocity), juce::dontSendNotification);
-            veloEncoderLabel_.setText("Vélo " + juce::String(sd.velocity), juce::dontSendNotification);
+            veloEncoderLabel_.setText(juce::String(juce::CharPointer_UTF8("V\xc3\xa9lo ")) + juce::String(sd.velocity), juce::dontSendNotification);
         }
         return;
     }
@@ -740,7 +740,7 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
     } else {
         veloEncoder_.setRange(0.0, 127.0, 1.0);
         veloEncoder_.setValue(static_cast<double>(sd.velocity), juce::dontSendNotification);
-        veloEncoderLabel_.setText("Vélo " + juce::String(sd.velocity), juce::dontSendNotification);
+        veloEncoderLabel_.setText(juce::String(juce::CharPointer_UTF8("V\xc3\xa9lo ")) + juce::String(sd.velocity), juce::dontSendNotification);
     }
 }
 

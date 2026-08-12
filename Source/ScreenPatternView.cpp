@@ -245,17 +245,29 @@ void PatternScreen::paintPatternPage(juce::Graphics& g) {
 
         // Infos row (droite) : N · valeur musicale · durée d'un pas (ms)  canal mode [mute].
         // N = divisions de la mesure ; la signature (Mesure x/y, en-tête) en est indépendante.
-        juce::String info = "N" + juce::String(n);
-        if (row.divLabel.isNotEmpty())
-            info += juce::String::fromUTF8(" \xc2\xb7 ") + row.divLabel;   // « · »
-        if (row.stepMs > 0)
-            info += juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(row.stepMs) + "ms";
-        info += "  c" + juce::String(row.channel);
-        // Une row CC ne suit pas l'harmonie : on montre sa destination plutot
-        // que son mode harmonique, qui n'a aucun effet.
-        info += " " + (row.isCC ? (row.ccLabel.isNotEmpty() ? row.ccLabel
-                                                            : ("CC" + juce::String(row.ccNumber)))
-                                : juce::String(harmonyModeShort(row.harmonyMode)));
+        // La zone fait infoW_ = 96 px : tout ne tient pas, et JUCE tronque par
+        // la fin. On place donc en tete ce qui compte le plus.
+        //
+        // Row NOTE : N, valeur musicale, duree du pas, canal, mode harmonique.
+        // Row CC   : la DESTINATION d'abord — sans elle la ligne ne dit rien —
+        //            puis N et la valeur musicale. Ni duree ni mode harmonique :
+        //            le mode n'a aucun effet sur une row d'automation.
+        juce::String info;
+        if (row.isCC) {
+            info = row.ccShort.isNotEmpty() ? row.ccShort
+                                            : ("CC" + juce::String(row.ccNumber));
+            info += "  N" + juce::String(n);
+            if (row.divLabel.isNotEmpty())
+                info += juce::String::fromUTF8(" \xc2\xb7 ") + row.divLabel;   // « · »
+        } else {
+            info = "N" + juce::String(n);
+            if (row.divLabel.isNotEmpty())
+                info += juce::String::fromUTF8(" \xc2\xb7 ") + row.divLabel;
+            if (row.stepMs > 0)
+                info += juce::String::fromUTF8(" \xc2\xb7 ") + juce::String(row.stepMs) + "ms";
+            info += "  c" + juce::String(row.channel) + " "
+                  + juce::String(harmonyModeShort(row.harmonyMode));
+        }
         if (row.muted)
             info += " M";
         g.setColour(row.muted ? kMutedText : kRowLabel);

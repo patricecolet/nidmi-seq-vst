@@ -180,7 +180,8 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         dst.stepMs      = static_cast<int>(stepUs / 1000.0 + 0.5);
         dst.isCC        = (row.kind == RowKind::CC);
         dst.ccNumber    = static_cast<int>(row.ccNumber);
-        dst.ccLabel     = dst.isCC ? prof.label(dst.ccNumber) : juce::String();
+        dst.ccLabel     = dst.isCC ? prof.label(dst.ccNumber)      : juce::String();
+        dst.ccShort     = dst.isCC ? prof.shortLabel(dst.ccNumber) : juce::String();
         // Row soumise à l'harmonie : harmonie active globale ET mode != Chromatic.
         const bool bound = harmActive && row.harmonyModeAt(static_cast<uint8_t>(editBar_)) != RowHarmonyMode::Chromatic;
         dst.harmonyBound = bound;

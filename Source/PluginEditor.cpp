@@ -168,7 +168,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     };
     labelStyle(navEncoderLabel_, "Curseur");
     labelStyle(valueEncoderLabel_, "Valeur");
-    labelStyle(veloEncoderLabel_, "Vélo");
+    labelStyle(veloEncoderLabel_, juce::String(juce::CharPointer_UTF8("V\xc3\xa9lo")));
     labelStyle(zoomEncoderLabel_, "Zoom");
     labelStyle(masterEncoderLabel_, "Master");
 

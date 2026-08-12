@@ -157,7 +157,7 @@ void NidmiSeqAudioProcessorEditor::launchExportFlow() {
                 juce::MessageBoxOptions()
                     .withIconType(result.success ? juce::MessageBoxIconType::InfoIcon
                                                   : juce::MessageBoxIconType::WarningIcon)
-                    .withTitle(result.success ? "Export OK" : "Export raté")
+                    .withTitle(result.success ? "Export OK" : juce::String(juce::CharPointer_UTF8("Export rat\xc3\xa9")))
                     .withMessage(result.message)
                     .withButton("OK");
             juce::AlertWindow::showAsync(opts, nullptr);

@@ -234,7 +234,11 @@ Result exportToFile(const SequencerEngine& live, const juce::File& destFile, Mod
     fos.setPosition(0);
     fos.truncate();
     if (!mf.writeTo(fos))
-        return {false, "Échec d'écriture MidiFile"};
+        // Litteraux adjacents obligatoires : dans "\xc3\x89chec" le « c » qui
+        // suit est un chiffre hexadecimal valide et serait avale par
+        // l'echappement. Meme piege sur "\xc3\xa9criture".
+        return {false, juce::String(juce::CharPointer_UTF8(
+                           "\xc3\x89" "chec d'" "\xc3\xa9" "criture MidiFile"))};
 
     return {true, destFile.getFullPathName()};
 }
