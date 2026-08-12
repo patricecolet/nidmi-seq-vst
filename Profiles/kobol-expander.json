@@ -91,6 +91,7 @@
       ],
       "size": 0.045,
       "wired": true,
+      "default": 90,
       "learn": null
     },
     {
@@ -106,6 +107,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -121,6 +123,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -136,6 +139,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 40,
       "learn": null
     },
     {
@@ -151,6 +155,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 90,
       "learn": null
     },
     {
@@ -166,6 +171,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 64,
       "learn": null
     },
     {
@@ -181,6 +187,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -196,6 +203,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 40,
       "learn": null
     },
     {
@@ -211,6 +219,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -226,6 +235,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -241,6 +251,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -256,6 +267,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -271,6 +283,7 @@
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -286,6 +299,7 @@
       ],
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -298,6 +312,7 @@
       "pos": null,
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -310,6 +325,7 @@
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -322,6 +338,7 @@
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 127,
       "learn": null
     },
     {
@@ -334,6 +351,7 @@
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -346,6 +364,7 @@
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -358,6 +377,7 @@
       "pos": null,
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -370,6 +390,7 @@
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     }
   ]

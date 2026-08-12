@@ -61,6 +61,15 @@ public:
     // peut declencher la lecture du dossier de profils.
     void setDeviceProfileIndex(int i);
 
+    // Efface les liaisons apprises : retour a l'identite seule, telle que le
+    // profil la decrit. Ne touche pas au son. Hors thread audio.
+    void resetLearnMappings();
+
+    // Renvoie la valeur par defaut de chaque parametre du profil — « INIT
+    // patch ». Ne touche pas aux liaisons. Sur au thread audio : ne fait
+    // qu'armer un drapeau, l'emission a lieu au prochain bloc.
+    void sendDefaultValues() noexcept { pendingDefaults_.store(true, std::memory_order_relaxed); }
+
     bool pushCommand(const SequencerCommand& cmd);
     void applyPatternTree(const juce::ValueTree& tree);
 
@@ -108,6 +117,15 @@ private:
     // Surtout, ne PAS interroger DeviceProfile depuis processBlock :
     // byIndex() appelle ensureLoaded(), donc potentiellement une lecture disque.
     std::atomic<int8_t> learnMap_[128];
+
+    // Valeur par defaut de chaque CC du profil, -1 si le CC n'y figure pas.
+    // Precalculee pour la meme raison que learnMap_ : processBlock ne doit
+    // jamais interroger DeviceProfile, qui peut lire le disque.
+    std::atomic<int8_t> defaultValue_[128];
+
+    // Arme par « Reset valeurs » depuis l'UI, consomme au prochain bloc.
+    std::atomic<bool> pendingDefaults_ { false };
+
     void rebuildLearnMap();
 
     double sampleRate_ = 44100.0;

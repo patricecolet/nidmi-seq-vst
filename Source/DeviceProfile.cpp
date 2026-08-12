@@ -105,6 +105,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": true,
+      "default": 90,
       "learn": null
     },
     {
@@ -120,6 +121,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -135,6 +137,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -150,6 +153,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 40,
       "learn": null
     },
     {
@@ -165,6 +169,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 90,
       "learn": null
     },
     {
@@ -180,6 +185,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 64,
       "learn": null
     },
     {
@@ -195,6 +201,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -210,6 +217,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 40,
       "learn": null
     },
     {
@@ -225,6 +233,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -240,6 +249,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -255,6 +265,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 100,
       "learn": null
     },
     {
@@ -270,6 +281,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -285,6 +297,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -300,6 +313,7 @@ static const char* kKobolSeedJson = R"JSON({
       ],
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -312,6 +326,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -324,6 +339,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -336,6 +352,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 127,
       "learn": null
     },
     {
@@ -348,6 +365,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -360,6 +378,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     },
     {
@@ -372,6 +391,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": false,
+      "default": 0,
       "learn": null
     },
     {
@@ -384,6 +404,7 @@ static const char* kKobolSeedJson = R"JSON({
       "pos": null,
       "size": 0.045,
       "wired": true,
+      "default": 0,
       "learn": null
     }
   ]
@@ -443,6 +464,7 @@ static bool parseProfile(const juce::var& root, DeviceProfile& out, juce::String
         const juce::var lr = e.getProperty("learn", {});
         p.learn = lr.isVoid() ? -1 : static_cast<int>(lr);   // null JSON -> void
         if (p.learn < 0 || p.learn > 127) p.learn = -1;
+        p.defaultValue = juce::jlimit(0, 127, static_cast<int>(e.getProperty("default", 0)));
 
         if (p.name.isEmpty()) continue;
         if (p.shortName.isEmpty()) p.shortName = p.name.substring(0, 7);

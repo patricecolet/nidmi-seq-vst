@@ -33,6 +33,10 @@ struct DeviceParam {
     // Seul moyen de « MIDI learn » sur un synthe sans sortie MIDI : on ne peut
     // pas decouvrir sa carte, seulement lier un potard de notre controleur.
     int learn = -1;
+
+    // Valeur appliquee par « Reset valeurs ». Meme table que le cc_default du
+    // firmware au demarrage : le synthe retrouve son etat de mise sous tension.
+    int defaultValue = 0;
 };
 
 // Zone du panneau. Sur le materiel, une section = une page d'encodeurs.

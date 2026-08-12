@@ -264,11 +264,20 @@ void NidmiSeqAudioProcessor::setDeviceProfileIndex(int i) {
     rebuildLearnMap();
 }
 
+void NidmiSeqAudioProcessor::resetLearnMappings() {
+    rebuildLearnMap();
+}
+
 void NidmiSeqAudioProcessor::rebuildLearnMap() {
-    int8_t tmp[128];
+    int8_t tmp[128], def[128];
     std::fill(std::begin(tmp), std::end(tmp), static_cast<int8_t>(-1));
+    std::fill(std::begin(def), std::end(def), static_cast<int8_t>(-1));
 
     const DeviceProfile& prof = DeviceProfile::byIndex(deviceProfileIndex_);
+
+    for (const auto& p : prof.params())
+        if (p.cc >= 0 && p.cc < 128)
+            def[p.cc] = static_cast<int8_t>(juce::jlimit(0, 127, p.defaultValue));
 
     // 1) IDENTITE par defaut : un CC que le profil connait traverse sans changer
     //    de numero. Sans cela, un controleur deja regle sur le bon CC serait
@@ -285,8 +294,10 @@ void NidmiSeqAudioProcessor::rebuildLearnMap() {
         if (p.learn >= 0 && p.learn < 128 && p.cc >= 0 && p.cc < 128)
             tmp[p.learn] = static_cast<int8_t>(p.cc);
 
-    for (int i = 0; i < 128; ++i)
+    for (int i = 0; i < 128; ++i) {
         learnMap_[i].store(tmp[i], std::memory_order_relaxed);
+        defaultValue_[i].store(def[i], std::memory_order_relaxed);
+    }
 }
 
 void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
@@ -364,6 +375,16 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                                                  remaps[i].cc,
                                                                  remaps[i].value),
                               remaps[i].sample);
+
+    // « Reset valeurs » : un balayage de la table precalculee, sans toucher au
+    // profil. Canal 1 — le profil ne porte pas de canal par parametre.
+    if (pendingDefaults_.exchange(false, std::memory_order_relaxed)) {
+        for (int cc = 0; cc < 128; ++cc) {
+            const int v = defaultValue_[static_cast<size_t>(cc)].load(std::memory_order_relaxed);
+            if (v >= 0)
+                midiMessages.addEvent(juce::MidiMessage::controllerEvent(1, cc, v), 0);
+        }
+    }
 
     const int64_t blockUs =
         sampleRate_ > 0.0 ? static_cast<int64_t>(static_cast<double>(numSamples) * 1.0e6 / sampleRate_)

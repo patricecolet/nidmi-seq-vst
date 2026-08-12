@@ -94,7 +94,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.bpm = bpm->load();
 
     // Page GLOBAL : params projet (OLED) + « Canal » de la row + « Pattern » actif + « Mesures ».
-    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 4);
+    m.numGlobalParams = juce::jlimit(0, 16, kNumOledParams + 6);
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
     for (int i = 0; i < kNumOledParams && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
@@ -122,6 +122,17 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
     if (m.numGlobalParams > kNumOledParams + 3) {   // ligne = profil d'appareil
         m.global[static_cast<size_t>(kNumOledParams + 3)].name  = "Profil";
         m.global[static_cast<size_t>(kNumOledParams + 3)].value = prof.name();
+    }
+
+    // Deux actions, declenchees par le PUSH de l'encodeur Valeur sur la ligne.
+    // Elles ne portent pas de valeur : la colonne de droite dit quoi faire.
+    if (m.numGlobalParams > kNumOledParams + 4) {
+        m.global[static_cast<size_t>(kNumOledParams + 4)].name  = "Reset mappings";
+        m.global[static_cast<size_t>(kNumOledParams + 4)].value = "push";
+    }
+    if (m.numGlobalParams > kNumOledParams + 5) {
+        m.global[static_cast<size_t>(kNumOledParams + 5)].name  = "Reset valeurs";
+        m.global[static_cast<size_t>(kNumOledParams + 5)].value = "push";
     }
 
     // Page SONG : chaîne (arrangement) depuis l'engine.

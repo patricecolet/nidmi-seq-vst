@@ -60,6 +60,14 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         valueEncoderLabel_.setText(DeviceProfile::byIndex(idx).name(), juce::dontSendNotification);
         return;
     }
+    // Lignes d'action : rien a tourner, tout se joue au push. On neutralise
+    // l'encodeur plutot que de le laisser sur la valeur de la ligne precedente.
+    if (oledParamIndex_ == kNumOledParams + 4 || oledParamIndex_ == kNumOledParams + 5) {
+        valueEncoder_.setRange(0.0, 1.0, 1.0);
+        valueEncoder_.setValue(0.0, juce::dontSendNotification);
+        valueEncoderLabel_.setText("Push", juce::dontSendNotification);
+        return;
+    }
     auto&       ap    = proc_.apvts();
     const char* id    = oledParamId(oledParamIndex_);
     auto*       param = ap.getParameter(id);
@@ -132,6 +140,9 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         buildScreenModel();
         return;
     }
+    // Lignes d'action : la rotation est inerte, seul le push agit.
+    if (oledParamIndex_ == kNumOledParams + 4 || oledParamIndex_ == kNumOledParams + 5)
+        return;
     // Entrée virtuelle « Profil » : purement cosmetique, aucun passage par le
     // CommandFifo puisque le moteur n'est pas touche.
     if (oledParamIndex_ == kNumOledParams + 3) {
@@ -164,7 +175,7 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
     }
     if (screenPage_ == PatternScreenModel::Page::Global) {
         // kNumOledParams params APVTS + Canal (kNumOledParams) + Pattern (+1) + Mesures (+2).
-        const int ni = juce::jlimit(0, kNumOledParams + 3, (int) std::lround(navEncoder_.getValue()));
+        const int ni = juce::jlimit(0, kNumOledParams + 5, (int) std::lround(navEncoder_.getValue()));
         if (ni != oledParamIndex_) {
             oledParamIndex_ = ni;
             syncValueEncoderFromParam();
@@ -381,7 +392,7 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
     if (screenPage_ == PatternScreenModel::Page::Global) {
         navEncoderLabel_.setText("Param", juce::dontSendNotification);
         valueEncoderLabel_.setText("Valeur", juce::dontSendNotification);
-        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 3), 1.0);   // +Canal +Pattern +Mesures +Profil
+        navEncoder_.setRange(0.0, static_cast<double>(kNumOledParams + 5), 1.0);   // +Canal +Pattern +Mesures +Profil +2 resets
         navEncoder_.setValue(static_cast<double>(oledParamIndex_), juce::dontSendNotification);
         syncValueEncoderFromParam();
     } else if (screenPage_ == PatternScreenModel::Page::Pattern) {
@@ -640,6 +651,22 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
 void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
     // Routage du push d'encodeur par Vue. Les actions (drill-in sub) rafraîchissent
     // elles-mêmes l'UI et sortent tôt ; les bascules tombent dans le refresh commun.
+    // Page GLOBAL : le push de l'encodeur Valeur declenche l'action de la ligne
+    // sous le curseur. Les deux resets sont volontairement separes — effacer ses
+    // assignations de controleur n'a rien a voir avec reinitialiser le son.
+    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Global && idx == 1) {
+        if (oledParamIndex_ == kNumOledParams + 4) {
+            proc_.resetLearnMappings();
+            buildScreenModel();
+            return;
+        }
+        if (oledParamIndex_ == kNumOledParams + 5) {
+            proc_.sendDefaultValues();
+            buildScreenModel();
+            return;
+        }
+    }
+
     if (inSub_) {
         if (idx == 0) { exitSub(); return; }          // Enc1 = Sortir du sub
         else if (idx == 1 && screenPage_ == PatternScreenModel::Page::PianoRoll) {
