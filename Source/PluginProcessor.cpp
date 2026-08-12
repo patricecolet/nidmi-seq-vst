@@ -269,6 +269,18 @@ void NidmiSeqAudioProcessor::rebuildLearnMap() {
     std::fill(std::begin(tmp), std::end(tmp), static_cast<int8_t>(-1));
 
     const DeviceProfile& prof = DeviceProfile::byIndex(deviceProfileIndex_);
+
+    // 1) IDENTITE par defaut : un CC que le profil connait traverse sans changer
+    //    de numero. Sans cela, un controleur deja regle sur le bon CC serait
+    //    ignore, puisque processBlock vide tout l'entrant.
+    //    Seuls les CC declares passent : le plugin ne devient pas un MIDI thru.
+    for (const auto& p : prof.params())
+        if (p.cc >= 0 && p.cc < 128)
+            tmp[p.cc] = static_cast<int8_t>(p.cc);
+
+    // 2) Remappages explicites, appliques APRES : un learn l'emporte sur
+    //    l'identite. Si un learn vise un numero qui est deja le CC propre d'un
+    //    autre parametre, il le detourne — c'est voulu, l'explicite gagne.
     for (const auto& p : prof.params())
         if (p.learn >= 0 && p.learn < 128 && p.cc >= 0 && p.cc < 128)
             tmp[p.learn] = static_cast<int8_t>(p.cc);

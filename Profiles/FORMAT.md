@@ -72,7 +72,7 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | `pos` | `[x, y]` normalisés **sur le panneau entier**, centre du contrôle. `null` = pas de contrôle physique |
 | `size` | diamètre, en fraction de la **largeur** du panneau |
 | `wired` | le paramètre a-t-il un effet **audible aujourd'hui** ? |
-| `learn` | CC entrant remappé vers ce paramètre. `null` = aucun |
+| `learn` | CC entrant **supplémentaire**. `null` = aucun. Le CC propre du paramètre passe de toute façon à l'identique |
 
 ### `wired` n'est pas « décrit dans la table »
 
@@ -82,6 +82,28 @@ cutoff. Cas non évident : `CC 116` (vélocité → VCA) vaut `false`, parce qu'
 module le VCA Sustain, qui n'a pas de sortie. Le CC part, il ne produit rien.
 
 Sur 21 contrôleurs du Kobol, **7 sont audibles**.
+
+### `learn` ajoute une source, il n'en remplace pas
+
+**Le CC propre d'un paramètre passe toujours à l'identique** : le profil déclare
+`cc: 74`, un CC 74 entrant ressort en CC 74, sans qu'on ait à l'écrire. Inutile
+donc de remplir 21 champs redondants, et un profil écrit à la main sans aucun
+`learn` fonctionne d'emblée.
+
+`learn` ne sert qu'à **ajouter une seconde source** :
+
+```json
+{ "cc": 74, "name": "VCF Cutoff", "learn": 21 }
+```
+
+CC 21 **et** CC 74 pilotent alors le cutoff. Apprendre un potard de contrôleur
+ne fait donc jamais perdre le numéro d'origine du synthé.
+
+Un `learn` qui vise le CC propre d'un autre paramètre le détourne : l'explicite
+l'emporte sur l'identité.
+
+Seuls les CC **déclarés dans le profil** traversent. Le plugin ne devient pas un
+MIDI thru : un CC inconnu reste jeté, comme avant.
 
 ### `learn` : deux familles de synthés
 
