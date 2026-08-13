@@ -26,6 +26,8 @@ inline constexpr int kNumOledParams = static_cast<int>(std::size(kOledParamIds))
 // ligne au milieu decalait silencieusement toutes les suivantes.
 enum GlobalRow : int {
     kGlobalRowChannel = kNumOledParams,   // canal MIDI de la row selectionnee
+    kGlobalRowKind,                       // Note <-> CC : type de la row
+    kGlobalRowCCNum,                      // destination CC, si la row est en CC
     kGlobalRowPattern,                    // pattern actif de la banque
     kGlobalRowBars,                       // nombre de mesures du pattern
     kGlobalRowMode,                       // Pattern <-> Song

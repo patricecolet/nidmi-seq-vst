@@ -94,7 +94,9 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.bpm = bpm->load();
 
     // Page GLOBAL : params projet (OLED) + « Canal » de la row + « Pattern » actif + « Mesures ».
-    m.numGlobalParams = juce::jlimit(0, 16, static_cast<int>(kGlobalRowCount));
+    static_assert(static_cast<int>(kGlobalRowCount) <= PatternScreenModel::kMaxGlobalRows,
+                  "kGlobalRowCount depasse global[] : agrandir kMaxGlobalRows");
+    m.numGlobalParams = static_cast<int>(kGlobalRowCount);
     m.globalCursor    = juce::jlimit(0, juce::jmax(0, m.numGlobalParams - 1), oledParamIndex_);
     for (int i = 0; i < kGlobalRowChannel && i < m.numGlobalParams; ++i) {
         m.global[static_cast<size_t>(i)].name  = oledParamTitle(i);
@@ -105,6 +107,22 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         const int ch = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].channel) + 1 : 1;
         m.global[static_cast<size_t>(kGlobalRowChannel)].name  = "Canal R" + juce::String(sr + 1);
         m.global[static_cast<size_t>(kGlobalRowChannel)].value = juce::String(juce::jlimit(1, 16, ch));
+    }
+    if (m.numGlobalParams > kGlobalRowKind) {   // ligne = type de la row selectionnee
+        const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const bool isCC = (pat.numRows > 0) && (pat.rows[static_cast<size_t>(sr)].kind == RowKind::CC);
+        m.global[static_cast<size_t>(kGlobalRowKind)].name  = "Type R" + juce::String(sr + 1);
+        m.global[static_cast<size_t>(kGlobalRowKind)].value = isCC ? "CC" : "Note";
+    }
+    if (m.numGlobalParams > kGlobalRowCCNum) {   // ligne = destination CC de la row
+        const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const int cc = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].ccNumber) : 74;
+        const bool isCC = (pat.numRows > 0) && (pat.rows[static_cast<size_t>(sr)].kind == RowKind::CC);
+        m.global[static_cast<size_t>(kGlobalRowCCNum)].name  = "CC# R" + juce::String(sr + 1);
+        // Nomme par le profil quand il connait ce CC, et grise quand la row est
+        // en Note : le reglage existe mais ne sert a rien.
+        m.global[static_cast<size_t>(kGlobalRowCCNum)].value =
+            isCC ? prof.label(cc) : ("(" + prof.label(cc) + ")");
     }
     if (m.numGlobalParams > kGlobalRowPattern) {   // ligne = pattern actif de la banque
         const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;

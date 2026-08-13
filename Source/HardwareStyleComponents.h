@@ -105,7 +105,12 @@ struct PatternScreenModel {
 
     int         numGlobalParams = 0;
     int         globalCursor    = 0;
-    GlobalParam global[16];
+    // Doit rester >= kGlobalRowCount (EditorHelpers.h). Un static_assert le
+    // verifie a la compilation dans PluginEditorScreenModel.cpp : sans lui,
+    // ajouter une ligne a la page GLOBAL faisait silencieusement disparaitre la
+    // derniere au lieu de casser le build.
+    static constexpr int kMaxGlobalRows = 24;
+    GlobalParam global[kMaxGlobalRows];
 
     // Page HARMONIE (progression d'accords).
     struct ChordSlotView {

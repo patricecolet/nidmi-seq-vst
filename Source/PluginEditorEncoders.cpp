@@ -32,6 +32,29 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         valueEncoder_.setValue(static_cast<double>(juce::jlimit(1, 16, ch)), juce::dontSendNotification);
         return;
     }
+    // Entree virtuelle « Type » : Note <-> CC. Sans ce chemin, RowKind::CC
+    // restait inatteignable depuis l'ecran : seule la deserialisation le posait.
+    if (oledParamIndex_ == kGlobalRowKind) {
+        const auto& pat = proc_.engine().pattern();
+        const int   sr  = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const bool  isCC = (pat.numRows > 0) && (pat.rows[static_cast<size_t>(sr)].kind == RowKind::CC);
+        valueEncoder_.setRange(0.0, 1.0, 1.0);
+        valueEncoder_.setValue(isCC ? 1.0 : 0.0, juce::dontSendNotification);
+        scaleDrag(1);
+        valueEncoderLabel_.setText(isCC ? "CC" : "Note", juce::dontSendNotification);
+        return;
+    }
+    // Entree virtuelle « CC# » : destination de la lane d'automation.
+    if (oledParamIndex_ == kGlobalRowCCNum) {
+        const auto& pat = proc_.engine().pattern();
+        const int   sr  = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const int   cc  = (pat.numRows > 0) ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].ccNumber) : 74;
+        valueEncoder_.setRange(0.0, 127.0, 1.0);
+        valueEncoder_.setValue(static_cast<double>(juce::jlimit(0, 127, cc)), juce::dontSendNotification);
+        valueEncoderLabel_.setText(
+            DeviceProfile::byIndex(proc_.deviceProfileIndex()).label(cc), juce::dontSendNotification);
+        return;
+    }
     // Entrée virtuelle « Pattern » : pattern actif de la banque (1..kMaxPatterns).
     if (oledParamIndex_ == kGlobalRowPattern) {
         const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
@@ -121,6 +144,33 @@ void NidmiSeqAudioProcessorEditor::applyValueEncoderToParam() {
         c.id = SequencerCommandId::SetRowChannel;
         c.a  = static_cast<uint8_t>(sr);
         c.b  = static_cast<uint8_t>(ch - 1);   // engine stocke 0..15
+        proc_.controller().postCommand(c);
+        buildScreenModel();
+        return;
+    }
+    // Entree virtuelle « Type » : Note <-> CC.
+    if (oledParamIndex_ == kGlobalRowKind) {
+        const auto& pat = proc_.engine().pattern();
+        if (pat.numRows == 0) return;
+        const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetRowKind;
+        c.a  = static_cast<uint8_t>(sr);
+        c.b  = static_cast<uint8_t>(std::lround(valueEncoder_.getValue()) >= 1
+                                        ? RowKind::CC : RowKind::Note);
+        proc_.controller().postCommand(c);
+        buildScreenModel();
+        return;
+    }
+    // Entree virtuelle « CC# » : destination de la lane.
+    if (oledParamIndex_ == kGlobalRowCCNum) {
+        const auto& pat = proc_.engine().pattern();
+        if (pat.numRows == 0) return;
+        const int sr = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+        SequencerCommand c;
+        c.id = SequencerCommandId::SetRowCCNumber;
+        c.a  = static_cast<uint8_t>(sr);
+        c.b  = static_cast<uint8_t>(juce::jlimit(0, 127, (int) std::lround(valueEncoder_.getValue())));
         proc_.controller().postCommand(c);
         buildScreenModel();
         return;
