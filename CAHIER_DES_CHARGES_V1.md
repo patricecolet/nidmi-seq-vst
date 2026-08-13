@@ -495,6 +495,73 @@ suffisent déjà pas à la banque de patterns (1,74 Mo dès `kMaxBars` = 4).
 ---
 
 
+### 9.5 Automation CC : courbes et capture de geste (révision 2026-08)
+
+> Deux manques relevés à l'usage, qui sont **la même fonctionnalité par ses deux
+> extrémités** : capturer un geste, puis le restituer sans marches d'escalier.
+
+#### État actuel
+
+Une row `RowKind::CC` et les P-locks n'émettent **qu'une valeur par pas**,
+poussée au franchissement dans `triggerRowStep`. Pas d'interpolation, donc pas
+de courbe. Et le `Rec` n'arme que le pas-à-pas au clavier : le MIDI entrant est
+entièrement jeté par `processBlock`.
+
+#### L'horloge suffit déjà
+
+`SequencerClockDriver` sous-itère à **0,5 ms** (`kTickStepUs = 500`), soit ~25
+ticks par pas au pire cas (N=64 à 300 BPM) et 250 à 120 BPM avec N=16. **Rien à
+changer côté temps** : il manque un mode d'interpolation en mémoire et une
+émission entre les pas.
+
+#### La contrainte dure : la bande passante MIDI
+
+```
+DIN : 31250 bauds, 10 bits/octet → 3125 o/s ; un CC = 3 octets → 1041 msg/s
+```
+
+Une rampe pleine échelle 0→127 sur un pas de 125 ms représente **1024 msg/s** :
+**une seule row en courbe sature le DIN**. À N=64, quatre fois au-dessus. En USB
+la question ne se pose pas.
+
+Un **limiteur de débit est donc obligatoire**, pas optionnel :
+- ~100 Hz par row → 12 valeurs par pas de 125 ms, bien au-delà de ce que l'oreille
+  distingue sur un balayage ;
+- plus un **budget global**, 16 rows à 100 Hz refaisant 1600 msg/s ;
+- l'émission ne se déclenche que **si la valeur change** — le CC étant 7 bits, une
+  rampe ne produit jamais plus de 128 valeurs distinctes, ce qui borne d'office.
+
+#### Stockage : par row d'abord
+
+| Portée du mode d'interpolation | Coût |
+|---|---|
+| **par row** | 1 octet × 16 rows = **16 octets**, gratuit |
+| par pas | +1 o par lock × 8 → `StepData` 24 → 32 o, un pattern 205 → 273 Ko |
+
+Commencer **par row** : une lane d'automation change rarement de courbe à chaque
+pas. Le per-pas reste possible ensuite.
+
+Les courbes ont du sens sur une **row CC**, qui est une lane. Les **P-locks**
+sont par nature des instantanés accrochés à un pas : les interpoler serait
+incohérent.
+
+#### Capture temps réel : le crochet existe
+
+La table de remappage `learn` (plugin, `PluginProcessor::rebuildLearnMap`)
+identifie déjà un CC entrant et le rattache à un paramètre du profil actif.
+**Enregistrer, c'est écrire cette valeur dans le pas courant de la row armée**
+au lieu de la réémettre. Même plomberie, autre sortie.
+
+#### Lien avec §9.4
+
+Row CC + interpolation capture un geste **quantifié sur la grille** — suffisant
+pour un balayage de filtre, et la grille va jusqu'à 64 pas par mesure et par
+row. `RowKind::MidiClip` capture le geste **brut**, non quantifié. Les deux se
+justifient ; ce sont deux niveaux de fidélité, pas deux solutions au même
+problème.
+
+---
+
 ## 10. UI hardware-style
 
 ### 10.0 Vocabulaire (révision 2026-05)
@@ -623,6 +690,8 @@ Core refactor + VST UI hardware-style complète (écran TFT à Vues, tuplet-firs
 - **Import du blob NiDMI** (§9.2) : l'export `Full` écrit déjà le `Sequencer-Specific Meta` ; seule la lecture manque. Referme le round-trip.
 - **`RowKind::MidiClip`** (§9.4) : lecture MIDI parallèle, timing d'origine conservé. Subordonné au dimensionnement du pool d'événements.
 - LFOs par row.
+- **Automation CC : courbes + capture temps réel** (§9.5). Interpolation par row,
+  limiteur de débit obligatoire, capture branchée sur la table de learn.
 - Macros : destinations étendues ou scènes multiples.
 - Hardware : chargement MIDI depuis SD.
 
