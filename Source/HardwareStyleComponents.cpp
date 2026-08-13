@@ -168,6 +168,17 @@ void PatternScreen::paint(juce::Graphics& g) {
             // Indicateur de mesure éditée "Mes e/n". Si la lecture est sur une autre
             // mesure, on l'indique discrètement (▸joue X).
             crumb += "  Mes " + juce::String(model_.editBar + 1) + "/" + juce::String(juce::jmax(1, model_.numBars));
+            // Mode harmonique de la row EDITEE. Le PATTERN l'affiche depuis toujours
+            // en bout de bandeau ; le ROLL, lui, ne le disait nulle part — or c'est
+            // lui qui decide de combien une note sera deplacee a la lecture. En B2,
+            // les trois quarts des hauteurs se deplacent : editer sans le savoir,
+            // c'est editer a l'aveugle.
+            if (model_.selectedRow < model_.numRows) {
+                const auto& hr = model_.rows[static_cast<size_t>(model_.selectedRow)];
+                if (hr.harmonyBound)
+                    crumb += juce::String::fromUTF8("  \xc2\xb7 ")
+                           + harmonyModeShort(hr.harmonyMode);
+            }
             if (model_.playing && model_.numBars > 1 && model_.playBar != model_.editBar) {
                 const juce::String play(juce::CharPointer_UTF8("\xe2\x96\xb8"));   // ▸
                 crumb += play + "joue" + juce::String(model_.playBar + 1);

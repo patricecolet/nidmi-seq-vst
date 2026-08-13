@@ -303,7 +303,17 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             if (subI >= 0 && subI < 16 && model_.subs[static_cast<size_t>(subI)].numSteps > 0)
                 continue;   // rendu par la boucle sous-patterns (mini-blocs)
         }
-        const int lane = L.topNote - static_cast<int>(row.note[static_cast<size_t>(s)]);
+        // Hauteur JOUEE, pas la stockee. Le roll montre ce qui SONNE : une note
+        // tiree par l'harmonie tombe alors toujours sur une lane allumee, et la
+        // teinte des lanes suffit a dire pourquoi. Rien a surimprimer.
+        //
+        // La valeur STOCKEE n'est pas perdue : l'encodeur l'affiche en clair
+        // (« Note E4 »). Grille = ce qu'on entend, encodeur = ce qu'on ecrit.
+        //
+        // Pas de risque d'empilement : une row est monophonique, un pas porte une
+        // note. Deux pas qui tombent sur la meme hauteur se rangent sur la meme
+        // lane mais a des abscisses differentes.
+        const int lane = L.topNote - static_cast<int>(row.playedNote[static_cast<size_t>(s)]);
         if (lane < 0 || lane >= L.visibleLanes)
             continue;
         const float x = L.plot.getX() + static_cast<float>(s) * L.cellW;
@@ -314,6 +324,7 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
         juce::Rectangle<float> block(x, y, juce::jmax(2.0f, L.cellW * gateFrac), L.laneH);
         g.setColour(row.muted ? kCellOn.withAlpha(0.4f) : kCellOn.withAlpha(velA));
         g.fillRoundedRectangle(block.reduced(1.0f, 1.0f), 2.0f);
+
         if (s == row.playhead) {
             g.setColour(kPlayhead);
             g.drawRoundedRectangle(block.reduced(0.8f, 0.8f), 2.0f, 1.2f);
