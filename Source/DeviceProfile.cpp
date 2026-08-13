@@ -465,6 +465,7 @@ static bool parseProfile(const juce::var& root, DeviceProfile& out, juce::String
         p.learn = lr.isVoid() ? -1 : static_cast<int>(lr);   // null JSON -> void
         if (p.learn < 0 || p.learn > 127) p.learn = -1;
         p.defaultValue = juce::jlimit(0, 127, static_cast<int>(e.getProperty("default", 0)));
+        p.bipolar      = static_cast<bool>(e.getProperty("bipolar", false));
 
         if (p.name.isEmpty()) continue;
         if (p.shortName.isEmpty()) p.shortName = p.name.substring(0, 7);

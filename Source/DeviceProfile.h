@@ -37,6 +37,11 @@ struct DeviceParam {
     // Valeur appliquee par « Reset valeurs ». Meme table que le cc_default du
     // firmware au demarrage : le synthe retrouve son etat de mise sous tension.
     int defaultValue = 0;
+
+    // Parametre -64..0..+63 remappe en 0..127 en ajoutant 64. L'editeur doit
+    // l'afficher signe : sans cela « 64 » s'affiche pour un reglage centre.
+    // Cas frequent chez Waldorf, marque d'un asterisque dans leurs manuels.
+    bool bipolar = false;
 };
 
 // Zone du panneau. Sur le materiel, une section = une page d'encodeurs.

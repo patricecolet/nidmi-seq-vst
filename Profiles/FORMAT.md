@@ -73,6 +73,7 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | `size` | diamètre, en fraction de la **largeur** du panneau |
 | `wired` | le paramètre a-t-il un effet **audible aujourd'hui** ? |
 | `learn` | CC entrant **supplémentaire**. `null` = aucun. Le CC propre du paramètre passe de toute façon à l'identique |
+| `bipolar` | le paramètre va de −64 à +63, remappé en 0–127 en ajoutant 64. L'éditeur doit l'afficher **signé** |
 
 ### `wired` n'est pas « décrit dans la table »
 
@@ -129,7 +130,7 @@ Coût d'un profil en RAM, structure embarquée compacte (pas de `juce::String`) 
 | Paramètres | `char[]` fixes, 48 o/param | blob + offsets, 16 o/param |
 |---|---|---|
 | 21 — Kobol Expander | 1,0 Ko | 0,8 Ko |
-| 63 — Waldorf Blofeld | 3,0 Ko | 2,5 Ko |
+| 47 — Waldorf M *(relevé sur son manuel)* | 2,2 Ko | 1,9 Ko |
 | **128 — plafond MIDI** | **6,0 Ko** | 5,1 Ko |
 
 Pour une collection entière :
@@ -142,6 +143,30 @@ Pour une collection entière :
 **Un seul pattern de la grille pèse 205 Ko**, soit 34 profils au plafond MIDI.
 Même la stratégie naïve tient dans 4,7 % des 8 Mo de PSRAM d'une N16R8. Le
 chargement paresseux n'est utile que sur une carte **sans** PSRAM.
+
+### `bipolar` : sinon « 64 » s'affiche pour un réglage centré
+
+Beaucoup de synthés exposent des paramètres signés — détune, quantité
+d'enveloppe, suivi de clavier — sur une plage −64…0…+63, remappée en 0–127 par
+ajout de 64. Waldorf les marque d'un astérisque dans ses manuels.
+
+Sans ce champ, l'éditeur afficherait `64` là où l'utilisateur attend `0`, et
+`0` là où il attend `−64`. Le MIDI émis est inchangé : c'est purement de
+l'affichage.
+
+## Profils fournis
+
+| Fichier | Synthé | Paramètres | Source |
+|---|---|---|---|
+| `kobol-expander.json` | RSF Kobol Expander | 21 | **généré** depuis la carte MIDI du firmware |
+| `waldorf-m.json` | Waldorf M | 47 | relevé sur le manuel, appendice p. 82 |
+
+Le profil du M vaut aussi pour les **Microwave II / XT** : son manuel précise
+qu'il en reprend la disposition CC classique, à l'ajout près du CC 63.
+
+Il illustre deux choses que le Kobol ne montre pas — un profil **sans image**,
+et un synthé qui **émet** du MIDI quand on bouge ses potards, donc où le vrai
+learn est possible.
 
 ## Synthés multitimbraux
 
