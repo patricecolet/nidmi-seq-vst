@@ -77,18 +77,51 @@ void PatternScreen::paintPitchLanes(juce::Graphics& g, juce::Rectangle<float> pl
             g.fillRect(lane);
         }
 
-        // Libelle sur chaque do, et sur le la quand la place le permet : deux
-        // reperes par octave valent mieux qu'un pour situer une note au vol.
-        const bool label = (note % 12) == 0 || ((note % 12) == 9 && laneH >= 9.0f);
-        if (label) {
-            g.setColour((note % 12) == 0 ? kRowLabel : kRowLabel.withAlpha(0.45f));
-            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
-            g.drawText(midiNoteShort(note),
-                       juce::Rectangle<float>(bodyArea_.getX(), y, 24.0f, laneH),
-                       juce::Justification::centredLeft);
-        }
         g.setColour(kScreenBorder);
         g.drawLine(plot.getX(), y, plot.getRight(), y, 0.4f);
+    }
+
+    // --- Clavier vertical dans la gouttiere ---------------------------------
+    //
+    // Une touche par demi-ton, alignee sur les lanes. Les noires sont plus
+    // COURTES et posees du cote oppose a la grille : c'est un clavier vu du
+    // dessus, le joueur etant a droite. On lit donc la hauteur a la forme.
+    //
+    // Le repere « la » a disparu : il ne servait qu'a compenser l'absence de
+    // reference dans l'octave, ce que le clavier donne maintenant partout. Il ne
+    // reste que le nom d'octave sur chaque do, pose SUR la touche.
+    const juce::Rectangle<float> gutter(bodyArea_.getX(), plot.getY(),
+                                        plot.getX() - bodyArea_.getX(), plot.getHeight());
+    if (gutter.getWidth() >= 8.0f) {
+        const float blackW = gutter.getWidth() * 0.62f;   // longueur d'une noire
+        g.setColour(kKeyWhite);
+        g.fillRect(gutter);                                // fond = les blanches
+
+        for (int i = 0; i < visibleLanes; ++i) {
+            const int   note = topNote - i;
+            const float y    = plot.getY() + static_cast<float>(i) * laneH;
+            if (isBlackKeyPc(note)) {
+                g.setColour(kKeyBlack);
+                g.fillRect(juce::Rectangle<float>(gutter.getX(), y, blackW, laneH));
+            } else if ((note % 12) == 4 || (note % 12) == 11) {
+                // Mi et si : la blanche suivante est collee (pas de noire entre
+                // les deux). Sans ce trait, mi/fa et si/do fusionnent en un seul
+                // bloc et le clavier devient illisible — c'est justement la ou on
+                // se trompe d'octave.
+                g.setColour(kKeyEdge);
+                g.drawLine(gutter.getX(), y, gutter.getRight(), y, 1.0f);
+            }
+            if ((note % 12) == 0 && laneH >= 8.0f) {
+                g.setColour(kScreenBg);                    // encre sombre SUR la blanche
+                g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f).withStyle("Bold")));
+                g.drawText(midiNoteShort(note),
+                           juce::Rectangle<float>(gutter.getX(), y,
+                                                  gutter.getWidth() - 2.0f, laneH),
+                           juce::Justification::centredRight);
+            }
+        }
+        g.setColour(kScreenBorder);
+        g.drawLine(gutter.getRight(), gutter.getY(), gutter.getRight(), gutter.getBottom(), 1.0f);
     }
 }
 
@@ -104,7 +137,7 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     auto        bodyTop  = bodyArea_.withTrimmedBottom(subLaneH);
     const juce::Rectangle<float> velLane(bodyArea_.getX(), bodyTop.getBottom(),
                                          bodyArea_.getWidth(), subLaneH);
-    auto        plot = bodyTop.withTrimmedLeft(26.0f).reduced(2.0f);
+    auto        plot = bodyTop.withTrimmedLeft(kPitchGutterW).reduced(2.0f);
     if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f)
         return;
 

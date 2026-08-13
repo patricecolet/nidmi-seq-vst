@@ -259,7 +259,10 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
             auto        bodyTop  = bodyArea_.withTrimmedBottom(subLaneH);
             const juce::Rectangle<float> velLane(bodyArea_.getX(), bodyTop.getBottom(),
                                                  bodyArea_.getWidth(), subLaneH);
-            auto plot = bodyTop.withTrimmedLeft(26.0f).reduced(2.0f);
+            // kPitchGutterW, PAS une copie du nombre : le dessin et le clic partagent
+            // la meme gouttiere. Elargie pour le clavier, une constante figee ici
+            // aurait decale toutes les hauteurs cliquees sans rien afficher d'anormal.
+            auto plot = bodyTop.withTrimmedLeft(kPitchGutterW).reduced(2.0f);
             if (plot.getHeight() < 10.0f || plot.getWidth() < 10.0f)
                 return;
             const float cellWlane = plot.getWidth() / static_cast<float>(sn);

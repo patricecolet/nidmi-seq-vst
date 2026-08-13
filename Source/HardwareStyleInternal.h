@@ -54,6 +54,19 @@ inline const juce::Colour kClipCopy     {0xff3a78c0};   // pas COPIÉ en attente
 inline const juce::Colour kGhost        {0xff35d2d6};   // sous-pattern PARTAGÉ (alias) : triangle cyan, coin bas-gauche
 inline const juce::Colour kSubSolo      {0xffff00ff};   // sous-pattern INDÉPENDANT : triangle magenta, coin bas-gauche
 
+// Gouttiere de hauteurs a gauche du piano-roll : y tient le CLAVIER VERTICAL, plus
+// le nom d'octave sur chaque do. Elle faisait 26 px quand elle ne portait qu'un
+// libelle texte.
+//
+// Le clavier ne DIT pas la hauteur, il la MONTRE : on reconnait un fa diese a la
+// forme, sans compter les lignes depuis le do ni lire une etiquette. C'est la
+// meme intention que la teinte harmonique des lanes — la semantique passe dans le
+// decor plutot que dans du texte.
+inline constexpr float kPitchGutterW = 34.0f;
+inline const juce::Colour kKeyWhite     {0xff9aa79e};   // touche blanche : clair mais en retrait des blocs de notes
+inline const juce::Colour kKeyBlack     {0xff10140f};   // touche noire
+inline const juce::Colour kKeyEdge      {0xff2a322c};   // separation entre deux blanches voisines (mi/fa, si/do)
+
 /// Teinte par pitch-class (0..11) : 12 couleurs distinctes, saturées mais non criardes,
 /// lisibles sur le fond sombre TFT. Les cellules tombant sur la MÊME note jouée partagent
 /// donc la même teinte → la « zone chromatique » du filtre harmonique se lit d'un coup d'œil.
@@ -81,7 +94,7 @@ inline PrLayout computePrLayout(const PatternScreenModel& m, juce::Rectangle<flo
     const auto& row = m.rows[static_cast<size_t>(r)];
     const int   n   = juce::jlimit(1, 64, row.numSteps);
 
-    juce::Rectangle<float> plot = body.withTrimmedLeft(26.0f);
+    juce::Rectangle<float> plot = body.withTrimmedLeft(kPitchGutterW);
     if (plot.getWidth() < 10.0f || plot.getHeight() < 10.0f)
         return L;
 
