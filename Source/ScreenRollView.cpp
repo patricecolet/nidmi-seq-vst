@@ -1,6 +1,8 @@
 #include "HardwareStyleComponents.h"
 #include "HardwareStyleInternal.h"
 
+#include <cmath>
+
 void PatternScreen::paintSubRoll(juce::Graphics& g) {
     if (model_.subEditIdx < 0 || model_.subEditIdx >= 16) {
         paintStubPage(g, "SUB", "—");
@@ -238,9 +240,18 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             // pas une seule cellule — elle suit la taille réglée par le push →Span.
             const int   sp = juce::jlimit(1, juce::jmax(1, L.n - s),
                                           juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(s)])));
-            g.setColour(kSelRowBg);
-            g.fillRect(juce::Rectangle<float>(x, L.plot.getY(),
-                                              L.cellW * static_cast<float>(sp), L.plot.getHeight()));
+            const juce::Rectangle<float> sel(x, L.plot.getY(),
+                                             L.cellW * static_cast<float>(sp), L.plot.getHeight());
+
+            // Le remplissage seul est INTENABLE sur un grand span : a span=8 sur 16 pas,
+            // il lavait la moitie de la grille de vert et noyait les lanes en dessous.
+            // On l'allege a mesure que le span grandit, et on rend le contour porteur
+            // de l'information : c'est lui qui dit ou commence et finit la selection.
+            const float fade = 1.0f / std::sqrt(static_cast<float>(sp));
+            g.setColour(kSelRowBg.withMultipliedAlpha(fade));
+            g.fillRect(sel);
+            g.setColour(kSelRowBg.withMultipliedAlpha(3.0f));
+            g.drawRect(sel, 1.5f);
         }
         if (s == row.playhead) {
             g.setColour(kPlayhead.withAlpha(0.22f));
