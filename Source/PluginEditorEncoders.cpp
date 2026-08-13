@@ -708,9 +708,11 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         const int len = juce::jlimit(0, 32, static_cast<int>(proc_.engine().pattern().chordProgression.len));
         const bool realSlot = harmonyCursor_ < len;   // Suppr seulement sur un slot existant
         setAction(0, "Suppr", realSlot);               // Enc1 : action immédiate
-        setToggle(1, "\xe2\x86\x92" "Bass",  harmValBass_);   // Enc2 : →Bass
-        hide(2);                                               // Enc3 = Durée en rotation directe (plus de toggle)
-        setToggle(3, "\xe2\x86\x92" "Gamme", harmZoomScale_); // Enc4 : →Gamme
+        // `arrow`, pas les octets bruts : un litteral char* non decode s'affiche
+        // « â‚Bass » a l'ecran (meme cause que le « VÃ©lo » corrige ailleurs).
+        setToggle(1, arrow + "Bass",  harmValBass_);   // Enc2 : →Bass
+        hide(2);                                        // Enc3 = Durée en rotation directe (plus de toggle)
+        setToggle(3, arrow + "Gamme", harmZoomScale_); // Enc4 : →Gamme
         return;
     }
     if (screenPage_ == PatternScreenModel::Page::Pattern) {

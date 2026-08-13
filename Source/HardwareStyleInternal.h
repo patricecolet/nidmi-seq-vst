@@ -216,12 +216,51 @@ inline juce::String chordSuffix(int quality, int extensions) {
     return out;
 }
 
+// Bornes reelles des cases d'une bande dont la largeur porte la DUREE.
+//
+// La bande etait a pas egal : un accord de 2 temps et un de 8 avaient exactement
+// la meme case. Le rythme harmonique — l'information qui fait qu'une progression
+// est une progression et pas une liste — n'etait lisible que dans la ligne de
+// detail, un slot a la fois. Partout ailleurs dans ce sequenceur la largeur, c'est
+// le temps (roll, strip, bandeau de mesures) ; la page HARMONIE etait la seule
+// exception.
+template <int N>
+struct DurationBand {
+    float x[N] = {}, w[N] = {};
+    int   count = 1;
+    /// Repartit `total` px sur `count` cases : un plancher egal pour tout le monde
+    /// (sinon un slot d'1 temps a cote d'un de 16 devient inclicable), le reste au
+    /// prorata de la duree.
+    void layout(float originX, float totalW, const int* durations, int n) {
+        count = juce::jlimit(1, N, n);
+        const float minW  = juce::jmin(16.0f, totalW / static_cast<float>(count));
+        const float freeW = juce::jmax(0.0f, totalW - minW * static_cast<float>(count));
+        int sum = 0;
+        for (int i = 0; i < count; ++i) sum += juce::jmax(1, durations[i]);
+        float cx = originX;
+        for (int i = 0; i < count; ++i) {
+            const float share = static_cast<float>(juce::jmax(1, durations[i]))
+                              / static_cast<float>(juce::jmax(1, sum));
+            x[i] = cx;
+            w[i] = minW + freeW * share;
+            cx  += w[i];
+        }
+    }
+    /// Case sous l'abscisse `px` (-1 hors bande). Les cases n'ont plus la meme
+    /// largeur : diviser par un pas constant ne marche plus pour le clic.
+    int atX(float px) const {
+        for (int i = 0; i < count; ++i)
+            if (px >= x[i] && px < x[i] + w[i]) return i;
+        return (count > 0 && px >= x[count - 1]) ? count - 1 : -1;
+    }
+};
+
 struct HarmLayout {
     juce::Rectangle<float> info, keyBand, slotBand, rowsBand, detail, hint;  // info / tonalité / accords / Rows / détail / hint
-    float slotW = 10.0f;
+    DurationBand<32> slots;
+    DurationBand<16> keys;
     int   slotsToShow = 1;
-    float keyW = 10.0f;
-    int   keysToShow = 1;
+    int   keysToShow  = 1;
 };
 
 inline HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle<float> body) {
@@ -243,9 +282,21 @@ inline HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle
     b.removeFromTop(4.0f);
     L.slotBand  = b;   // le reste = bande de slots d'accords
     L.slotsToShow = juce::jlimit(1, 32, juce::jmax(m.progLen, m.harmonyCursor + 1));
-    L.slotW  = L.slotBand.getWidth() / static_cast<float>(L.slotsToShow);
-    L.keysToShow = juce::jlimit(1, 16, juce::jmax(m.keyLen, m.keyCursor + 1));
-    L.keyW   = L.keyBand.getWidth() / static_cast<float>(L.keysToShow);
+    L.keysToShow  = juce::jlimit(1, 16, juce::jmax(m.keyLen, m.keyCursor + 1));
+
+    // Largeur ∝ duree, pour les accords comme pour la tonalite : la bande devient
+    // une frise temporelle et non une liste. Le slot au-dela de progLen (curseur
+    // sur la case « nouveau ») n'a pas de duree reelle — jmax(1,…) lui donne la
+    // part minimale plutot que de le faire disparaitre.
+    int durs[32];
+    for (int i = 0; i < L.slotsToShow; ++i)
+        durs[i] = (i < m.progLen) ? juce::jmax(1, m.chord[i].durationBeats) : 1;
+    L.slots.layout(L.slotBand.getX(), L.slotBand.getWidth(), durs, L.slotsToShow);
+
+    int kdurs[16];
+    for (int i = 0; i < L.keysToShow; ++i)
+        kdurs[i] = (i < m.keyLen) ? juce::jmax(1, m.keyLane[i].durationBeats) : 1;
+    L.keys.layout(L.keyBand.getX(), L.keyBand.getWidth(), kdurs, L.keysToShow);
     return L;
 }
 

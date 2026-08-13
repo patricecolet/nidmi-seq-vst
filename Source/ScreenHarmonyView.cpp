@@ -53,8 +53,8 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
 
     // Bande de slots d'accords (chips) : romain+qualité en haut, nom d'accord réel en bas.
     for (int i = 0; i < L.slotsToShow; ++i) {
-        juce::Rectangle<float> chip(L.slotBand.getX() + static_cast<float>(i) * L.slotW,
-                                    L.slotBand.getY(), L.slotW, L.slotBand.getHeight());
+        juce::Rectangle<float> chip(L.slots.x[i], L.slotBand.getY(),
+                                    L.slots.w[i], L.slotBand.getHeight());
         const auto inner = chip.reduced(3.0f, 2.0f);
         const bool used  = (i < model_.progLen);
         const bool cur   = (i == model_.progCurrent);
@@ -96,8 +96,8 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
     {
         const bool focusKey = (model_.harmonyFocus == 1);
         for (int i = 0; i < L.keysToShow; ++i) {
-            juce::Rectangle<float> chip(L.keyBand.getX() + static_cast<float>(i) * L.keyW,
-                                        L.keyBand.getY(), L.keyW, L.keyBand.getHeight());
+            juce::Rectangle<float> chip(L.keys.x[i], L.keyBand.getY(),
+                                        L.keys.w[i], L.keyBand.getHeight());
             const auto inner = chip.reduced(3.0f, 1.5f);
             const bool used  = (i < model_.keyLen);
             const bool cur   = (i == model_.keyCurrent);
@@ -158,7 +158,13 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         const juce::String ring (juce::CharPointer_UTF8("\xe2\x97\x8b"));  // ○ creux = délié
         const int nr   = juce::jlimit(0, 16, model_.numRows);
         const int cap  = juce::jmin(nr, 12);   // abrège au-delà de ~12 pour tenir en largeur
-        juce::String rowsLine = "Rows ";
+        // Le geste ⇧+blanche N regle le mode de la row POUR LA MESURE EDITEE, pas
+        // pour la row entiere. La ligne disait « Rows R1:A R2:A… » sans jamais le
+        // dire : on changeait de mesure, les lettres changeaient, et rien a l'ecran
+        // n'expliquait pourquoi. Le numero de mesure porte cette portee.
+        juce::String rowsLine = (model_.numBars > 1)
+            ? ("Mes " + juce::String(model_.editBar + 1) + " " + juce::String(juce::CharPointer_UTF8("\xc2\xb7")) + " rows ")
+            : juce::String("Rows ");
         for (int r = 0; r < cap; ++r) {
             const int m = model_.rows[static_cast<size_t>(r)].harmonyMode;  // 0=A 1=B1 2=B2 3=Chromatic
             const juce::String tag = (m == 3) ? ring : juce::String(harmonyModeShort(m));

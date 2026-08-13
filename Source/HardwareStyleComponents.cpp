@@ -312,9 +312,10 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
     if (model_.page == PatternScreenModel::Page::Harmony) {
         const HarmLayout L = computeHarmLayout(model_, bodyArea_);
         if (L.slotBand.contains(x, y)) {
-            int i = static_cast<int>((x - L.slotBand.getX()) / L.slotW);
-            i = juce::jlimit(0, L.slotsToShow - 1, i);
-            if (onHarmonySlot)
+            // Les cases n'ont plus la meme largeur (elles portent la duree) :
+            // diviser par un pas constant designerait le mauvais slot.
+            const int i = L.slots.atX(x);
+            if (i >= 0 && onHarmonySlot)
                 onHarmonySlot(i);
         }
         return;

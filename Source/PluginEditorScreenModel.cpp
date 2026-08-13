@@ -329,6 +329,21 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         subStep_ = juce::jlimit(0, sn - 1, subStep_);
     }
     m.subStep = subStep_;
+    // Tete de lecture du sub : uniquement si le sub qu'on EDITE est bien celui que
+    // la row hote joue en ce moment — sinon on montrerait la position d'un autre sub
+    // sur la grille affichee. Meme precaution que le playhead du roll (mesure editee
+    // == mesure jouee).
+    m.subPlayhead = -1;
+    if (inSub_ && m.subEditIdx >= 0 && playing) {
+        const int hr = juce::jlimit(0, juce::jmax(0, m.numRows - 1), subHostRow_);
+        const uint8_t hostStep = proc_.engine().currentStepForRow(static_cast<uint8_t>(hr));
+        const bool sameBar  = (editBar_ == static_cast<int>(proc_.engine().currentBar()));
+        const bool sameHost = (hostStep != 0xFF && static_cast<int>(hostStep) == subHostStep_);
+        const uint8_t ss = proc_.engine().currentSubStepForRow(static_cast<uint8_t>(hr));
+        if (sameBar && sameHost && ss != 0xFF
+            && ss < m.subs[static_cast<size_t>(m.subEditIdx)].numSteps)
+            m.subPlayhead = static_cast<int>(ss);
+    }
 
     // Page HARMONIE : progression d'accords du pattern.
     const auto& prog = pat.chordProgression;

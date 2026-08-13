@@ -108,6 +108,7 @@ struct PatternScreenModel {
     int     subHostRow  = 0;       // fil d'Ariane : row…
     int     subHostStep = 0;       // …et pas qui héberge le sub
     int     subHostNote = 60;      // note du pas hôte (ancre du piano-roll relatif)
+    int     subPlayhead = -1;      // sous-pas en cours de lecture, -1 = aucun
 
     // Page GLOBAL.
     juce::String ccSlotLabel[8];            // libellé des 8 slots de P-lock (page AUTO)
@@ -207,6 +208,12 @@ private:
     void paintPatternPage(juce::Graphics& g);
     void paintPianoRollPage(juce::Graphics& g);
     void paintSubRoll(juce::Graphics& g);   // piano-roll du sub (ligne d'ancrage si relatif)
+    /// Lanes de hauteur : teinte harmonique (ou repli touches noires), reperes Do/La,
+    /// separateurs. PARTAGE par le roll principal et le sub-roll — le sub ne teintait
+    /// que les Do, donc on editait un ornement sans aucune reference de gamme, une
+    /// mesure plus bas dans la meme hierarchie.
+    void paintPitchLanes(juce::Graphics& g, juce::Rectangle<float> plot,
+                         int topNote, int visibleLanes, float laneH);
     void paintHarmonyPage(juce::Graphics& g);
     void paintMeasureBand(juce::Graphics& g);   // bandeau de mesures (PATTERN/HARMONIE)
     void paintAutoPage(juce::Graphics& g);
