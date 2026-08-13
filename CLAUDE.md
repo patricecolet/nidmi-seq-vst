@@ -212,6 +212,13 @@ interop.
 - `setSteps(N)` (legacy) sets every row to N. For polyrhythmic patterns, use `setRowSteps(row, N)` per row.
 - When writing tests that call `tick(nowUs)` multiple times, **nowUs must be monotonic**. Driver resets its accumulator if it detects a time jump backwards.
 - Only **one** subpattern plays at a time globally in V1 (engine has a single `RunningSubPattern`). Multi-row parallel subpatterns require V2 refactor.
+- **`RowKind::CC` is data only — the engine never plays it.** `row.kind` is
+  written by `setRowKind()` and copied on clipboard ops, but
+  `SequencerEngine.cpp` **never reads it** to branch playback: a "CC row" emits
+  notes like any other. The only two CC emission sites are **macros**
+  (`setMacroValue`) and **P-locks** (`triggerRowStep` → `ccLocks[8]`). So today
+  the AUTO page is the *only* way to sequence a controller. No UI path sets
+  `kind` either — only `PatternValueTree` deserialisation does.
 - `ChainVM` (song mode) **is wired**: `SetSongMode` command, `advanceChainAtPatternLoop()` at the pattern loop edge (or at cadence resolution when the pattern has a chord progression), serialised in `PatternValueTree`, covered by the core tests (196 pass). Toggle lives on the SONG page, key index 4. What is still deferred to V2 is **simultaneous multi-pattern playback** — only one pattern plays at a time.
 - Default MIDI channel is **one per row** (row 0 → ch 1, … row 15 → ch 16), set in the `Pattern` constructor. `PatternRow`'s own default is 0, so without it every row spoke on channel 1 — useless for a multitrack sequencer driving several machines.
 
