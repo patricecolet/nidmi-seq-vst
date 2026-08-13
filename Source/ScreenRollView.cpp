@@ -28,29 +28,47 @@ void PatternScreen::paintPitchLanes(juce::Graphics& g, juce::Rectangle<float> pl
         const int pc = ((note % 12) + 12) % 12;
 
         if (model_.harmonyActive) {
-            // Lecture HARMONIQUE : ce qui ressort, c'est ce qui sonne juste.
-            // Hors gamme -> creuse ; dans la gamme -> neutre ; note de l'accord
-            // courant -> ressort ; fondamentale de l'accord -> le plus marque.
+            // Lecture HARMONIQUE, sur DEUX axes independants :
+            //   - la GAMME sur un axe NEUTRE (gris), du fond vers le clair ;
+            //   - l'ACCORD sur l'axe VERT, par-dessus.
+            //
+            // La gamme etait codee par l'ABSENCE : les notes de la gamme n'etaient
+            // pas peintes, les autres assombries. Mesure a l'ecran, ca donnait un
+            // ecart de 3 niveaux (7,8,7 hors gamme contre 10,12,10 dedans) quand
+            // l'accord en avait 28 — la gamme etait dessinee mais invisible. On ne
+            // peut pas encoder vers le bas a partir d'un fond deja quasi noir : il
+            // n'y a pas de marge sous le noir. C'est le fond qui redevient « hors
+            // gamme », et la gamme qui monte.
             const bool inScale  = (model_.scaleMask & (1 << pc)) != 0;
             const bool inChord  = (model_.chordMask & (1 << pc)) != 0;
             const bool isChordR = (pc == model_.chordRootPc);
             const bool isKeyR   = (pc == model_.keyRootPc);
 
-            // Une lane dans la gamme mais hors de l'accord n'est PAS peinte :
-            // c'est le fond neutre, ce qui laisse ressortir les trois autres cas.
+            // Socle NEUTRE de la gamme, pose en premier : gris, donc il ne rentre
+            // pas en concurrence avec le vert de l'accord — les deux informations
+            // se lisent en meme temps au lieu de se disputer la luminosite.
+            //
+            // Valeurs calees sur la luminance obtenue apres compositing, pas au
+            // juge : 0.08 met la frontiere de gamme a 19,3 (contre 3,7 avant) et
+            // laisse celle de l'accord a 21,2 (contre 24,0) — la gamme devient
+            // lisible sans rien retirer a l'accord. La tonique est a 0,12 et pas
+            // plus : au-dela elle passait devant une note de l'accord. L'echelle
+            // finale est monotone — hors gamme 11 < gamme 31 < tonique 41 <
+            // accord 52 < fondamentale 70.
+            if (inScale) {
+                g.setColour(juce::Colours::white.withAlpha(isKeyR ? 0.12f : 0.08f));
+                g.fillRect(lane);
+            }
+            // Puis l'ACCORD par-dessus, sur l'axe vert, inchange : il marchait.
             if (isChordR) {
                 g.setColour(kRowLabel.withAlpha(0.26f));
                 g.fillRect(lane);
             } else if (inChord) {
                 g.setColour(kRowLabel.withAlpha(0.14f));
                 g.fillRect(lane);
-            } else if (!inScale) {
-                g.setColour(juce::Colours::black.withAlpha(0.34f));
-                g.fillRect(lane);
-            } else if (isKeyR) {
-                g.setColour(kCellGrid);
-                g.fillRect(lane);
             }
+            // Hors gamme : rien. Le fond nu est desormais le creux, et il est
+            // franchement plus bas que le socle de la gamme.
         } else if ((note % 12) == 0) {
             g.setColour(kCellGrid);
             g.fillRect(lane);
