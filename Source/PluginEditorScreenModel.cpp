@@ -142,6 +142,11 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.global[static_cast<size_t>(kGlobalRowMode)].value =
             proc_.engine().songMode() ? "Song" : "Pattern";
     }
+    if (m.numGlobalParams > kGlobalRowCCBudget) {   // ligne = debit des lanes
+        m.global[static_cast<size_t>(kGlobalRowCCBudget)].name  = "Debit CC";
+        m.global[static_cast<size_t>(kGlobalRowCCBudget)].value =
+            ccBudgetLabel(static_cast<int>(proc_.engine().ccRateBudget()));
+    }
     if (m.numGlobalParams > kGlobalRowProfile) {   // ligne = profil d'appareil
         m.global[static_cast<size_t>(kGlobalRowProfile)].name  = "Profil";
         m.global[static_cast<size_t>(kGlobalRowProfile)].value = prof.name();

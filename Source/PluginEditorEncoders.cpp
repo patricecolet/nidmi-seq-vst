@@ -82,6 +82,16 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
                                    juce::dontSendNotification);
         return;
     }
+    // Entree virtuelle « Debit CC » : budget global d'interpolation.
+    if (oledParamIndex_ == kGlobalRowCCBudget) {
+        const int idx = ccBudgetIndexOf(static_cast<int>(proc_.engine().ccRateBudget()));
+        valueEncoder_.setRange(0.0, static_cast<double>(kNumCCBudgetChoices - 1), 1.0);
+        valueEncoder_.setValue(static_cast<double>(idx), juce::dontSendNotification);
+        scaleDrag(kNumCCBudgetChoices - 1);
+        valueEncoderLabel_.setText(ccBudgetLabel(kCCBudgetChoices[idx]),
+                                   juce::dontSendNotification);
+        return;
+    }
     // Entree virtuelle « Profil » : profil d'appareil (nommage des CC).
     if (oledParamIndex_ == kGlobalRowProfile) {
         const int n   = juce::jmax(1, DeviceProfile::count());

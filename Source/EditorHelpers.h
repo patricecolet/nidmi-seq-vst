@@ -31,11 +31,38 @@ enum GlobalRow : int {
     kGlobalRowPattern,                    // pattern actif de la banque
     kGlobalRowBars,                       // nombre de mesures du pattern
     kGlobalRowMode,                       // Pattern <-> Song
+    kGlobalRowCCBudget,                   // debit max des lanes d'automation
     kGlobalRowProfile,                    // profil d'appareil
     kGlobalRowResetMappings,              // action, au push
     kGlobalRowResetValues,                // action, au push
     kGlobalRowCount                       // nombre total de lignes de la page
 };
+
+// Budget d'interpolation CC, en messages par seconde. Choix discrets plutot
+// qu'une plage 0..65535 : a l'encodeur, ce sont les ORDRES DE GRANDEUR qui
+// comptent, et ils sont dictes par le bus.
+//
+//   MIDI DIN : 31250 bauds / 10 bits par octet / 3 octets par CC = 1041 msg/s
+//   USB MIDI : plusieurs milliers, sans difficulte
+//
+// 0 = illimite. Le moteur ne connait pas la topologie : si les rows partent
+// vers des ports differents, chacun a son budget et le plafond global est trop
+// severe — c'est a l'utilisateur de le dire ici.
+inline constexpr int kCCBudgetChoices[] = {0, 250, 500, 1000, 2000, 5000, 10000};
+inline constexpr int kNumCCBudgetChoices =
+    static_cast<int>(std::size(kCCBudgetChoices));
+
+inline juce::String ccBudgetLabel(int v) {
+    if (v == 0)    return "Illimite";
+    if (v == 1000) return "1000 (DIN)";
+    return juce::String(v) + "/s";
+}
+
+inline int ccBudgetIndexOf(int v) {
+    for (int i = 0; i < kNumCCBudgetChoices; ++i)
+        if (kCCBudgetChoices[i] == v) return i;
+    return 3;   // 1000, le defaut du moteur
+}
 
 inline constexpr const char* kRoman[] = {"I", "II", "III", "IV", "V", "VI", "VII"};
 

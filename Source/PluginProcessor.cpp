@@ -504,6 +504,10 @@ void NidmiSeqAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     // registre ne doit pas renommer les CC d'un projet deja enregistre.
     root.setProperty("deviceProfile",
                      DeviceProfile::byIndex(deviceProfileIndex_).name(), nullptr);
+    // Budget d'interpolation CC : reglage de PROJET, dicte par le cablage de
+    // l'utilisateur, pas par le pattern. Il vit donc ici et non dans
+    // PatternValueTree, pour survivre a un changement de pattern.
+    root.setProperty("ccRateBudget", static_cast<int>(engine_.ccRateBudget()), nullptr);
     root.appendChild(apvts_.copyState(), nullptr);
     // Le pattern actif fait foi (bank_[active] peut être périmé entre deux switches) :
     // on le resynchronise dans la banque avant de tout sérialiser.
@@ -526,6 +530,9 @@ void NidmiSeqAudioProcessor::setStateInformation(const void* data, int sizeInByt
             DeviceProfile::indexOfName(root.getProperty("deviceProfile").toString());
         rebuildLearnMap();
     }
+    if (root.hasProperty("ccRateBudget"))
+        engine_.setCCRateBudget(static_cast<uint16_t>(
+            juce::jlimit(0, 65535, static_cast<int>(root.getProperty("ccRateBudget")))));
 
     for (int i = 0; i < root.getNumChildren(); ++i) {
         juce::ValueTree c = root.getChild(i);
