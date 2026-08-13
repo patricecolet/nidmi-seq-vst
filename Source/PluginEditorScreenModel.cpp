@@ -124,6 +124,17 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         m.global[static_cast<size_t>(kGlobalRowCCNum)].value =
             isCC ? prof.label(cc) : ("(" + prof.label(cc) + ")");
     }
+    if (m.numGlobalParams > kGlobalRowCCInterp) {   // ligne = lissage de la lane
+        const int sr = (pat.numRows > 0) ? juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_) : 0;
+        const bool isCC = (pat.numRows > 0) && (pat.rows[static_cast<size_t>(sr)].kind == RowKind::CC);
+        const int  mode = (pat.numRows > 0)
+                            ? static_cast<int>(pat.rows[static_cast<size_t>(sr)].ccInterp) : 0;
+        m.global[static_cast<size_t>(kGlobalRowCCInterp)].name  = "Interp R" + juce::String(sr + 1);
+        // Entre parentheses sur une row Note : le reglage existe, il ne sert pas.
+        m.global[static_cast<size_t>(kGlobalRowCCInterp)].value =
+            isCC ? juce::String(ccInterpName(mode))
+                 : ("(" + juce::String(ccInterpName(mode)) + ")");
+    }
     if (m.numGlobalParams > kGlobalRowPattern) {   // ligne = pattern actif de la banque
         const int ap = static_cast<int>(proc_.engine().activePatternIndex()) + 1;
         m.global[static_cast<size_t>(kGlobalRowPattern)].name  = "Pattern";

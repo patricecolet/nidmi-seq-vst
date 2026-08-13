@@ -105,6 +105,7 @@ juce::ValueTree buildPatternNode(const Pattern& p, int idx) {
         row.setProperty("ns", p.rows[r].numSteps, nullptr);
         row.setProperty("k", static_cast<int>(p.rows[r].kind), nullptr);
         row.setProperty("cc", p.rows[r].ccNumber, nullptr);
+        row.setProperty("ci", static_cast<int>(p.rows[r].ccInterp), nullptr);
         // Mode harmonique PAR MESURE (hm0..hm3). hm0 sert aussi de marqueur de version :
         // un ancien projet n'a que "hm" (unique) → migré sur toutes les mesures au chargement.
         for (uint8_t bar = 0; bar < kMaxBars; ++bar)
@@ -512,6 +513,13 @@ void applyPatternNode(SequencerEngine& engine, const juce::ValueTree& node, int6
                 c.id = SequencerCommandId::SetRowCCNumber;
                 c.a  = r;
                 c.b  = static_cast<uint8_t>(static_cast<int>(row.getProperty("cc", 74)));
+                SequencerCommandApi::dispatch(engine, c, nowUs);
+            }
+            {
+                c    = SequencerCommand{};
+                c.id = SequencerCommandId::SetRowCCInterp;
+                c.a  = r;
+                c.b  = static_cast<uint8_t>(static_cast<int>(row.getProperty("ci", 0)));
                 SequencerCommandApi::dispatch(engine, c, nowUs);
             }
             // Mode harmonique PAR MESURE (hm0..hm3). Ancien projet (clé "hm" unique, sans hm0)

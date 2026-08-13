@@ -28,6 +28,7 @@ enum GlobalRow : int {
     kGlobalRowChannel = kNumOledParams,   // canal MIDI de la row selectionnee
     kGlobalRowKind,                       // Note <-> CC : type de la row
     kGlobalRowCCNum,                      // destination CC, si la row est en CC
+    kGlobalRowCCInterp,                   // lissage entre pas de la lane
     kGlobalRowPattern,                    // pattern actif de la banque
     kGlobalRowBars,                       // nombre de mesures du pattern
     kGlobalRowMode,                       // Pattern <-> Song
@@ -62,6 +63,12 @@ inline int ccBudgetIndexOf(int v) {
     for (int i = 0; i < kNumCCBudgetChoices; ++i)
         if (kCCBudgetChoices[i] == v) return i;
     return 3;   // 1000, le defaut du moteur
+}
+
+// Modes de lissage d'une lane, alignes sur CCInterp (StepTypes.h).
+inline const char* ccInterpName(int mode) {
+    static const char* kN[3] = {"Step", "Lineaire", "Douce"};
+    return kN[juce::jlimit(0, 2, mode)];
 }
 
 inline constexpr const char* kRoman[] = {"I", "II", "III", "IV", "V", "VI", "VII"};
