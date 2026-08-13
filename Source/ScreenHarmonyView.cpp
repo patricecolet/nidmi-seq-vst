@@ -15,11 +15,20 @@ void PatternScreen::paintHarmonyPage(juce::Graphics& g) {
         auto info = L.info;
         const float lineH = info.getHeight() / 3.0f;
 
-        // Ligne A : tonalité effective.
+        // Ligne A : tonalité effective, ET D'OU ELLE VIENT.
+        //
+        // La lane de tonalite prime absolument des qu'elle a un marqueur : la
+        // tonique du pattern (et celle du master) devient inerte. Sans le dire, on
+        // tourne l'encodeur « Tonique » sans comprendre pourquoi « Key: » ne bouge
+        // pas. La source est maintenant ecrite a cote de la valeur.
+        const juce::String keySrc = (model_.keyLen > 0)
+                                        ? juce::String(" (lane)")
+                                        : (model_.followMasterTonality ? juce::String(" (master)")
+                                                                       : juce::String(" (pattern)"));
         g.setColour(kHeaderText);
         g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
         g.drawText("Key: " + pitchClassName(model_.harmonyRootPc) + " " + scaleNameShort(model_.harmonyScaleId)
-                       + (model_.followMasterTonality ? juce::String(" (master)") : juce::String()),
+                       + keySrc,
                    info.removeFromTop(lineH), juce::Justification::centredLeft);
 
         // Ligne B : mode harmonique partagé + nombre de rows liées (mode != Chromatic).

@@ -978,7 +978,29 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
         {
             // HARMONIE : Enc4 = Tonique (push →Gamme = Gamme). Relatif, wrap modulo 12.
             // (Harmonie ON/OFF est sur le bouton « Harm » dédié — plus de ⇧Enc4.)
-            // Édite la SOURCE ACTIVE : master (si followMasterTonality) sinon le pattern.
+            //
+            // La LANE DE TONALITE PRIME des qu'elle a un marqueur : currentKey()
+            // ecrase root/scale du pattern, et applyHarmony() passe par elle — donc
+            // pattern.harmony.rootPc ne pilote plus RIEN, ni l'ecran ni le son. On
+            // tournait l'encodeur, l'etiquette affichait « Tonique D# », et « Key: »
+            // restait obstinement en do avec les degres de do : la molette ecrivait
+            // dans une valeur que plus personne ne lit. Elle edite donc le marqueur
+            // courant quand la lane existe, et ne retombe sur pattern/master que
+            // lorsque la lane est vide.
+            if (proc_.engine().pattern().keyProgression.len > 0) {
+                const auto& kp = proc_.engine().pattern().keyProgression;
+                const int   kc = juce::jlimit(0, static_cast<int>(kp.len) - 1, keyCursor_);
+                const auto& k  = kp.slots[static_cast<size_t>(kc)];
+                keyCursor_ = kc;
+                if (harmZoomScale_) {
+                    const int n = juce::jmax(1, static_cast<int>(scalebank::Count));
+                    setKeyField(1, ((static_cast<int>(k.scaleId) + dir) % n + n) % n);
+                } else {
+                    setKeyField(0, ((static_cast<int>(k.rootPc) + dir) % 12 + 12) % 12);
+                }
+                applyEncoderConfigForState();
+                return;
+            }
             const auto& ph    = proc_.engine().pattern().harmony;
             const auto& ps    = proc_.engine().projectSettings();
             const bool  toMas = ph.followMasterTonality;

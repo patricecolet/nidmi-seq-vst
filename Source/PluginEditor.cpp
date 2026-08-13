@@ -586,18 +586,31 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     if (screenPage_ == PatternScreenModel::Page::PianoRoll)
         zoomEncoderLabel_.setText("Zoom " + juce::String(rollOctaves_) + "oct", juce::dontSendNotification);
     else if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        // Enc4 = Tonique (ou Gamme si push →Gamme actif), lue sur la source effective.
+        // Enc4 = Tonique (ou Gamme si push →Gamme actif), lue sur la source EFFECTIVE.
         // (Harmonie ON/OFF = bouton « Harm » dédié, plus de ⇧Enc4.)
+        //
+        // « Effective » veut dire : la LANE DE TONALITE d'abord, car currentKey()
+        // lui donne la priorite absolue des qu'elle a un marqueur. L'etiquette lisait
+        // pattern/master et affichait donc « Tonique D# » pendant que « Key: » — et
+        // le son — restaient en do. Meme source que l'ecriture, sinon la molette et
+        // son etiquette racontent deux choses differentes.
         const auto& ph     = proc_.engine().pattern().harmony;
         const auto& ps     = proc_.engine().projectSettings();
+        const auto& kp     = proc_.engine().pattern().keyProgression;
         const bool  toMas  = ph.followMasterTonality;
+        const bool  toLane = (kp.len > 0);
+        const int   kc     = juce::jlimit(0, juce::jmax(0, static_cast<int>(kp.len) - 1), keyCursor_);
         if (harmZoomScale_) {
-            const int sc = toMas ? static_cast<int>(ps.masterScaleId) : static_cast<int>(ph.scaleId);
+            const int sc = toLane ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].scaleId)
+                         : toMas  ? static_cast<int>(ps.masterScaleId)
+                                  : static_cast<int>(ph.scaleId);
             zoomEncoderLabel_.setText(juce::String("Gamme ") + scalebank::getScale(static_cast<uint8_t>(
                 juce::jlimit(0, static_cast<int>(scalebank::Count) - 1, sc))).name,
                 juce::dontSendNotification);
         } else {
-            const int rp = toMas ? static_cast<int>(ps.masterRootPc) : static_cast<int>(ph.rootPc);
+            const int rp = toLane ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].rootPc)
+                         : toMas  ? static_cast<int>(ps.masterRootPc)
+                                  : static_cast<int>(ph.rootPc);
             static const char* kPc[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
             zoomEncoderLabel_.setText(juce::String("Tonique ") + kPc[juce::jlimit(0, 11, rp)],
                                       juce::dontSendNotification);
