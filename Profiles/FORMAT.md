@@ -118,6 +118,41 @@ potard de ton contrôleur à un paramètre**. C'est du mapping d'entrée, pas de
 découverte. Le champ marche pour les deux familles, mais le geste qui le
 remplit diffère.
 
+## Coût mémoire — pour le portage ESP32
+
+Sur bureau la question ne se pose pas. Sur ESP32-S3 elle mérite un chiffre,
+d'autant qu'il est **borné** : un profil décrit des CC, et MIDI n'en définit que
+**128**. Le pire cas est donc calculable, sans connaître le synthé.
+
+Coût d'un profil en RAM, structure embarquée compacte (pas de `juce::String`) :
+
+| Paramètres | `char[]` fixes, 48 o/param | blob + offsets, 16 o/param |
+|---|---|---|
+| 21 — Kobol Expander | 1,0 Ko | 0,8 Ko |
+| 63 — Waldorf Blofeld | 3,0 Ko | 2,5 Ko |
+| **128 — plafond MIDI** | **6,0 Ko** | 5,1 Ko |
+
+Pour une collection entière :
+
+| Stratégie | 10 synthés | 50 | 128 |
+|---|---|---|---|
+| Tout charger au démarrage (ce que fait le VST) | 30 Ko | 150 Ko | **384 Ko** |
+| Charger le profil actif + les noms pour le sélecteur | 3,3 Ko | 4,6 Ko | **7,0 Ko** |
+
+**Un seul pattern de la grille pèse 205 Ko**, soit 34 profils au plafond MIDI.
+Même la stratégie naïve tient dans 4,7 % des 8 Mo de PSRAM d'une N16R8. Le
+chargement paresseux n'est utile que sur une carte **sans** PSRAM.
+
+## Synthés multitimbraux
+
+Le format décrit **une partie**, pas un instrument entier. Sur un synthé
+multitimbral — le Waldorf M, cible du cahier — le même CC sur un canal
+différent adresse une autre partie.
+
+Rien de spécial à prévoir : **c'est le canal de la row qui décide de la
+partie**. Le même profil sert 4 rows sur 4 canaux, et le format reste
+inchangé. Il n'a donc aucune notion de canal, délibérément.
+
 ## Coordonnées
 
 Tout est normalisé `0..1` sur le panneau, **jamais en pixels**. Une position
