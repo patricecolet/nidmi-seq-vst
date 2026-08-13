@@ -2,92 +2,80 @@
   "schema": 2,
   "name": "Waldorf M",
   "manufacturer": "Waldorf",
-
+  "sync": {
+    "ccOnEdit": true,
+    "dump": "manual",
+    "dumpFormat": "waldorf-microwave-1",
+    "dumpOverwritesStoredProgram": true,
+    "_comment": "ccOnEdit : le M emet un CC quand on bouge un controle de facade (manuel p. 82), donc le vrai MIDI learn est possible et l'editeur reste synchrone APRES un premier accord. dump = manual : il sait envoyer son etat complet, mais seulement depuis son menu System > Operations > Send Current Sound (SYSEX) — aucune demande de dump n'est documentee, l'editeur ne peut PAS l'interroger. dumpOverwritesStoredProgram : DANGER — recevoir un sysex de son ecrase immediatement le programme selectionne sur la machine, pas seulement le tampon d'edition. Ne jamais envoyer de dump sans confirmation explicite."
+  },
   "_source": "M User Manual, appendice « MIDI CC Messages Support », p. 82. 47 CC. Le manuel precise que le M reprend la disposition CC classique des Microwave II / XT, avec l'ajout du CC 63 pour la wavetable de l'OSC2 : ce profil sert donc aussi ces machines.",
-
   "_learn": "Le M EMET un CC quand on bouge un controle de facade (manuel p. 82). Le vrai MIDI learn est donc possible : bouger le potard du synthe, le profil apprend. C'est l'inverse du Kobol, qui n'emet rien.",
-
   "_defaults": "ATTENTION — le champ 'default' n'est PAS documente par Waldorf. Les valeurs ci-dessous sont un point de depart raisonnable : 64 pour les parametres bipolaires (le centre), des niveaux plausibles ailleurs. A verifier sur la machine avant de se fier au bouton « Reset valeurs ».",
-
   "panel": {
     "image": null,
     "aspect": 0,
     "_comment": "Pas de photo : le rendu est schematique, section par section. Le format le permet, c'est deliberé.",
     "sections": [
-      { "id": "osc1",  "name": "OSC 1",   "rect": [0, 0, 0, 0] },
-      { "id": "osc2",  "name": "OSC 2",   "rect": [0, 0, 0, 0] },
-      { "id": "wave",  "name": "Wave",    "rect": [0, 0, 0, 0] },
-      { "id": "mix",   "name": "Mixer",   "rect": [0, 0, 0, 0] },
-      { "id": "vcf",   "name": "VCF",     "rect": [0, 0, 0, 0] },
-      { "id": "vca",   "name": "VCA",     "rect": [0, 0, 0, 0] },
-      { "id": "lfo",   "name": "LFO",     "rect": [0, 0, 0, 0] },
-      { "id": "freeeg","name": "Free EG", "rect": [0, 0, 0, 0] },
-      { "id": "glide", "name": "Glide",   "rect": [0, 0, 0, 0] }
+      { "id": "osc1", "name": "OSC 1", "rect": [0, 0, 0, 0] },
+      { "id": "osc2", "name": "OSC 2", "rect": [0, 0, 0, 0] },
+      { "id": "wave", "name": "Wave", "rect": [0, 0, 0, 0] },
+      { "id": "mix", "name": "Mixer", "rect": [0, 0, 0, 0] },
+      { "id": "vcf", "name": "VCF", "rect": [0, 0, 0, 0] },
+      { "id": "vca", "name": "VCA", "rect": [0, 0, 0, 0] },
+      { "id": "lfo", "name": "LFO", "rect": [0, 0, 0, 0] },
+      { "id": "freeeg", "name": "Free EG", "rect": [0, 0, 0, 0] },
+      { "id": "glide", "name": "Glide", "rect": [0, 0, 0, 0] }
     ]
   },
-
   "parameters": [
-    { "cc":  5, "short": "Glide",  "name": "Glide Rate",        "group": "Mod", "section": "glide", "type": "knob",   "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 65, "short": "GlidOn", "name": "Glide Enable",      "group": "Mod", "section": "glide", "type": "switch", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-
-    { "cc": 14, "short": "F Atk",  "name": "EG1 VCF Attack",    "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 15, "short": "F Dec",  "name": "EG1 VCF Decay",     "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 16, "short": "F Sus",  "name": "EG1 VCF Sustain",   "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 90, "bipolar": false },
-    { "cc": 17, "short": "F Rel",  "name": "EG1 VCF Release",   "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 40, "bipolar": false },
-
-    { "cc": 18, "short": "A Atk",  "name": "EG2 VCA Attack",    "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 19, "short": "A Dec",  "name": "EG2 VCA Decay",     "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 20, "short": "A Sus",  "name": "EG2 VCA Sustain",   "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100,"bipolar": false },
-    { "cc": 21, "short": "A Rel",  "name": "EG2 VCA Release",   "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 40, "bipolar": false },
-
-    { "cc": 24, "short": "L1Rate", "name": "LFO1 Rate",         "group": "LFO", "section": "lfo", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 25, "short": "L1Shap", "name": "LFO1 Shape",        "group": "LFO", "section": "lfo", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 26, "short": "L2Rate", "name": "LFO2 Rate",         "group": "LFO", "section": "lfo", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 28, "short": "L2Shap", "name": "LFO2 Shape",        "group": "LFO", "section": "lfo", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-
-    { "cc": 33, "short": "O1 Oct", "name": "OSC1 Octave",       "group": "VCO", "section": "osc1", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 34, "short": "O1 Sem", "name": "OSC1 Semitone",     "group": "VCO", "section": "osc1", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 35, "short": "O1 Det", "name": "OSC1 Detune",       "group": "VCO", "section": "osc1", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
-
-    { "cc": 38, "short": "O2 Oct", "name": "OSC2 Octave",       "group": "VCO", "section": "osc2", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 39, "short": "O2 Sem", "name": "OSC2 Semitone",     "group": "VCO", "section": "osc2", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 40, "short": "O2 Det", "name": "OSC2 Detune",       "group": "VCO", "section": "osc2", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
-    { "cc": 41, "short": "O2Sync", "name": "OSC2 Sync to OSC1", "group": "VCO", "section": "osc2", "type": "switch",   "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-
-    { "cc": 45, "short": "Lvl O1", "name": "OSC1 Level",        "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
-    { "cc": 46, "short": "Lvl O2", "name": "OSC2 Level",        "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
-    { "cc": 47, "short": "Lvl Rm", "name": "Ringmod Level",     "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,   "bipolar": false },
-    { "cc": 48, "short": "Lvl Nz", "name": "Noise Level",       "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,   "bipolar": false },
-
-    { "cc": 50, "short": "Cutoff", "name": "VCF Cutoff",        "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 90, "bipolar": false },
-    { "cc": 56, "short": "Reso",   "name": "VCF Resonance",     "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 51, "short": "F Ktrk", "name": "VCF Keytrack",      "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 52, "short": "F EGAm", "name": "VCF EG Amount",     "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 53, "short": "F EGVl", "name": "VCF EG Velocity",   "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
-
-    { "cc": 57, "short": "Volume", "name": "Master Volume",     "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
-    { "cc": 58, "short": "A EGAm", "name": "VCA EG Amount",     "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64,  "bipolar": false },
-    { "cc": 59, "short": "A EGVl", "name": "VCA EG Velocity",   "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64,  "bipolar": true },
-
-    { "cc": 70, "short": "WT O1",  "name": "Wavetable OSC1",    "group": "Wave", "section": "wave", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 71, "short": "Wav O1", "name": "Wave OSC1",         "group": "Wave", "section": "wave", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 63, "short": "WT O2",  "name": "Wavetable OSC2",    "group": "Wave", "section": "wave", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 78, "short": "Wav O2", "name": "Wave OSC2",         "group": "Wave", "section": "wave", "type": "knob",     "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
+    { "cc": 5, "short": "Glide", "name": "Glide Rate", "group": "Mod", "section": "glide", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 65, "short": "GlidOn", "name": "Glide Enable", "group": "Mod", "section": "glide", "type": "switch", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 14, "short": "F Atk", "name": "EG1 VCF Attack", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 15, "short": "F Dec", "name": "EG1 VCF Decay", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 16, "short": "F Sus", "name": "EG1 VCF Sustain", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 90, "bipolar": false },
+    { "cc": 17, "short": "F Rel", "name": "EG1 VCF Release", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 40, "bipolar": false },
+    { "cc": 18, "short": "A Atk", "name": "EG2 VCA Attack", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 19, "short": "A Dec", "name": "EG2 VCA Decay", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 20, "short": "A Sus", "name": "EG2 VCA Sustain", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
+    { "cc": 21, "short": "A Rel", "name": "EG2 VCA Release", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 40, "bipolar": false },
+    { "cc": 24, "short": "L1Rate", "name": "LFO1 Rate", "group": "LFO", "section": "lfo", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 25, "short": "L1Shap", "name": "LFO1 Shape", "group": "LFO", "section": "lfo", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 26, "short": "L2Rate", "name": "LFO2 Rate", "group": "LFO", "section": "lfo", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 28, "short": "L2Shap", "name": "LFO2 Shape", "group": "LFO", "section": "lfo", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 33, "short": "O1 Oct", "name": "OSC1 Octave", "group": "VCO", "section": "osc1", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 34, "short": "O1 Sem", "name": "OSC1 Semitone", "group": "VCO", "section": "osc1", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 35, "short": "O1 Det", "name": "OSC1 Detune", "group": "VCO", "section": "osc1", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
+    { "cc": 38, "short": "O2 Oct", "name": "OSC2 Octave", "group": "VCO", "section": "osc2", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 39, "short": "O2 Sem", "name": "OSC2 Semitone", "group": "VCO", "section": "osc2", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 40, "short": "O2 Det", "name": "OSC2 Detune", "group": "VCO", "section": "osc2", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
+    { "cc": 41, "short": "O2Sync", "name": "OSC2 Sync to OSC1", "group": "VCO", "section": "osc2", "type": "switch", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 45, "short": "Lvl O1", "name": "OSC1 Level", "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
+    { "cc": 46, "short": "Lvl O2", "name": "OSC2 Level", "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
+    { "cc": 47, "short": "Lvl Rm", "name": "Ringmod Level", "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 48, "short": "Lvl Nz", "name": "Noise Level", "group": "Mix", "section": "mix", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 50, "short": "Cutoff", "name": "VCF Cutoff", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 90, "bipolar": false },
+    { "cc": 56, "short": "Reso", "name": "VCF Resonance", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 51, "short": "F Ktrk", "name": "VCF Keytrack", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 52, "short": "F EGAm", "name": "VCF EG Amount", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 53, "short": "F EGVl", "name": "VCF EG Velocity", "group": "VCF", "section": "vcf", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
+    { "cc": 57, "short": "Volume", "name": "Master Volume", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 100, "bipolar": false },
+    { "cc": 58, "short": "A EGAm", "name": "VCA EG Amount", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 59, "short": "A EGVl", "name": "VCA EG Velocity", "group": "VCA", "section": "vca", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
+    { "cc": 70, "short": "WT O1", "name": "Wavetable OSC1", "group": "Wave", "section": "wave", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 71, "short": "Wav O1", "name": "Wave OSC1", "group": "Wave", "section": "wave", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 63, "short": "WT O2", "name": "Wavetable OSC2", "group": "Wave", "section": "wave", "type": "selector", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 78, "short": "Wav O2", "name": "Wave OSC2", "group": "Wave", "section": "wave", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
     { "cc": 73, "short": "WEG O1", "name": "Wave EG to Wave OSC1", "group": "Wave", "section": "wave", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
     { "cc": 79, "short": "WEG O2", "name": "Wave EG to Wave OSC2", "group": "Wave", "section": "wave", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": true },
-
-    { "cc": 85, "short": "FE T1",  "name": "Free EG Time 1",       "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 86, "short": "FE L1",  "name": "Free EG Level 1",      "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 87, "short": "FE T2",  "name": "Free EG Time 2",       "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 88, "short": "FE L2",  "name": "Free EG Level 2",      "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
-    { "cc": 89, "short": "FE T3",  "name": "Free EG Time 3",       "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false },
-    { "cc": 90, "short": "FE Sus", "name": "Free EG Sustain Level","group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 85, "short": "FE T1", "name": "Free EG Time 1", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 86, "short": "FE L1", "name": "Free EG Level 1", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 87, "short": "FE T2", "name": "Free EG Time 2", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 88, "short": "FE L2", "name": "Free EG Level 2", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
+    { "cc": 89, "short": "FE T3", "name": "Free EG Time 3", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false },
+    { "cc": 90, "short": "FE Sus", "name": "Free EG Sustain Level", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 64, "bipolar": false },
     { "cc": 91, "short": "FE RlT", "name": "Free EG Release Time", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 40, "bipolar": false },
-    { "cc": 92, "short": "FE RlL", "name": "Free EG Release Level","group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0,  "bipolar": false }
+    { "cc": 92, "short": "FE RlL", "name": "Free EG Release Level", "group": "EG", "section": "freeeg", "type": "knob", "pos": null, "size": 0.045, "wired": true, "learn": null, "default": 0, "bipolar": false }
   ],
-
-  "_incertitudes": [
-    "CC 89 : le manuel imprime « Free EG Time 2 » pour 89 alors que 87 porte deja ce nom. Transcrit ici en « Free EG Time 3 », lecture la plus probable d'une coquille. A verifier sur la machine.",
-    "bipolar : l'asterisque du manuel marque les parametres -64..0..+63 remappes en 0..127. Son rattachement est ambigu dans la mise en page pour CC 52 (VCF EG Amount), 58 (VCA EG Amount) et 73 (Wave EG to OSC1), de meme nature que leurs voisins marques. Laisses a false faute de certitude."
-  ]
+  "_incertitudes": ["CC 89 : le manuel imprime « Free EG Time 2 » pour 89 alors que 87 porte deja ce nom. Transcrit ici en « Free EG Time 3 », lecture la plus probable d'une coquille. A verifier sur la machine.", "bipolar : l'asterisque du manuel marque les parametres -64..0..+63 remappes en 0..127. Son rattachement est ambigu dans la mise en page pour CC 52 (VCF EG Amount), 58 (VCA EG Amount) et 73 (Wave EG to OSC1), de meme nature que leurs voisins marques. Laisses a false faute de certitude."]
 }

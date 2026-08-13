@@ -168,6 +168,70 @@ Il illustre deux choses que le Kobol ne montre pas — un profil **sans image**,
 et un synthé qui **émet** du MIDI quand on bouge ses potards, donc où le vrai
 learn est possible.
 
+## Rester d'accord avec la machine — `sync`
+
+Le problème central de tout éditeur de synthé matériel : **l'utilisateur charge
+un preset sur la machine, et les potards de l'éditeur ne correspondent plus à
+rien.** Il n'y a pas de solution générale — ce que l'on peut faire dépend
+entièrement de ce que l'appareil sait dire de lui-même.
+
+```json
+"sync": {
+  "ccOnEdit": true,
+  "dump": "manual",
+  "dumpFormat": "waldorf-microwave-1",
+  "dumpOverwritesStoredProgram": true
+}
+```
+
+| Champ | Ce qu'il change |
+|---|---|
+| `ccOnEdit` | l'appareil émet un CC quand on bouge un contrôle de façade. Si oui, l'éditeur **reste** synchrone après un premier accord, et le vrai MIDI learn est possible |
+| `dump` | `none` · `manual` · `request` — voir ci-dessous |
+| `dumpFormat` | le codage du dump, à décoder pour en tirer les valeurs |
+| `dumpOverwritesStoredProgram` | **danger** : envoyer un dump écrase un preset mémorisé |
+
+### Les trois cas de `dump`
+
+**`none`** — rien à lire. Le Kobol n'a aucune sortie MIDI : il n'émet rien, ne
+dumpe rien. **L'état de l'éditeur *est* la vérité**, il n'y a rien à
+synchroniser. C'est le cas le plus simple, et celui de la plupart des synthés
+d'avant 1983.
+
+**`manual`** — l'appareil sait envoyer son état complet, mais seulement depuis
+**son propre menu**. C'est le cas du Waldorf M : *System > Operations > Send
+Current Sound (SYSEX)*. Son manuel ne documente **aucune demande de dump** —
+l'éditeur ne peut donc pas l'interroger. Il doit demander à l'utilisateur de
+déclencher l'envoi, puis décoder ce qui arrive.
+
+**`request`** — l'éditeur demande, l'appareil répond. La synchronisation devient
+invisible. C'est le confort que la plupart des synthés modernes offrent, et
+qu'aucun de nos deux profils n'a.
+
+### L'avertissement à ne pas perdre
+
+Le manuel du M dit :
+
+> *When a sound program sysex message will be received by M, it will be
+> immediately overwrite the current selected sound program.*
+
+Recevoir un dump **écrase un programme mémorisé**, pas seulement le tampon
+d'édition. Un éditeur qui enverrait un dump à la légère détruirait les presets
+de l'utilisateur. D'où le champ `dumpOverwritesStoredProgram` : la donnée doit
+voyager avec le profil, pas rester dans un manuel PDF.
+
+### Ce qu'un éditeur devrait en faire
+
+| `dump` | `ccOnEdit` | Comportement raisonnable |
+|---|---|---|
+| `none` | non | l'éditeur fait foi ; à l'ouverture, envoyer son état |
+| `manual` | oui | après un changement de preset, signaler « désynchronisé » et proposer la marche à suivre ; suivre ensuite les CC entrants |
+| `request` | — | demander un dump à l'ouverture et à chaque Program Change |
+
+Le repli universel, valable partout : le **soft takeover** — un potard de
+l'éditeur n'agit qu'une fois qu'il a croisé la valeur courante. Il n'accorde
+pas l'affichage, mais il évite le saut brutal.
+
 ## Synthés multitimbraux
 
 Le format décrit **une partie**, pas un instrument entier. Sur un synthé

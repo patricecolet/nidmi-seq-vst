@@ -16,61 +16,23 @@ static const char* kKobolSeedJson = R"JSON({
   "schema": 2,
   "name": "Kobol Expander",
   "manufacturer": "RSF",
+  "sync": {
+    "ccOnEdit": false,
+    "dump": "none",
+    "dumpFormat": null,
+    "dumpOverwritesStoredProgram": false,
+    "_comment": "Le Kobol n'a AUCUNE sortie MIDI : il n'emet rien quand on bouge un potard, et ne sait rien dumper. L'etat de l'editeur EST la verite, il n'y a rien a synchroniser. C'est le cas le plus simple, et celui de la plupart des synthes d'avant 1983."
+  },
   "panel": {
     "image": "kobol-expander.jpg",
     "aspect": 3.18,
     "_comment": "Ratio 3,18:1. Sur un ecran 320x240 la photo ne fait que 320x101 : 58 % de hauteur perdue, potards a 12 px, labels a 1 px. L'image sert a l'editeur bureau ; le materiel dessine les sections a partir de 'section' et 'pos'.",
     "sections": [
-      {
-        "id": "lfo",
-        "name": "LFO",
-        "rect": [
-          0.02,
-          0.05,
-          0.16,
-          0.9
-        ]
-      },
-      {
-        "id": "vco",
-        "name": "VCO",
-        "rect": [
-          0.2,
-          0.05,
-          0.3,
-          0.9
-        ]
-      },
-      {
-        "id": "vcf",
-        "name": "VCF",
-        "rect": [
-          0.51,
-          0.05,
-          0.15,
-          0.9
-        ]
-      },
-      {
-        "id": "env",
-        "name": "ADS",
-        "rect": [
-          0.66,
-          0.05,
-          0.25,
-          0.9
-        ]
-      },
-      {
-        "id": "mod",
-        "name": "Mod",
-        "rect": [
-          0.0,
-          0.0,
-          0.0,
-          0.0
-        ]
-      }
+      { "id": "lfo", "name": "LFO", "rect": [0.02, 0.05, 0.16, 0.9] },
+      { "id": "vco", "name": "VCO", "rect": [0.2, 0.05, 0.3, 0.9] },
+      { "id": "vcf", "name": "VCF", "rect": [0.51, 0.05, 0.15, 0.9] },
+      { "id": "env", "name": "ADS", "rect": [0.66, 0.05, 0.25, 0.9] },
+      { "id": "mod", "name": "Mod", "rect": [0.0, 0.0, 0.0, 0.0] }
     ]
   },
   "pitch": {
@@ -85,328 +47,31 @@ static const char* kKobolSeedJson = R"JSON({
     "_comment": "Reprend v1-first-release/kobolDAC.ino, qui tourne dans le Teensy et sonne juste : 4000 unités DAC pour 120 demi-tons. Ce n'est pas du 1 V/oct malgré ce qu'annonce le README de la v1.",
     "section": "vco",
     "type": "knob",
-    "pos": [
-      0.3,
-      0.705
-    ],
+    "pos": [0.3, 0.705],
     "size": 0.045
   },
   "parameters": [
-    {
-      "cc": 74,
-      "short": "Cutoff",
-      "name": "VCF Cutoff",
-      "group": "VCF",
-      "section": "vcf",
-      "type": "knob",
-      "pos": [
-        0.539,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": true,
-      "default": 90,
-      "learn": null
-    },
-    {
-      "cc": 71,
-      "short": "Reso",
-      "name": "VCF Resonance",
-      "group": "VCF",
-      "section": "vcf",
-      "type": "knob",
-      "pos": [
-        0.618,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 73,
-      "short": "VcfAtk",
-      "name": "VCF Attack",
-      "group": "VCF",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.697,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 75,
-      "short": "VcfDec",
-      "name": "VCF Decay",
-      "group": "VCF",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.776,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 40,
-      "learn": null
-    },
-    {
-      "cc": 102,
-      "short": "VcfSus",
-      "name": "VCF Sustain",
-      "group": "VCF",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.855,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 90,
-      "learn": null
-    },
-    {
-      "cc": 103,
-      "short": "AdsCtl",
-      "name": "VCF ADS Ctrl",
-      "group": "VCF",
-      "section": "vcf",
-      "type": "knob",
-      "pos": [
-        0.618,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 64,
-      "learn": null
-    },
-    {
-      "cc": 105,
-      "short": "VcaAtk",
-      "name": "VCA Attack",
-      "group": "VCA",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.697,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 106,
-      "short": "VcaDec",
-      "name": "VCA Decay",
-      "group": "VCA",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.776,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 40,
-      "learn": null
-    },
-    {
-      "cc": 107,
-      "short": "VcaSus",
-      "name": "VCA Sustain",
-      "group": "VCA",
-      "section": "env",
-      "type": "knob",
-      "pos": [
-        0.855,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 100,
-      "learn": null
-    },
-    {
-      "cc": 109,
-      "short": "Vol2",
-      "name": "VCO2 Volume",
-      "group": "VCO",
-      "section": "vco",
-      "type": "knob",
-      "pos": [
-        0.457,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 100,
-      "learn": null
-    },
-    {
-      "cc": 108,
-      "short": "Vol1",
-      "name": "VCO1 Volume",
-      "group": "VCO",
-      "section": "vco",
-      "type": "knob",
-      "pos": [
-        0.457,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 100,
-      "learn": null
-    },
-    {
-      "cc": 112,
-      "short": "Wave1",
-      "name": "VCO1 Waveform",
-      "group": "VCO",
-      "section": "vco",
-      "type": "knob",
-      "pos": [
-        0.379,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 113,
-      "short": "Wave2",
-      "name": "VCO2 Waveform",
-      "group": "VCO",
-      "section": "vco",
-      "type": "knob",
-      "pos": [
-        0.379,
-        0.705
-      ],
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 76,
-      "short": "LfoRate",
-      "name": "LFO Rate",
-      "group": "LFO",
-      "section": "lfo",
-      "type": "knob",
-      "pos": [
-        0.068,
-        0.285
-      ],
-      "size": 0.045,
-      "wired": true,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 1,
-      "short": "Mod",
-      "name": "Mod Wheel",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 5,
-      "short": "Porta",
-      "name": "Portamento Time",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": true,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 65,
-      "short": "PortSw",
-      "name": "Portamento On/Off",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": true,
-      "default": 127,
-      "learn": null
-    },
-    {
-      "cc": 114,
-      "short": "VelCutN",
-      "name": "Velocite > Cutoff (on)",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": true,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 115,
-      "short": "VelCutF",
-      "name": "Velocite > Cutoff (off)",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": true,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 116,
-      "short": "VelVca",
-      "name": "Velocite > VCA",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": false,
-      "default": 0,
-      "learn": null
-    },
-    {
-      "cc": 118,
-      "short": "Gate",
-      "name": "Gate force",
-      "group": "Mod",
-      "section": "mod",
-      "type": "knob",
-      "pos": null,
-      "size": 0.045,
-      "wired": true,
-      "default": 0,
-      "learn": null
-    }
+    { "cc": 74, "short": "Cutoff", "name": "VCF Cutoff", "group": "VCF", "section": "vcf", "type": "knob", "pos": [0.539, 0.285], "size": 0.045, "wired": true, "default": 90, "learn": null },
+    { "cc": 71, "short": "Reso", "name": "VCF Resonance", "group": "VCF", "section": "vcf", "type": "knob", "pos": [0.618, 0.285], "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 73, "short": "VcfAtk", "name": "VCF Attack", "group": "VCF", "section": "env", "type": "knob", "pos": [0.697, 0.705], "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 75, "short": "VcfDec", "name": "VCF Decay", "group": "VCF", "section": "env", "type": "knob", "pos": [0.776, 0.705], "size": 0.045, "wired": false, "default": 40, "learn": null },
+    { "cc": 102, "short": "VcfSus", "name": "VCF Sustain", "group": "VCF", "section": "env", "type": "knob", "pos": [0.855, 0.705], "size": 0.045, "wired": false, "default": 90, "learn": null },
+    { "cc": 103, "short": "AdsCtl", "name": "VCF ADS Ctrl", "group": "VCF", "section": "vcf", "type": "knob", "pos": [0.618, 0.705], "size": 0.045, "wired": false, "default": 64, "learn": null },
+    { "cc": 105, "short": "VcaAtk", "name": "VCA Attack", "group": "VCA", "section": "env", "type": "knob", "pos": [0.697, 0.285], "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 106, "short": "VcaDec", "name": "VCA Decay", "group": "VCA", "section": "env", "type": "knob", "pos": [0.776, 0.285], "size": 0.045, "wired": false, "default": 40, "learn": null },
+    { "cc": 107, "short": "VcaSus", "name": "VCA Sustain", "group": "VCA", "section": "env", "type": "knob", "pos": [0.855, 0.285], "size": 0.045, "wired": false, "default": 100, "learn": null },
+    { "cc": 109, "short": "Vol2", "name": "VCO2 Volume", "group": "VCO", "section": "vco", "type": "knob", "pos": [0.457, 0.705], "size": 0.045, "wired": false, "default": 100, "learn": null },
+    { "cc": 108, "short": "Vol1", "name": "VCO1 Volume", "group": "VCO", "section": "vco", "type": "knob", "pos": [0.457, 0.285], "size": 0.045, "wired": false, "default": 100, "learn": null },
+    { "cc": 112, "short": "Wave1", "name": "VCO1 Waveform", "group": "VCO", "section": "vco", "type": "knob", "pos": [0.379, 0.285], "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 113, "short": "Wave2", "name": "VCO2 Waveform", "group": "VCO", "section": "vco", "type": "knob", "pos": [0.379, 0.705], "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 76, "short": "LfoRate", "name": "LFO Rate", "group": "LFO", "section": "lfo", "type": "knob", "pos": [0.068, 0.285], "size": 0.045, "wired": true, "default": 0, "learn": null },
+    { "cc": 1, "short": "Mod", "name": "Mod Wheel", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 5, "short": "Porta", "name": "Portamento Time", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": true, "default": 0, "learn": null },
+    { "cc": 65, "short": "PortSw", "name": "Portamento On/Off", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": true, "default": 127, "learn": null },
+    { "cc": 114, "short": "VelCutN", "name": "Velocite > Cutoff (on)", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": true, "default": 0, "learn": null },
+    { "cc": 115, "short": "VelCutF", "name": "Velocite > Cutoff (off)", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": true, "default": 0, "learn": null },
+    { "cc": 116, "short": "VelVca", "name": "Velocite > VCA", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": false, "default": 0, "learn": null },
+    { "cc": 118, "short": "Gate", "name": "Gate force", "group": "Mod", "section": "mod", "type": "knob", "pos": null, "size": 0.045, "wired": true, "default": 0, "learn": null }
   ]
 })JSON";
 // <<< FIN DU BLOC GENERE
@@ -474,6 +139,17 @@ static bool parseProfile(const juce::var& root, DeviceProfile& out, juce::String
     if (list.empty()) { why = "aucun parametre exploitable"; return false; }
 
     out = DeviceProfile(name, std::move(list));
+
+    // Capacites de synchronisation : facultatives, defaut « rien a lire ».
+    if (const juce::var sy = root.getProperty("sync", {}); sy.isObject()) {
+        DeviceSync ds;
+        ds.ccOnEdit   = static_cast<bool>(sy.getProperty("ccOnEdit", false));
+        ds.dump       = sy.getProperty("dump", "none").toString();
+        ds.dumpFormat = sy.getProperty("dumpFormat", {}).toString();
+        ds.dumpOverwritesStoredProgram =
+            static_cast<bool>(sy.getProperty("dumpOverwritesStoredProgram", false));
+        out.setSync(std::move(ds));
+    }
 
     // Panneau : facultatif. Sans lui le profil reste valide, il ne sert
     // simplement qu'au nommage des CC.

@@ -44,6 +44,30 @@ struct DeviceParam {
     bool bipolar = false;
 };
 
+// Ce que l'appareil sait dire de son propre etat. Determine entierement la
+// strategie de synchronisation quand l'utilisateur charge un preset SUR la
+// machine : les potards de l'editeur ne correspondent alors plus a rien.
+struct DeviceSync {
+    // L'appareil emet-il un CC quand on bouge un controle de facade ?
+    // Si oui, l'editeur reste synchrone APRES un premier accord, et le vrai
+    // MIDI learn est possible.
+    bool ccOnEdit = false;
+
+    // "none"    : rien a lire, l'etat de l'editeur EST la verite (Kobol)
+    // "manual"  : l'appareil sait dumper, mais seulement depuis SON menu —
+    //             l'editeur ne peut pas l'interroger, il doit demander a
+    //             l'utilisateur de declencher l'envoi (Waldorf M)
+    // "request" : l'editeur demande et recoit, synchronisation invisible
+    juce::String dump { "none" };
+
+    juce::String dumpFormat;   // p. ex. "waldorf-microwave-1"
+
+    // DANGER. Sur le M, recevoir un sysex de son ecrase immediatement le
+    // programme SELECTIONNE sur la machine, pas seulement le tampon d'edition.
+    // Un editeur ne doit jamais envoyer de dump sans confirmation explicite.
+    bool dumpOverwritesStoredProgram = false;
+};
+
 // Zone du panneau. Sur le materiel, une section = une page d'encodeurs.
 struct DeviceSection {
     juce::String id, name;
@@ -55,6 +79,8 @@ public:
     DeviceProfile() = default;
     DeviceProfile(juce::String name, std::vector<DeviceParam> params)
         : name_(std::move(name)), params_(std::move(params)) {}
+
+    void setSync(DeviceSync s) { sync_ = std::move(s); }
 
     void setPanel(juce::String image, float aspect, std::vector<DeviceSection> sections) {
         image_ = std::move(image); aspect_ = aspect; sections_ = std::move(sections);
@@ -71,6 +97,7 @@ public:
     const juce::String&               imageFile() const noexcept { return image_; }
     float                             aspect()    const noexcept { return aspect_; }
     const std::vector<DeviceSection>& sections()  const noexcept { return sections_; }
+    const DeviceSync&                 sync()      const noexcept { return sync_; }
     const std::vector<DeviceParam>&   params()    const noexcept { return params_; }
 
     juce::String label(int cc) const;        // « VCF Cutoff », sinon « CC 74 »
@@ -96,4 +123,5 @@ private:
     juce::String               image_;
     float                      aspect_ = 0.0f;
     std::vector<DeviceSection> sections_;
+    DeviceSync                 sync_;
 };
