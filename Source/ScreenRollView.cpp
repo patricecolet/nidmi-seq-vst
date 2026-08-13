@@ -134,17 +134,48 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     const int   r   = juce::jlimit(0, model_.numRows - 1, model_.selectedRow);
     const auto& row = model_.rows[static_cast<size_t>(r)];
 
-    // Lanes de hauteur. Un piano-roll se lit d'un coup d'oeil parce que les
-    // TOUCHES NOIRES sont teintees : sans elles, toutes les lanes se ressemblent
-    // et il faut compter les lignes depuis le do pour savoir si on est sur un mi
-    // ou un fa. On teinte donc les 5 noires de chaque octave, et on marque le do
-    // plus franchement puisqu'il ancre la lecture.
+    // Lanes de hauteur, teintees selon DEUX references possibles.
+    //
+    // Harmonie ACTIVE : on teinte selon la gamme et l'accord courant. Une teinte
+    // de clavier serait trompeuse — en do mineur, ce sont les mauvaises notes qui
+    // ressortiraient. L'ecran montre alors ce qui SONNE, pas la disposition d'un
+    // clavier que ce sequenceur n'a pas.
+    //
+    // Harmonie INACTIVE : repli sur les touches noires, la reference habituelle
+    // d'un piano-roll. Sans teinte du tout, il faudrait compter les lignes depuis
+    // le do pour distinguer un mi d'un fa.
     for (int i = 0; i < L.visibleLanes; ++i) {
         const int   note = L.topNote - i;
         const float y    = L.plot.getY() + static_cast<float>(i) * L.laneH;
         const juce::Rectangle<float> lane(L.plot.getX(), y, L.plot.getWidth(), L.laneH);
 
-        if ((note % 12) == 0) {
+        const int pc = ((note % 12) + 12) % 12;
+
+        if (model_.harmonyActive) {
+            // Lecture HARMONIQUE : ce qui ressort, c'est ce qui sonne juste.
+            // Hors gamme -> creuse ; dans la gamme -> neutre ; note de l'accord
+            // courant -> ressort ; fondamentale de l'accord -> le plus marque.
+            const bool inScale  = (model_.scaleMask & (1 << pc)) != 0;
+            const bool inChord  = (model_.chordMask & (1 << pc)) != 0;
+            const bool isChordR = (pc == model_.chordRootPc);
+            const bool isKeyR   = (pc == model_.keyRootPc);
+
+            // Une lane dans la gamme mais hors de l'accord n'est PAS peinte :
+            // c'est le fond neutre, ce qui laisse ressortir les trois autres cas.
+            if (isChordR) {
+                g.setColour(kRowLabel.withAlpha(0.26f));
+                g.fillRect(lane);
+            } else if (inChord) {
+                g.setColour(kRowLabel.withAlpha(0.14f));
+                g.fillRect(lane);
+            } else if (!inScale) {
+                g.setColour(juce::Colours::black.withAlpha(0.34f));
+                g.fillRect(lane);
+            } else if (isKeyR) {
+                g.setColour(kCellGrid);
+                g.fillRect(lane);
+            }
+        } else if ((note % 12) == 0) {
             g.setColour(kCellGrid);
             g.fillRect(lane);
         } else if (isBlackKeyPc(note)) {

@@ -90,6 +90,39 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
 
     const DeviceProfile& prof = DeviceProfile::byIndex(proc_.deviceProfileIndex());
 
+    // --- Coloration harmonique du ROLL -------------------------------------
+    // Le piano-roll teintait ses lanes selon les touches NOIRES : une reference
+    // de clavier, pas de musique. En do mineur, ce sont les mauvaises notes qui
+    // ressortent. Quand l'harmonie est active, on teinte donc selon la GAMME et
+    // l'ACCORD courant ; sinon on retombe sur le clavier.
+    {
+        m.harmonyActive = pat.harmony.harmonyEnabled;
+        m.scaleMask = m.chordMask = 0;
+        m.chordRootPc = -1;
+        if (m.harmonyActive) {
+            uint8_t rootPc = pat.harmony.rootPc, scaleId = pat.harmony.scaleId;
+            proc_.engine().currentKey(rootPc, scaleId);   // suit la lane de tonalite
+            m.keyRootPc = rootPc % 12;
+
+            const auto& def = scalebank::getScale(scaleId);
+            for (uint8_t i = 0; i < def.count; ++i)
+                m.scaleMask |= 1 << ((rootPc + def.intervals[i]) % 12);
+
+            if (pat.chordProgression.len > 0) {
+                const auto& ch = pat.chordProgression.current();
+                uint8_t chordRoot = harmony::degreePitchClass(ch.degree, scaleId, rootPc);
+                if (ch.bassOffset != 0)
+                    chordRoot = static_cast<uint8_t>((chordRoot + 12 + ch.bassOffset) % 12);
+                m.chordRootPc = chordRoot % 12;
+                uint8_t pcs[12];
+                const uint8_t n = harmony::chordPitchClasses(chordRoot, ch.quality,
+                                                             ch.extensions, pcs);
+                for (uint8_t i = 0; i < n; ++i)
+                    m.chordMask |= 1 << (pcs[i] % 12);
+            }
+        }
+    }
+
     if (auto* bpm = proc_.apvts().getRawParameterValue("bpm"))
         m.bpm = bpm->load();
 

@@ -60,6 +60,15 @@ struct PatternScreenModel {
     // Barre de titre (commune à toutes les pages).
     bool  playing      = false;
     float bpm          = 120.0f;
+    // Coloration harmonique du piano-roll. Masques de 12 bits, un par classe de
+    // hauteur. Calcules dans buildScreenModel : la vue ne fait que colorier, elle
+    // n'a pas a connaitre les gammes ni les accords.
+    bool  harmonyActive = false;   // false -> repli sur les touches noires
+    int   scaleMask     = 0;       // notes de la gamme mere
+    int   chordMask     = 0;       // notes de l'accord courant
+    int   keyRootPc     = 0;       // fondamentale de la tonalite
+    int   chordRootPc   = -1;      // fondamentale de l'accord, -1 si pas d'accord
+
     int   tsNum        = 4;
     int   tsDen        = 4;
 
