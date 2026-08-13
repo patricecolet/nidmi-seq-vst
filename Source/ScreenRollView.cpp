@@ -134,14 +134,29 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     const int   r   = juce::jlimit(0, model_.numRows - 1, model_.selectedRow);
     const auto& row = model_.rows[static_cast<size_t>(r)];
 
-    // Lanes de hauteur : bande + libellé sur les Do, ligne fine ailleurs.
+    // Lanes de hauteur. Un piano-roll se lit d'un coup d'oeil parce que les
+    // TOUCHES NOIRES sont teintees : sans elles, toutes les lanes se ressemblent
+    // et il faut compter les lignes depuis le do pour savoir si on est sur un mi
+    // ou un fa. On teinte donc les 5 noires de chaque octave, et on marque le do
+    // plus franchement puisqu'il ancre la lecture.
     for (int i = 0; i < L.visibleLanes; ++i) {
         const int   note = L.topNote - i;
         const float y    = L.plot.getY() + static_cast<float>(i) * L.laneH;
+        const juce::Rectangle<float> lane(L.plot.getX(), y, L.plot.getWidth(), L.laneH);
+
         if ((note % 12) == 0) {
             g.setColour(kCellGrid);
-            g.fillRect(juce::Rectangle<float>(L.plot.getX(), y, L.plot.getWidth(), L.laneH));
-            g.setColour(kRowLabel);
+            g.fillRect(lane);
+        } else if (isBlackKeyPc(note)) {
+            g.setColour(kScreenBg.brighter(0.16f));
+            g.fillRect(lane);
+        }
+
+        // Libelle sur chaque do, et sur le la quand la place le permet : deux
+        // reperes par octave valent mieux qu'un pour situer une note au vol.
+        const bool label = (note % 12) == 0 || ((note % 12) == 9 && L.laneH >= 9.0f);
+        if (label) {
+            g.setColour((note % 12) == 0 ? kRowLabel : kRowLabel.withAlpha(0.45f));
             g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
             g.drawText(midiNoteShort(note),
                        juce::Rectangle<float>(bodyArea_.getX(), y, 24.0f, L.laneH),
@@ -162,6 +177,27 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
             const int osp = juce::jlimit(1, L.n - o, juce::jmax(1, static_cast<int>(row.span[static_cast<size_t>(o)])));
             if (o + osp > s) { coveredRoll[s] = true; break; }
         }
+
+    // TEMPS de la mesure, a leur VRAIE position — b/tsNum de la largeur — et non
+    // sur la grille des pas.
+    //
+    // C'est ce decalage qui rend la polyrythmie VISIBLE : une row a N=11 dans une
+    // mesure a 4 temps montre ses pas deriver contre les temps, puis se realigner
+    // au downbeat. Un sequenceur a grille fixe ne peut pas montrer ca — ses pas
+    // TOMBENT sur les temps par construction. C'est le pilier 1 du cahier, et il
+    // n'etait visible nulle part a l'ecran.
+    //
+    // Dessine AVANT les separateurs de pas : ceux-ci passent par-dessus.
+    {
+        const int beats = juce::jlimit(1, 16, model_.tsNum);
+        for (int b = 0; b < beats; ++b) {
+            const float x = L.plot.getX()
+                          + L.plot.getWidth() * static_cast<float>(b) / static_cast<float>(beats);
+            const bool downbeat = (b == 0);
+            g.setColour(kRowLabel.withAlpha(downbeat ? 0.38f : 0.15f));
+            g.drawLine(x, L.plot.getY(), x, L.plot.getBottom(), downbeat ? 1.6f : 0.9f);
+        }
+    }
 
     // Colonnes (cases du tuplet) : curseur de pas + playhead + séparateurs.
     for (int s = 0; s < L.n; ++s) {

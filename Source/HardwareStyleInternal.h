@@ -249,6 +249,14 @@ inline HarmLayout computeHarmLayout(const PatternScreenModel& m, juce::Rectangle
     return L;
 }
 
+// Les 5 touches noires d'une octave, par classe de hauteur.
+// Sert a teinter les lanes du piano-roll : sans elles on ne distingue pas un
+// mi d'un fa sans compter les lignes depuis le do.
+inline bool isBlackKeyPc(int note) {
+    const int pc = ((note % 12) + 12) % 12;
+    return pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
+}
+
 inline constexpr int kAutoNumSlots  = 8;
 inline constexpr int kAutoNumFields = 2;
 inline const char* autoFieldName(int field) {
