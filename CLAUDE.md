@@ -185,9 +185,15 @@ round-trip is half built.
 The spec (`CAHIER_DES_CHARGES_V1.md` §9.4, revision 2026-08) keeps a **parallel
 MIDI clip player** alongside the tuplet engine, as `RowKind::MidiClip`: same
 transport and bar anchor, different "what plays now" function, original timing
-preserved instead of quantised. Its blocker is memory, not concept —
-`PatternRow` is a fixed `StepData steps[kMaxBars][kMaxSteps]` (~6 KB/row) and a
-variable-length clip needs storage outside that array.
+preserved instead of quantised.
+
+Its blocker is **layout, not volume** — measured, not assumed: a dense 10-track
+MIDI file decodes to ~25 000 channel events ≈ **194 KB**, about the cost of *one*
+pattern (205 KB at `kMaxBars` = 8), i.e. 2.4 % of an ESP32-S3 N16R8's 8 MB
+PSRAM. The obstacle is that `PatternRow` is a **fixed** 12 301-byte struct with
+nowhere to put variable-length data; it needs a separate event pool indexed per
+row. Streaming from flash would save ~180 KB out of 8 MB and cost flash latency
+on the timing path — only worth it on a board **without** PSRAM.
 
 **This intention was lost once already**: only the "convert on import" half
 survived into the spec. Do not quietly drop it again when reasoning about MIDI

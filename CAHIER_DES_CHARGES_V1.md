@@ -439,16 +439,50 @@ Une row `MidiClip` :
 
 La polyrythmie des rows voisines continue de tourner sans rien savoir d'elle.
 
-#### Contrainte mémoire — le vrai obstacle
+#### Mémoire : mesurée, ce n'est pas l'obstacle
 
-`PatternRow` est un **tableau fixe** : `StepData steps[kMaxBars][kMaxSteps]`, soit
-≈ 6 Ko par row occupés en permanence, vides ou non, ≈ 96 Ko pour 16 rows. Un clip
-à nombre d'événements variable **n'entre pas dans ce moule**.
+> **Révision 2026-08 — corrige une affirmation de la première rédaction.** Il y
+> était écrit que la mémoire était « le vrai obstacle » du `MidiClip`. Mesure
+> faite sur des fichiers réels, c'est faux.
 
-Il faut donc un stockage **hors** du tableau fixe : un pool d'événements indexé
-par row, alloué à l'import. Sur ESP32-S3 la PSRAM l'absorbe ; sur la cible VST la
-question ne se pose pas. À dimensionner avant d'écrire quoi que ce soit — c'est
-ce point, et non le concept, qui décide de la faisabilité hardware.
+Décodage de fichiers MIDI existants, événements de canal seuls (ce qu'un
+lecteur joue), à 8 octets par événement — horodatage 4 o + statut + 2 données :
+
+| Fichier | Taille | Pistes | Événements | En RAM |
+|---|---|---|---|---|
+| dense, 10 pistes | 99 Ko | 10 | 24 788 | **194 Ko** |
+| moyen | 39 Ko | 10 | 10 841 | 85 Ko |
+| léger | 20 Ko | 10 | 4 613 | 36 Ko |
+
+À comparer avec ce que coûte déjà la grille : **un seul pattern pèse 205 Ko**
+(`kMaxBars` = 8), et la banque de 16 en pèse 3,28 Mo. Un fichier MIDI multipiste
+dense revient donc à **un pattern**, soit 2,4 % des 8 Mo de PSRAM d'une
+ESP32-S3 N16R8.
+
+**Le volume n'est pas le problème. Le problème est la forme :** `PatternRow` est
+une structure **fixe** de 12 301 octets (`StepData steps[kMaxBars][kMaxSteps]`)
+et n'a aucune place pour des données de longueur variable. Il faut un **pool
+d'événements séparé**, indexé par row — pas un flux.
+
+#### Faut-il streamer depuis la flash ?
+
+Techniquement oui : un SMF est séquentiel, la lecture n'avance que vers l'avant,
+et une avance de lecture de ~64 événements par piste suffirait — environ 1 Ko
+par piste, 16 Ko pour 16 pistes au lieu de 194.
+
+Mais le gain est de ~180 Ko sur 8 Mo, contre un coût réel :
+
+- latence flash sur le chemin du timing, donc lecture anticipée dans une tâche
+  séparée alimentant une FIFO sans verrou ;
+- un curseur de fichier par piste — un SMF Type 1 range ses pistes bout à bout,
+  pas entrelacées ;
+- un index construit à l'import pour boucler et se déplacer : les delta-times
+  sont **relatifs**, donc sauter à la mesure 30 sans index impose de relire
+  depuis le début.
+
+Mauvais échange tant que la cible a de la PSRAM. **Le streaming ne devient
+nécessaire que sur une carte sans PSRAM**, où les 512 Ko de SRAM interne ne
+suffisent déjà pas à la banque de patterns (1,74 Mo dès `kMaxBars` = 4).
 
 #### Ordre de travail
 
