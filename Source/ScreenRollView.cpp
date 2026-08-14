@@ -161,26 +161,16 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     // noires, reperes Do et La). Le sub n'affichait que les do : on descendait
     // d'un niveau et la gamme disparaissait.
     paintPitchLanes(g, plot, topNote, visible, laneH);
-    // Ligne d'ancrage (mode relatif) = note hote RESOLUE, celle sur laquelle le
-    // moteur ancre reellement le sub. Quand l'harmonie deplace cette note, le
-    // libelle porte le mode de la row : sans ca on voit l'ancre bouger toute seule
-    // en changeant d'accord, sans savoir qui la deplace.
-    if (sv.relative) {
-        const int lane = topNote - model_.subHostNote;
-        if (lane >= 0 && lane < visible) {
-            const int  hr = juce::jlimit(0, juce::jmax(0, model_.numRows - 1), model_.subHostRow);
-            const auto& hrow = model_.rows[static_cast<size_t>(hr)];
-            juce::String tag = "ancre " + midiNoteShort(model_.subHostNote);
-            if (hrow.harmonyBound)
-                tag += juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + harmonyModeShort(hrow.harmonyMode);
-            const float y = plot.getY() + static_cast<float>(lane) * laneH + laneH * 0.5f;
-            g.setColour(kPlayhead);
-            g.drawLine(plot.getX(), y, plot.getRight(), y, 1.4f);
-            g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
-            g.drawText(tag,
-                       juce::Rectangle<float>(plot.getX() + 2.0f, y - laneH, 90.0f, laneH),
-                       juce::Justification::centredLeft);
-        }
+    // LIGNE d'ancrage (mode relatif) : sous les blocs, une ligne fine qui passe
+    // derriere une note se lit tres bien. Le LIBELLE, lui, est dessine tout a la
+    // fin (cf. plus bas) : ici il passait sous les blocs et un sous-pas pose devant
+    // le coupait en deux.
+    const int anchorLane = sv.relative ? (topNote - model_.subHostNote) : -1;
+    const bool anchorVisible = (anchorLane >= 0 && anchorLane < visible);
+    const float anchorY = plot.getY() + static_cast<float>(anchorLane) * laneH + laneH * 0.5f;
+    if (anchorVisible) {
+        g.setColour(kPlayhead);
+        g.drawLine(plot.getX(), anchorY, plot.getRight(), anchorY, 1.4f);
     }
     // Sous-pas RECOUVERTS par la longueur (span) d'un sous-pas antérieur : masqués (même
     // règle que le moteur / le ROLL principal). Le pas sélectionné reste éditable (colonne).
@@ -229,6 +219,37 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
                 g.fillRoundedRectangle(blk.reduced(1.0f, 1.0f), 2.0f);
             }
         }
+    }
+
+    // LIBELLE de l'ancre, dessine EN DERNIER et sur une pastille opaque.
+    //
+    // Il etait peint avant les blocs : des qu'un sous-pas tombait devant, la note
+    // le recouvrait et le coupait en deux — precisement le cas frequent, puisque
+    // les sous-pas d'un sub relatif gravitent autour de l'ancre. Une pastille, comme
+    // les badges REL/ABS du roll principal : meme langage, et lisible sur n'importe
+    // quel fond. Elle mange un bout d'un bloc, ce qui est le bon compromis — la note
+    // reste identifiable par sa lane, le libelle ne l'est que par son texte.
+    if (anchorVisible) {
+        const int  hr = juce::jlimit(0, juce::jmax(0, model_.numRows - 1), model_.subHostRow);
+        const auto& hrow = model_.rows[static_cast<size_t>(hr)];
+        juce::String tag = "ancre " + midiNoteShort(model_.subHostNote);
+        if (hrow.harmonyBound)
+            tag += juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + harmonyModeShort(hrow.harmonyMode);
+
+        const juce::Font f(juce::FontOptions().withHeight(9.0f));
+        const float tw = juce::GlyphArrangement::getStringWidth(f, tag) + 8.0f;
+        // Au-dessus de la ligne, sauf tout en haut du plot ou l'etiquette sortirait.
+        const bool below = (anchorY - laneH < plot.getY());
+        juce::Rectangle<float> chip(plot.getX() + 2.0f,
+                                    below ? anchorY + 1.0f : anchorY - laneH - 1.0f,
+                                    juce::jmin(tw, plot.getWidth() - 4.0f), laneH);
+        g.setColour(kScreenBg.withAlpha(0.88f));
+        g.fillRoundedRectangle(chip, 2.0f);
+        g.setColour(kPlayhead.withAlpha(0.55f));
+        g.drawRoundedRectangle(chip.reduced(0.5f), 2.0f, 0.8f);
+        g.setColour(kPlayhead);
+        g.setFont(f);
+        g.drawText(tag, chip, juce::Justification::centred);
     }
 
     // Lane vélo (bas) : histogramme de la vélo par sous-pas (visualisation + clic).
