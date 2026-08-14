@@ -841,11 +841,23 @@ void NidmiSeqAudioProcessorEditor::configureVeloEncoder() {
 
     // HARMONIE : la qualité (triade) passe sur les blanches 8..13 → Enc3 = Durée du slot.
     if (screenPage_ == PatternScreenModel::Page::Harmony) {
-        const auto& prog = proc_.engine().pattern().chordProgression;
-        const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
-        int dur = juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
-        if (cur < static_cast<int>(prog.len))
-            dur = prog.slots[static_cast<size_t>(cur)].durationBeats;
+        // Enc3 = duree de la case EDITEE, donc du marqueur de tonalite quand le focus
+        // est sur cette bande. Le focus n'etait pas teste : on selectionnait une
+        // tonalite et la molette affichait — et editait — la duree d'un ACCORD.
+        int dur;
+        if (harmonyFocus_ == HarmonyFocus::Tonality) {
+            const auto& kp = proc_.engine().pattern().keyProgression;
+            const int   kc = juce::jlimit(0, 15, keyCursor_);
+            dur = (kc < static_cast<int>(kp.len))
+                      ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].durationBeats)
+                      : juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
+        } else {
+            const auto& prog = proc_.engine().pattern().chordProgression;
+            const int   cur  = juce::jlimit(0, 31, harmonyCursor_);
+            dur = (cur < static_cast<int>(prog.len))
+                      ? prog.slots[static_cast<size_t>(cur)].durationBeats
+                      : juce::jmax(1, static_cast<int>(proc_.engine().pattern().numerator));
+        }
         veloEncoder_.setRange(1.0, 64.0, 1.0);
         veloEncoder_.setValue(static_cast<double>(dur), juce::dontSendNotification);
         // durationBeats = nombre de TEMPS pendant lesquels l'accord reste actif.
@@ -974,6 +986,9 @@ void NidmiSeqAudioProcessorEditor::onZoomEncoderChanged() {
                                    ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].scaleId)
                                    : static_cast<int>(proc_.engine().projectSettings().masterScaleId);
         setKeyField(1, curScale + dir);
+        // Rafraichit l'etiquette : en focus TONALITE, le timer ne la repose plus
+        // (il ecrasait « Gamme » par « Tonique »), donc elle resterait figee.
+        applyEncoderConfigForState();
     } else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         {
             // HARMONIE : Enc4 = Tonique (push →Gamme = Gamme). Relatif, wrap modulo 12.

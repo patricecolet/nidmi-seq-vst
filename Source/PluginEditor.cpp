@@ -597,6 +597,23 @@ void NidmiSeqAudioProcessorEditor::timerCallback() {
     configurePushButtons();   // labels/état/led des boutons PUSH (Suppr suit le curseur slot)
     if (screenPage_ == PatternScreenModel::Page::PianoRoll)
         zoomEncoderLabel_.setText("Zoom " + juce::String(rollOctaves_) + "oct", juce::dontSendNotification);
+    else if (screenPage_ == PatternScreenModel::Page::Harmony
+             && harmonyFocus_ == HarmonyFocus::Tonality) {
+        // Focus TONALITE : Enc4 = GAMME du marqueur edite (Tonique est sur Enc2).
+        //
+        // Ce bloc tourne a CHAQUE frame. Il ne regardait pas le focus et ecrasait
+        // donc l'etiquette posee par applyEncoderConfigForState : on cliquait un
+        // marqueur, le bandeau annoncait « Enc4=Gamme » et la molette affichait
+        // « Tonique ». Le traiter ici plutot que sauter le bloc — sauter faisait
+        // tomber l'etiquette dans le cas par defaut, qui affichait « Row 1 ».
+        const auto& kp = proc_.engine().pattern().keyProgression;
+        const int   kc = juce::jlimit(0, juce::jmax(0, static_cast<int>(kp.len) - 1), keyCursor_);
+        const int   sc = (kp.len > 0) ? static_cast<int>(kp.slots[static_cast<size_t>(kc)].scaleId)
+                                      : static_cast<int>(proc_.engine().projectSettings().masterScaleId);
+        zoomEncoderLabel_.setText(juce::String("Gamme ") + scalebank::getScale(static_cast<uint8_t>(
+            juce::jlimit(0, static_cast<int>(scalebank::Count) - 1, sc))).name,
+            juce::dontSendNotification);
+    }
     else if (screenPage_ == PatternScreenModel::Page::Harmony) {
         // Enc4 = Tonique (ou Gamme si push →Gamme actif), lue sur la source EFFECTIVE.
         // (Harmonie ON/OFF = bouton « Harm » dédié, plus de ⇧Enc4.)
