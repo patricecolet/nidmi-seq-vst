@@ -252,7 +252,49 @@ existant.
 comme les *workspaces* de Blender. À évaluer contre le coût d'interface sur un
 480 × 320.
 
-### 5.3 Autres propositions
+### 5.3 Le mixage MIDI *(idée de Patrice, 2026-08-14)*
+
+Point de départ : **un bouton `MUTE` dédié ne sait faire qu'une chose, sur une seule row
+à la fois** — alors que couper une piste est par nature une opération de comparaison,
+on la coupe *pour entendre les autres*. Sa place est là où on les voit toutes.
+
+Ce que « mixage » veut dire sur un séquenceur **MIDI-only**, sans rien inventer :
+
+| | |
+|---|---|
+| **Mute** | réel — `PatternRow.muted` |
+| **Solo** | n'existe nulle part |
+| **Volume** | pas un champ : **CC 7**, par canal |
+| **Panoramique** | pas un champ : **CC 10**, par canal |
+
+Volume et panoramique retombent donc sur la même réponse que le glide (§5.4) : des **CC
+connus, nommés par le profil d'appareil**. Aucun paramètre nouveau, aucun moteur à
+toucher. Une vue de mixage est surtout **une lecture de ce qui existe déjà**, plus le
+mute — ce qui la rend étonnamment bon marché.
+
+**Ce qu'elle répare.** `muted` n'a aujourd'hui **aucune adresse** dans la grammaire : la
+répartition l'avait expédié d'une phrase (« c'est un bouton dédié ») alors qu'il n'y a
+pas de bouton dédié dans les huit. Et le critère du compte remord : **`PatternRow` a six
+champs éditables — N, mode harmonique, destination, interpolation, canal, mute — pour
+quatre places.** Le canal est déjà exilé sur GLOB ; le mixage est le logement naturel du
+sixième.
+
+**Emplacement visé** : un mode de plus dans le cycle de `VUE` sur PATTERN —
+`Pas · Accent · Swing · Contrôleur · Mixage`. Chaque row y montre son niveau, et les
+touches blanches coupent les rows : le clavier étant déjà le miroir de la vue, aucun
+geste nouveau.
+
+**Pourquoi ce n'est pas implémenté.** Ajouter un cinquième mode à `VUE` avant d'avoir
+arrêté l'ensemble des modes, c'est précisément l'ajout au compte-goutte qu'on s'interdit.
+Les modes de `VUE` se trancheront d'un bloc — d'autant qu'on ignore encore ce que ce
+bouton cycle sur ROLL, AUTO et HARMONIE (§6).
+
+**Arithmétique des boutons, pour mémoire.** Sept sont indiscutables : les trois familles,
+`SHIFT`, `PLAY`, `STOP`, `REC`. Il en reste **un**, que se disputent `EXPORT`, `VUE` et
+`MUTE`. Le mixage règle le cas de `MUTE`, la page PROJET celui d'`EXPORT` : le huitième
+revient à `VUE`.
+
+### 5.4 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
@@ -260,7 +302,7 @@ comme les *workspaces* de Blender. À évaluer contre le coût d'interface sur u
 | **Glide** | Interpolation, sur une row de notes | 2026-08-14. Remplit un emplacement mort : `ccInterp` ne s'applique qu'aux lanes, l'encodeur affiche `—` sur une row de notes. **Forme retenue** : pas un paramètre nouveau, mais **CC 5 / CC 65 nommés par le profil d'appareil**. Le portamento est le travail du synthé ; générer le glissando nous-mêmes imposerait du pitch bend, qui est par canal et entre en collision avec le modèle de notes. |
 | **Ancrage · Densité · Disposition** | Valeur ▸ push, row Note | Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. |
 | **Tension du lissage** | Valeur ▸ push, lane CC | `CCInterp` est un enum sans paramètre. Coût faible. |
-| **Aléa · Courbe de vélocité** | Vélo ▸ push | Modulateurs — `VISION §6`. Recouvre en partie le §4.1. |
+| **Aléa · Courbe de vélocité** | Vélo ▸ push | Modulateurs — `VISION §6`. Recouvre en partie le §5.1. |
 | **Ratchet / répétitions** | Gate ▸ push | N'existe nulle part. Touche le déclenchement, donc le moteur. |
 | **Emprunt vs modulation** | Curseur ▸ push, slot d'accord | `VISION §5.2c` — explicitement non tranché. |
 | **Swing global** | Master ▸ push | Le swing réel vit au niveau du sous-pattern. À unifier ou à renommer. |
@@ -280,7 +322,8 @@ comme les *workspaces* de Blender. À évaluer contre le coût d'interface sur u
    de la convention. Si une seule molette doit rester contextuelle, ce sera celle-là.
 5. **Gate sur une lane CC** reste libre, sans proposition.
 6. **Ce que `VUE` cycle** sur ROLL, AUTO et HARMONIE. Seul PATTERN est adossé à un
-   mécanisme existant.
+   mécanisme existant. À trancher **d'un bloc**, mixage compris (§5.3), plutôt qu'un
+   mode à la fois.
 7. **La polyrythmie n'est plus le principe d'organisation de PATTERN.** Elle reste un
    outil local — un charley en 3 contre 4 n'a rien d'exotique — mais la vue s'organise
    désormais autour de *l'état de chaque row*. Conséquence : `CAHIER_DES_CHARGES_V1.md`
