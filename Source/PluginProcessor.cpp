@@ -270,7 +270,6 @@ void NidmiSeqAudioProcessor::resetLearnMappings() {
 
 void NidmiSeqAudioProcessor::rebuildLearnMap() {
     int8_t tmp[128], def[128];
-    std::fill(std::begin(tmp), std::end(tmp), static_cast<int8_t>(-1));
     std::fill(std::begin(def), std::end(def), static_cast<int8_t>(-1));
 
     const DeviceProfile& prof = DeviceProfile::byIndex(deviceProfileIndex_);
@@ -279,13 +278,25 @@ void NidmiSeqAudioProcessor::rebuildLearnMap() {
         if (p.cc >= 0 && p.cc < 128)
             def[p.cc] = static_cast<int8_t>(juce::jlimit(0, 127, p.defaultValue));
 
-    // 1) IDENTITE par defaut : un CC que le profil connait traverse sans changer
-    //    de numero. Sans cela, un controleur deja regle sur le bon CC serait
-    //    ignore, puisque processBlock vide tout l'entrant.
-    //    Seuls les CC declares passent : le plugin ne devient pas un MIDI thru.
-    for (const auto& p : prof.params())
-        if (p.cc >= 0 && p.cc < 128)
-            tmp[p.cc] = static_cast<int8_t>(p.cc);
+    // 1) IDENTITE POUR LES 128, y compris les CC que le profil ne connait pas.
+    //
+    //    La version precedente n'ouvrait que les CC declares au profil, et la table
+    //    restait donc INTEGRALEMENT a -1 sur le profil « Aucun » (index 0, vide,
+    //    toujours present et actif par defaut). Comme processBlock vide tout
+    //    l'entrant puis ne reinjecte que ce qui a survecu a cette table, le plugin
+    //    devenait un trou noir : aucun CC entrant enregistrable, aucun transmis en
+    //    sortie, aucun learn possible — et rien nulle part ne le disait.
+    //
+    //    Deux raisons de renverser le defaut :
+    //      - le CONTRAT. INTEGRATION.md (depot synth) stipule que « le profil est
+    //        purement cosmetique et ne modifie aucun message MIDI ». Un profil qui
+    //        filtre l'entree viole ce qu'il annonce. Le profil NOMME les CC, il ne
+    //        decide pas de leur sort.
+    //      - la REGLE DE FORME : rien ne doit etre bloquant. Sans profil, un CC
+    //        entrant passe sous son propre numero et s'enregistre tel quel, au lieu
+    //        d'etre refuse en silence.
+    for (int i = 0; i < 128; ++i)
+        tmp[i] = static_cast<int8_t>(i);
 
     // 2) Remappages explicites, appliques APRES : un learn l'emporte sur
     //    l'identite. Si un learn vise un numero qui est deja le CC propre d'un
@@ -337,6 +348,11 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // « Learn » : un CC entrant est remappe vers le CC que le profil associe au
     // parametre. Sur un synthe sans sortie MIDI — le Kobol — c'est le seul sens
     // possible du MIDI learn : lier un potard de notre controleur.
+    //
+    // Un CC SANS remappage passe sous son propre numero (identite, cf.
+    // rebuildLearnMap) : le profil nomme les CC, il ne filtre pas l'entree. La
+    // garde `dst < 0` ci-dessous ne peut donc plus se declencher ; elle reste par
+    // securite si la table venait a porter un jour des entrees fermees.
     //
     // Capture AVANT le clear, qui jette tout l'entrant, et reinjection apres.
     // Tableau sur la pile : aucune allocation sur le thread audio. Au-dela de

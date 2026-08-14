@@ -53,6 +53,12 @@ des pas que le moteur refuse.
 
 ## 2. Le profil « Aucun » avale tout le MIDI entrant
 
+> ✅ **CORRIGÉ le 2026-08-14.** `rebuildLearnMap()` initialise désormais les 128 entrées
+> en **identité**, y compris les CC que le profil ne connaît pas ; les remappages de learn
+> s'appliquent par-dessus. Un CC entrant passe donc sous son propre numéro et
+> s'enregistre tel quel, sans profil. Le profil **nomme** les CC, il ne décide plus de
+> leur sort — ce que `INTEGRATION.md` stipulait déjà.
+
 **Se tait.** C'est l'explication complète de « REC ne fait rien ».
 
 `rebuildLearnMap()` (`PluginProcessor.cpp:271`) ne remplit sa table **que** depuis le
@@ -264,7 +270,7 @@ la question n'est pas *« comment le dire ? »* mais *« que devrait-il faire ? 
 | point | aujourd'hui | forme visée |
 |---|---|---|
 | 1 — pas > 16 | ~~écriture jetée~~ ✅ corrigé | le moteur borne sur le N de la row, comme l'UI |
-| 2 — profil « Aucun » | MIDI entrant avalé | l'inconnu passe en identité ; le profil ne fait que **nommer** |
+| 2 — profil « Aucun » | ~~MIDI entrant avalé~~ ✅ corrigé | l'inconnu passe en identité ; le profil ne fait que **nommer** |
 | 3 — REC à l'arrêt | refus | **step-record** (convention Elektron/MPC), REC en rouge |
 | 3 — REC sans profil | refus | enregistre le **numéro** de contrôleur brut |
 | 3 — REC sur P-lock | inerte | écrit le P-lock du pas courant |
