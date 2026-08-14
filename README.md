@@ -121,9 +121,11 @@ Si **AudioPluginHost** est activé, l’application se trouve sous :
 
 ### Interface plugin
 
-L’éditeur reproduit le **panneau matériel visé** : écran couleur (pages **PAT / ROLL / HARM / AUTO / GLOB / SONG**), **4 encodeurs poussés**, boutons de transport et **clavier** 16 blanches + 11 noires avec Shift.
+L’éditeur reproduit le **panneau matériel visé** : écran couleur (pages **PAT / ROLL / HARM / AUTO / GLOB / SONG**), encodeurs poussés, boutons de transport et **clavier** 16 blanches + 11 noires avec Shift.
 
-> L’ancienne description « écran OLED, deux encodeurs » est **périmée** : elle décrivait la cible de la première révision. Voir `CAHIER_DES_CHARGES_V1.md` §10.1–10.2.
+> **Panneau cible, figé** (`nidmi-seq-hardware/docs/BOM.md`) : écran ILI9488 4,0″ **480×320**, **5 encodeurs EC11**, **8 boutons PB86**, 27 touches capacitives + ruban. Le VST en implémente bien **5**, mais leurs rôles sont contextuels au lieu d’être fixes.
+>
+> Référence ergonomique : **`VISION_ERGO_HARMONIE.md`**. Les descriptions « écran OLED / deux encodeurs » puis « ~320×240 / 4 encodeurs » de `CAHIER_DES_CHARGES_V1.md` §10.1–10.2 sont **périmées**.
 
 Les paramètres (BPM, signature, horloge MIDI, etc.) restent dans l’**APVTS** et peuvent être automatisés par l’hôte.
 

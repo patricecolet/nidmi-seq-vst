@@ -345,7 +345,8 @@ résultat transformé).
 | Navigation = canal global, jamais confisqué (§2.2) | ❌ vision (aujourd'hui : drill-in vole la nav) |
 | Sous-pattern = grain (push-curseur), édition en place ROLL | ❌ vision (aujourd'hui : drill-in = mode exclusif) |
 | Note par défaut hérite du dernier pas édité | ❌ vision (aujourd'hui : C4/100/80 rigide) |
-| 5ᵉ encodeur master | ❌ vision |
+| 5ᵉ encodeur master | ✅ implémenté *(corrigé 2026-08 : `masterEncoder_` existe, BPM + push BPM/Pat)* |
+| Rôles fixes des 5 encodeurs (Curseur · Hauteur · Vélo · **Gate** · Master) | ❌ vision — le compte y est, pas les rôles ; **Gate n'a pas d'encodeur dédié** |
 | Boutons de vue par famille + re-appui | ❌ vision (aujourd'hui : cyclage « Vue ») |
 | Push-and-turn généralisé (profondeur) | ❌ vision (aujourd'hui : ⇧Enc partiels) |
 | Tonalité maître dans Harmony | ❌ vision (aujourd'hui : Global) |

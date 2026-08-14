@@ -571,7 +571,13 @@ Termes fixés, sans collision (« mode » est **réservé** à son sens musical 
 - **Page** — fenêtre de **16 pas** (P1–P4) à l'intérieur d'une Row dont le N > 16 ; navigation sur les **touches noires** (Vues PATTERN + AUTO).
 - **Pattern** — la séquence · **Row** — la piste (son tuplet N) · **Step** — un pas parmi N.
 
-### 10.1 Écran graphique ~320×240 couleur (révision 2026-05)
+### 10.1 Écran graphique couleur (révision 2026-05, **corrigé 2026-08**)
+
+> ⚠️ **PÉRIMÉ SUR LA RÉSOLUTION — corrigé le 2026-08.** L'écran cible est **FIGÉ**
+> à **ILI9488 4,0″ 480×320 SPI** (`nidmi-seq-hardware/docs/BOM.md` §6 et
+> `docs/ARCHITECTURE.md`, tous deux marqués FIGÉ). Le « ~320×240 » ci-dessous date
+> de la révision 2026-05, avant le gel de la BOM. Tout raisonnement de place à
+> l'écran doit partir de 480×320.
 
 > **Révision 2026-05 — supersède l'OLED 256×64 mono.** Pour rendre la composition lisible (polyrythmie multi-row, progression harmonique, automation) tout en gardant le hardware comme source de vérité, l'afficheur passe à un **TFT graphique couleur ~320×240 (SPI)**, dans les capacités d'un ESP32-S3. L'ergonomie reste pilotée par **touches + encodeurs** : l'écran ne fait qu'**afficher** l'état ; il n'est pas tactile. Le layout « 2 lignes × 4 colonnes / 8 params » de la V1 mono devient un cas particulier (page GLOBAL), pas la contrainte d'affichage générale.
 
@@ -587,9 +593,19 @@ L'écran est **le hub d'édition** : il doit porter toutes les conditions d'une 
 
 Barre de titre commune : contexte courant + transport (▶/■) + BPM + signature.
 
-### 10.2 Encodeurs (contextuels — révision 2026-05)
+### 10.2 Encodeurs (contextuels — révision 2026-05) — ⚠️ **SUPERSÉDÉ**
 
-**4 encodeurs poussoirs** (révision : +2 vs la V1 à 2 encodeurs ; un encodeur ≈ 1 $, reste bon marché) :
+> ⚠️ **SECTION SUPERSÉDÉE PAR `VISION_ERGO_HARMONIE.md` (2026-06) §2.0, §2.4 et §3.**
+> Elle décrit des **encodeurs contextuels** dont « le sens dépend de la Vue active ».
+> La vision retenue pose l'inverse : *« la vue ne change que ce qu'on VOIT ; la
+> grammaire d'édition reste identique partout »*, et **un attribut par encodeur,
+> rôle stable dans toutes les vues** — sur **5 encodeurs** (Curseur · Hauteur ·
+> Vélo · Gate · Master), la surface matérielle étant figée à 5 EC11.
+>
+> Ce qui suit décrit donc **l'implémentation actuelle du VST**, pas la cible. C'est
+> la source directe des défauts relevés dans `ERGONOMIE.md` §4, §5 et §6.
+
+**4 encodeurs poussoirs** — *état implémenté ; la cible est 5, cf. encadré ci-dessus* :
 - **Enc1 = valeur** (édite le champ sous le curseur).
 - **Enc2 = curseur** (navigue) ; **push Enc2 = change le champ édité** par Enc1.
 - **Enc3 = Vélo** (dédié) : vélocité du pas sélectionné, **dans n'importe quelle Vue** (luminosité PATTERN / lane ROLL suivent). **Shift+Enc3 = Gate** (émule le *push* de l'encodeur-poussoir → articulation : durée de la note en % du pas).
@@ -672,8 +688,12 @@ Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué). **Im
 - MIDI UART (IN/OUT) minimum.
 - USB-MIDI (via USB natif de l'S3).
 - TRS MIDI (type A ou B — à fixer).
-- 1 écran TFT graphique couleur **~320×240 (SPI)** — révision 2026-05, supersède l'OLED 256×64 mono (cf. §10.1). SPI haute fréquence pour un refresh fluide du playhead.
-- 27 touches (16 blanches + 11 noires), **5 boutons (Play · Stop · Rec · Vue · Export)**, **4 encodeurs poussoirs** (Valeur · Curseur · Vélo · Zoom) + Shift.
+> **Surface de contrôle FIGÉE** (`nidmi-seq-hardware/docs/BOM.md`, BOM gelée) —
+> les trois lignes ci-dessous sont corrigées le 2026-08 d'après elle.
+
+- 1 écran TFT graphique couleur **ILI9488 4,0″ 480×320 (SPI)** — FIGÉ. SPI haute fréquence pour un refresh fluide du playhead. *(la révision 2026-05 disait « ~320×240 » : périmé.)*
+- 27 touches capacitives (16 blanches + 11 noires) **+ ruban**, **8 boutons PB86** — 3 de vue (`ROW` · `HARMONY` · `PROJET`, re-appui = cycle dans la famille) + `Shift` + `Play` · `Stop` · `Rec` · `Export`. *(la révision 2026-05 disait « 5 boutons dont Vue » : périmé, cf. `VISION_ERGO_HARMONIE.md` §3.)*
+- **5 encodeurs poussoirs EC11** (Curseur · Hauteur · Vélo · Gate · Master) — FIGÉ. *(le VST en implémente bien 5 — Curseur, Valeur, Vélo, Zoom, Master — mais leurs **rôles** ne sont pas ceux-ci : ils sont contextuels, et Gate n'a pas d'encodeur dédié.)*
 
 ---
 

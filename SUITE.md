@@ -80,8 +80,13 @@ Cible :
 | Pas | Valeur | **CC#** | Row |
 
 `Interp` sur le push d'Enc3, juste sous la molette qui porte le CC#. La bande
-disparaît et libère sa hauteur au profit de la lane — 20 px qui comptent sur un
-320×240. Le cas P-lock marche tel quel, Enc3 éditant alors le CC# du slot actif.
+disparaît et libère sa hauteur au profit de la lane. Le cas P-lock marche tel quel,
+Enc3 éditant alors le CC# du slot actif.
+
+> **Corrigé le 2026-08** : cette section justifiait le gain de place « sur un
+> 320×240 ». L'écran cible est figé à **480×320** — l'argument de place tenait sur
+> un chiffre périmé. Le fond reste valable (`ERGONOMIE.md` §5), mais pour une autre
+> raison : la bande redéfinit deux encodeurs sans le dire.
 
 ### 2. Doublons de la page GLOB
 

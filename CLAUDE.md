@@ -84,7 +84,22 @@ Not "step = fraction of a quarter note", but "the bar is divided into N equal st
 - **Chromatic**: raw MIDI.
 
 ### 3. Hardware-first ergonomics
-Colour graphic TFT **~320×240 (SPI), non-touch**, **4 push encoders** (Enc1 value / Enc2 cursor / Enc3 velocity / Enc4 zoom), 16 white keys (steps) + 11 black (functions) + Shift. The VST is a prototype for ESP32-S3 hardware. See `CAHIER_DES_CHARGES_V1.md` §10.1–10.2 for the full spec.
+**Target hardware — FROZEN** (`nidmi-seq-hardware/docs/BOM.md`): colour TFT
+**ILI9488 4,0″ 480×320 SPI, non-touch**, **5 push encoders** (EC11), **8 PB86
+buttons**, 27 capacitive keys (16 white + 11 black) + ribbon, 3× ESP32-S3.
+
+**Implemented today in the VST**: **5 push encoders** — `navEncoder_` (cursor),
+`valueEncoder_`, `veloEncoder_`, `zoomEncoder_`, `masterEncoder_` (BPM, push
+BPM/Pat) — keys + Shift. The count matches the target; the **roles do not**. The
+vision assigns one fixed attribute per encoder (Cursor · Pitch · Velo · Gate ·
+Master, identical in every view); today's roles are contextual and there is no
+dedicated Gate encoder (gate hides behind a push toggle on Velo).
+
+Do not conflate the two. The ergonomic reference is
+**`VISION_ERGO_HARMONIE.md`** — designated source of truth by the hardware repo;
+its §8 holds the vision/implemented table. `CAHIER_DES_CHARGES_V1.md` §10.1–10.2
+predates it (2026-05) and is **superseded on the control surface and on the
+encoder grammar**.
 
 > Revision 2026-05 **supersedes** the original OLED 256×64 mono / 2-encoder
 > spec. The old mono "2 rows × 4 columns / 8 params" layout survives only as a
@@ -125,8 +140,9 @@ The processor owns the engine and is the *only* code that mutates it. The editor
 
 - **`PluginEditor` + `HardwareStyleComponents`** — hardware-style UI mirroring the
   target panel: colour screen (`PatternScreen`, pages PAT / ROLL / HARM / AUTO /
-  GLOB / SONG), transport buttons, **4 push encoders**, and a 16-white + 11-black
-  keys pad with Shift. *Not* the obsolete OLED / 2-encoder layout — see pillar 3.
+  GLOB / SONG), transport buttons, **4 push encoders today (target: 5)**, and a
+  16-white + 11-black keys pad with Shift. *Not* the obsolete OLED / 2-encoder
+  layout — see pillar 3.
   Screen painting is split per page (`ScreenPatternView`, `ScreenRollView`,
   `ScreenHarmonyView`, `ScreenAutoGlobalView`); geometry helpers shared by painting
   **and** hit-testing live in `HardwareStyleInternal.h` (`computePrLayout`,
