@@ -14,6 +14,11 @@ premier point n'est pas de l'ergonomie, c'est une perte de données.
 
 ## 1. Perte de données silencieuse au-delà du pas 16
 
+> ✅ **CORRIGÉ le 2026-08-14** — `nidmi-sequencer-core` `6df4aef`. Les onze gardes
+> passent par `stepExists()`, qui borne sur `rows[row].numSteps`. Cinq tests de
+> régression, vérifiés par falsification : en remettant la borne globale, les cinq
+> tombent et rien d'autre ne bouge. 234/234.
+
 **Se tait.** C'est le plus grave, et il ne se voit pas.
 
 `SequencerEngine` borne l'écriture d'un pas sur `pattern_.numSteps` — le compteur
@@ -258,7 +263,7 @@ la question n'est pas *« comment le dire ? »* mais *« que devrait-il faire ? 
 
 | point | aujourd'hui | forme visée |
 |---|---|---|
-| 1 — pas > 16 | écriture jetée | le moteur borne sur le N de la row, comme l'UI |
+| 1 — pas > 16 | ~~écriture jetée~~ ✅ corrigé | le moteur borne sur le N de la row, comme l'UI |
 | 2 — profil « Aucun » | MIDI entrant avalé | l'inconnu passe en identité ; le profil ne fait que **nommer** |
 | 3 — REC à l'arrêt | refus | **step-record** (convention Elektron/MPC), REC en rouge |
 | 3 — REC sans profil | refus | enregistre le **numéro** de contrôleur brut |
