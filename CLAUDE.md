@@ -268,4 +268,8 @@ interop.
 
 ## Reference documents
 
+- **`SUITE.md`** — where the work stands and what comes next: repo/branch state,
+  what is verified vs merely compiled, the ordered backlog, and the practical
+  gotchas (relaunch after build, driving the UI, forcing a rebuild). **Read this
+  first when resuming.**
 - **`CAHIER_DES_CHARGES_V1.md`** — complete V1 specification (design rationale, data model, ergonomic grammar, ESP32-S3 target, roadmap V1/V1.5/V2).
