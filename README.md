@@ -121,11 +121,29 @@ Si **AudioPluginHost** est activé, l’application se trouve sous :
 
 ### Interface plugin
 
-L’éditeur est volontairement **minimal** : **écran OLED**, **boutons** (transport + navigation) et **clavier** 16 pas + dièses. Les paramètres (BPM, signature, horloge MIDI, etc.) restent dans l’**APVTS** et peuvent être automatisés par l’hôte ; une UI complète pourra être ajoutée plus tard sur ce socle matériel.
+L’éditeur reproduit le **panneau matériel visé** : écran couleur (pages **PAT / ROLL / HARM / AUTO / GLOB / SONG**), **4 encodeurs poussés**, boutons de transport et **clavier** 16 blanches + 11 noires avec Shift.
+
+> L’ancienne description « écran OLED, deux encodeurs » est **périmée** : elle décrivait la cible de la première révision. Voir `CAHIER_DES_CHARGES_V1.md` §10.1–10.2.
+
+Les paramètres (BPM, signature, horloge MIDI, etc.) restent dans l’**APVTS** et peuvent être automatisés par l’hôte.
+
+### Profils de synthé
+
+Le plugin charge des **profils** décrivant un synthé cible — carte des CC, libellés
+courts, géométrie du panneau, valeurs par défaut — depuis
+`~/Documents/NiDMI/Profiles/*.json`. Le profil actif se choisit sur la page **GLOB**.
+
+Deux profils sont fournis dans [`Profiles/`](Profiles/) : **Kobol Expander**
+(généré depuis le firmware MIDI-CV, cf. dépôt `synth`) et **Waldorf M**. Le format
+est documenté dans [`Profiles/FORMAT.md`](Profiles/FORMAT.md) et reste éditable à
+la main.
+
+Un **MIDI learn** permet de remapper le CC reçu vers le CC envoyé au paramètre, sans
+perdre le numéro d'origine : « Reset mappings » (page GLOB) revient à l'identité.
 
 ### Transport
 
-**Play** et **Stop** pilotent le moteur (sauf si l’**horloge MIDI** est active : voir les paramètres `useMidiClock` / automation). L’**état** et le **BPM** affichés sur l’OLED viennent du moteur / des paramètres.
+**Play** et **Stop** pilotent le moteur (sauf si l’**horloge MIDI** est active : voir les paramètres `useMidiClock` / automation). L’**état** et le **BPM** affichés à l’écran viennent du moteur / des paramètres.
 
 ### Standalone : horloge MIDI
 

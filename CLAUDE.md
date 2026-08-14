@@ -123,7 +123,20 @@ The processor owns the engine and is the *only* code that mutates it. The editor
 
 - **`PatternValueTree`** — serialization bridge between `SequencerEngine` state and `juce::ValueTree` (used in `getStateInformation` / `setStateInformation`). Plugin state XML has two children: the APVTS `"PARAMETERS"` tree and the `PatternValueTree` tree.
 
-- **`PluginEditor` + `HardwareStyleComponents`** — deliberately minimal hardware-style UI: OLED display, transport buttons, two encoders (param select / value), and a 16-step + 11-sharp piano-keys pad. Most settings live in APVTS and are automatable; richer UI is explicitly deferred.
+- **`PluginEditor` + `HardwareStyleComponents`** — hardware-style UI mirroring the
+  target panel: colour screen (`PatternScreen`, pages PAT / ROLL / HARM / AUTO /
+  GLOB / SONG), transport buttons, **4 push encoders**, and a 16-white + 11-black
+  keys pad with Shift. *Not* the obsolete OLED / 2-encoder layout — see pillar 3.
+  Screen painting is split per page (`ScreenPatternView`, `ScreenRollView`,
+  `ScreenHarmonyView`, `ScreenAutoGlobalView`); geometry helpers shared by painting
+  **and** hit-testing live in `HardwareStyleInternal.h` (`computePrLayout`,
+  `computeHarmLayout`, `DurationBand`). Most settings live in APVTS and are
+  automatable.
+
+- **`DeviceProfile`** — synth profiles loaded at runtime from
+  `~/Documents/NiDMI/Profiles/*.json`: CC map, labels, panel geometry, MIDI-learn
+  remapping. `Profiles/FORMAT.md` documents the schema; `Profiles/` ships the
+  Kobol Expander and Waldorf M.
 
 ### Core engine model — bar-relative sampling
 
@@ -211,15 +224,33 @@ interop.
 - The audio thread must never take locks or allocate — go through `CommandFifo` for any engine mutation from the UI.
 - `setSteps(N)` (legacy) sets every row to N. For polyrhythmic patterns, use `setRowSteps(row, N)` per row.
 - When writing tests that call `tick(nowUs)` multiple times, **nowUs must be monotonic**. Driver resets its accumulator if it detects a time jump backwards.
-- Only **one** subpattern plays at a time globally in V1 (engine has a single `RunningSubPattern`). Multi-row parallel subpatterns require V2 refactor.
-- **`RowKind::CC` is data only — the engine never plays it.** `row.kind` is
-  written by `setRowKind()` and copied on clipboard ops, but
-  `SequencerEngine.cpp` **never reads it** to branch playback: a "CC row" emits
-  notes like any other. The only two CC emission sites are **macros**
-  (`setMacroValue`) and **P-locks** (`triggerRowStep` → `ccLocks[8]`). So today
-  the AUTO page is the *only* way to sequence a controller. No UI path sets
-  `kind` either — only `PatternValueTree` deserialisation does.
-- `ChainVM` (song mode) **is wired**: `SetSongMode` command, `advanceChainAtPatternLoop()` at the pattern loop edge (or at cadence resolution when the pattern has a chord progression), serialised in `PatternValueTree`, covered by the core tests (196 pass). Toggle lives on the SONG page, key index 4. What is still deferred to V2 is **simultaneous multi-pattern playback** — only one pattern plays at a time.
+- Subpatterns run **one per row, up to `kMaxRows` in parallel** (`runningSub_[kMaxRows]`,
+  `hasActiveSubPattern(row)`). The old "single global `RunningSubPattern`" limit is gone.
+- **`RowKind::CC` is played by the engine** (`triggerRowStep`): the step's `note`
+  field carries the 0–127 controller value, and `row.ccInterp` (`Step` / `Linear` /
+  `Smooth`) interpolates *between* steps via `emitInterpolatedCC()`. Rate is capped
+  per row (10 ms) **and** globally (`setCCRateBudget()`, default 1000 msg/s,
+  round-robin across rows) — 16 lanes without the global budget measured 1616 msg/s
+  against MIDI DIN's 1041 ceiling. P-locks (`ccLocks[8]`) and macros remain the two
+  other CC emission sites.
+- **A relative subpattern anchors on the RESOLVED host note.** `triggerRowStep`
+  runs `resolveDegreeToMidi` with the row's per-bar harmony mode *before* handing
+  the note to `startSubPattern`, so a relative sub follows the modulation. Any UI
+  code computing an offset against the host note must resolve it identically —
+  `resolvePlayedNote()` in the editor is the single point for that. It used to
+  exist in three copies (engine, `buildScreenModel`, `subHostNote()`), and the
+  third didn't resolve at all: a pitch clicked in a relative sub was stored with
+  the wrong offset and played somewhere else.
+- **Paint and hit-test must share one geometry.** Bitten twice: the sub-roll
+  recomputed `withTrimmedLeft(26.0f)` separately for clicks (now `kPitchGutterW`),
+  and the HARMONIE page hit-tested on `bodyArea_` while painting on `gridArea()`
+  — so with a measure strip every band was offset and clicking the tonality lane
+  selected a chord. Neither showed anything abnormal on screen.
+- **Don't encode information "downwards" from the near-black background.**
+  `kScreenBg` is (10,12,10): darkening an out-of-scale lane by 34 % black bought
+  3.7 of luminance contrast where the chord tint had 24 — the scale was drawn and
+  invisible. Scale/chord now ride two independent axes (neutral grey / green).
+- `ChainVM` (song mode) **is wired**: `SetSongMode` command, `advanceChainAtPatternLoop()` at the pattern loop edge (or at cadence resolution when the pattern has a chord progression), serialised in `PatternValueTree`, covered by the core tests (219 pass). Toggle lives on the SONG page, key index 4. What is still deferred to V2 is **simultaneous multi-pattern playback** — only one pattern plays at a time.
 - Default MIDI channel is **one per row** (row 0 → ch 1, … row 15 → ch 16), set in the `Pattern` constructor. `PatternRow`'s own default is 0, so without it every row spoke on channel 1 — useless for a multitrack sequencer driving several machines.
 
 ## Reference documents
