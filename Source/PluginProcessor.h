@@ -70,6 +70,14 @@ public:
     // qu'armer un drapeau, l'emission a lieu au prochain bloc.
     void sendDefaultValues() noexcept { pendingDefaults_.store(true, std::memory_order_relaxed); }
 
+    // Enregistrement TEMPS REEL des controleurs : quand c'est arme et que le
+    // sequenceur joue, tout CC entrant se depose dans la lane d'automation qui
+    // porte ce numero (cf. SequencerEngine::recordCCValue).
+    //
+    // Un atomic et non un simple bool : pose par l'IHM, lu par le thread audio.
+    void setCCRecordArmed(bool on) noexcept { ccRecordArmed_.store(on, std::memory_order_relaxed); }
+    bool ccRecordArmed() const noexcept { return ccRecordArmed_.load(std::memory_order_relaxed); }
+
     bool pushCommand(const SequencerCommand& cmd);
     void applyPatternTree(const juce::ValueTree& tree);
 
@@ -125,6 +133,7 @@ private:
 
     // Arme par « Reset valeurs » depuis l'UI, consomme au prochain bloc.
     std::atomic<bool> pendingDefaults_ { false };
+    std::atomic<bool> ccRecordArmed_   { false };   // REC : capture des CC dans les lanes
 
     void rebuildLearnMap();
 

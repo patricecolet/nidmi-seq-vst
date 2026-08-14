@@ -1,5 +1,6 @@
 #include "HardwareStyleComponents.h"
 #include "HardwareStyleInternal.h"
+#include "EditorHelpers.h"   // ccInterpName : la vue AUTOMATION nomme le mode de lissage
 
 #include <cmath>
 
@@ -280,6 +281,121 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     }
 }
 
+// Vue AUTOMATION — ce que joue reellement une lane CC.
+//
+// La valeur d'un pas est une BARRE (0 en bas, 127 en haut) ; entre deux pas, la
+// COURBE dessinee est celle que le moteur emettra vraiment, selon ccInterp. Le
+// mode de lissage n'etait visible nulle part : on le reglait a l'aveugle, et un
+// geste enregistre en temps reel ne se relisait pas.
+void PatternScreen::paintAutomationLane(juce::Graphics& g, const PrLayout& L,
+                                        const PatternScreenModel::Row& row) {
+    const auto  plot = L.plot;
+    const int   n    = L.n;
+    const float cw   = L.cellW;
+    auto yOf = [&](int v) {   // 0..127 -> bas..haut
+        return plot.getBottom() - plot.getHeight() * juce::jlimit(0.0f, 1.0f, v / 127.0f);
+    };
+
+    // Reperes horizontaux 0 / 64 / 127 : sans echelle, une barre ne dit rien.
+    for (int v : {0, 64, 127}) {
+        const float y = yOf(v);
+        g.setColour(v == 64 ? kScreenBorder : kCellGrid);
+        g.drawLine(plot.getX(), y, plot.getRight(), y, v == 64 ? 0.8f : 1.0f);
+        g.setColour(kRowLabel.withAlpha(0.5f));
+        g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
+        g.drawText(juce::String(v),
+                   juce::Rectangle<float>(bodyArea_.getX(), y - 5.0f, kPitchGutterW - 3.0f, 10.0f),
+                   juce::Justification::centredRight);
+    }
+
+    // TEMPS de la mesure, comme dans le piano-roll : c'est ce qui rend la
+    // polyrythmie lisible, et une lane a son propre N.
+    {
+        const int beats = juce::jlimit(1, 16, model_.tsNum);
+        for (int b = 0; b < beats; ++b) {
+            const float x = plot.getX() + plot.getWidth() * static_cast<float>(b) / static_cast<float>(beats);
+            const bool  down = (b == 0);
+            g.setColour(kRowLabel.withAlpha(down ? 0.38f : 0.15f));
+            g.drawLine(x, plot.getY(), x, plot.getBottom(), down ? 1.6f : 0.9f);
+        }
+    }
+
+    // Barres de valeur, pas par pas. Un pas inactif ne porte aucune valeur : il
+    // est laisse vide plutot que dessine a zero, sinon « CC a 0 » et « pas de
+    // point ici » deviendraient indiscernables.
+    for (int s = 0; s < n; ++s) {
+        const float x = plot.getX() + static_cast<float>(s) * cw;
+        if (s == model_.selectedStep) {
+            g.setColour(kSelRowBg);
+            g.fillRect(juce::Rectangle<float>(x, plot.getY(), cw, plot.getHeight()));
+            g.setColour(kSelRowBg.withMultipliedAlpha(3.0f));
+            g.drawRect(juce::Rectangle<float>(x, plot.getY(), cw, plot.getHeight()), 1.5f);
+        }
+        if (s == row.playhead) {
+            g.setColour(kPlayhead.withAlpha(0.22f));
+            g.fillRect(juce::Rectangle<float>(x, plot.getY(), cw, plot.getHeight()));
+        }
+        g.setColour(kScreenBorder);
+        g.drawLine(x, plot.getY(), x, plot.getBottom(), 0.4f);
+
+        if (!row.enabled[static_cast<size_t>(s)]) continue;
+        const int   v = row.note[static_cast<size_t>(s)] & 0x7F;   // note = VALEUR sur une lane CC
+        const float y = yOf(v);
+        g.setColour(kCellOn.withAlpha(0.28f));
+        g.fillRect(juce::Rectangle<float>(x + 1.0f, y, cw - 2.0f, plot.getBottom() - y));
+        g.setColour(kCellOn);
+        g.fillRect(juce::Rectangle<float>(x + 1.0f, y - 1.0f, cw - 2.0f, 2.5f));   // sommet marque
+    }
+
+    // COURBE reelle entre les pas actifs, selon ccInterp — la meme fonction que le
+    // moteur (smoothstep pour Smooth, droite pour Linear, palier pour Step).
+    {
+        int prev = -1;
+        juce::Path p;
+        bool started = false;
+        for (int s = 0; s < n; ++s) {
+            if (!row.enabled[static_cast<size_t>(s)]) continue;
+            const float xc = plot.getX() + (static_cast<float>(s) + 0.5f) * cw;
+            const float yc = yOf(row.note[static_cast<size_t>(s)] & 0x7F);
+            if (!started) { p.startNewSubPath(xc, yc); started = true; prev = s; continue; }
+
+            const float x0 = plot.getX() + (static_cast<float>(prev) + 0.5f) * cw;
+            const float y0 = yOf(row.note[static_cast<size_t>(prev)] & 0x7F);
+            if (row.ccInterp == 0) {                 // Step : palier puis saut
+                p.lineTo(xc, y0);
+                p.lineTo(xc, yc);
+            } else if (row.ccInterp == 1) {          // Linear
+                p.lineTo(xc, yc);
+            } else {                                  // Smooth : courbe en S echantillonnee
+                const int kSeg = 12;
+                for (int i = 1; i <= kSeg; ++i) {
+                    const float t = static_cast<float>(i) / static_cast<float>(kSeg);
+                    const float e = t * t * (3.0f - 2.0f * t);   // smoothstep, comme le moteur
+                    p.lineTo(x0 + (xc - x0) * t, y0 + (yc - y0) * e);
+                }
+            }
+            prev = s;
+        }
+        if (started) {
+            g.setColour(kPlayhead.withAlpha(0.85f));
+            g.strokePath(p, juce::PathStrokeType(1.6f));
+        }
+    }
+
+    // En-tete : destination et mode de lissage, les deux reglages qui decident de
+    // ce qu'on vient de voir.
+    juce::String head = (row.ccShort.isNotEmpty() ? row.ccShort : ("CC" + juce::String(row.ccNumber)))
+                      + juce::String(juce::CharPointer_UTF8("  \xc2\xb7  "))
+                      + ccInterpName(row.ccInterp);
+    if (model_.recArmed)
+        head += juce::String(juce::CharPointer_UTF8("  \xc2\xb7  REC"));
+    g.setColour(model_.recArmed ? kPlayhead : kRowLabel);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
+    g.drawText(head, juce::Rectangle<float>(plot.getX() + 4.0f, plot.getY() + 2.0f,
+                                            plot.getWidth() - 8.0f, 12.0f),
+               juce::Justification::topLeft);
+}
+
 void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     if (model_.inSub) { paintSubRoll(g); return; }   // re-cible le piano-roll sur le sub
     paintMeasureBand(g);                              // bandeau de mesures (multi-mesures), cliquable
@@ -291,6 +407,15 @@ void PatternScreen::paintPianoRollPage(juce::Graphics& g) {
     }
     const int   r   = juce::jlimit(0, model_.numRows - 1, model_.selectedRow);
     const auto& row = model_.rows[static_cast<size_t>(r)];
+
+    // Une lane d'AUTOMATION n'a pas de hauteurs : elle se lit sur la page AUTO,
+    // qui est LA page des controleurs. La dessiner ici aussi ferait double emploi
+    // — ROLL et AUTO sont tous deux la vue de detail de la row selectionnee, l'un
+    // pour les hauteurs, l'autre pour les controleurs.
+    if (row.isCC) {
+        paintStubPage(g, "ROW D'AUTOMATION", "les valeurs se lisent sur AUTO");
+        return;
+    }
 
     paintPitchLanes(g, L.plot, L.topNote, L.visibleLanes, L.laneH);
 

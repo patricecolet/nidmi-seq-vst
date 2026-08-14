@@ -491,6 +491,22 @@ void NidmiSeqAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     clock_.tick(engine_, tickTimeUs);
+
+    // Enregistrement TEMPS REEL des controleurs, APRES le tick : le pas courant
+    // de chaque row vient d'etre mis a jour, donc un CC qui arrive juste apres une
+    // frontiere de pas se depose dans le nouveau pas — celui qu'on entend.
+    //
+    // On enregistre les CC REMAPPES (post-learn), pas les bruts : c'est le CC qui
+    // part reellement au synthe, donc celui que la lane doit rejouer.
+    //
+    // La granularite reste le BLOC : tous les CC d'un meme bloc tombent dans le
+    // meme pas, quel que soit leur samplePosition. A 512 echantillons (~12 ms)
+    // contre un pas de 125 ms en 1/16 a 120 BPM, l'erreur maximale est d'un bloc
+    // sur une frontiere de pas. La quantisation au pas domine tres largement.
+    if (ccRecordArmed_.load(std::memory_order_relaxed))
+        for (int i = 0; i < numRemaps; ++i)
+            engine_.recordCCValue(remaps[i].cc, remaps[i].value);
+
     drainSeqEventsToMidi(midiMessages, 0);
 }
 

@@ -324,14 +324,28 @@ inline bool isBlackKeyPc(int note) {
 inline constexpr int kAutoNumSlots  = 8;
 inline constexpr int kAutoNumFields = 2;
 inline const char* autoFieldName(int field) {
-    static const char* kF[2] = {"Valeur", "CC#"};
-    return kF[juce::jlimit(0, 1, field)];
+    // 3e champ « Interp » : disponible seulement sur la LANE. Un P-lock est une
+    // valeur ponctuelle attachee a un pas, il n'y a rien a interpoler entre deux.
+    static const char* kF[3] = {"Valeur", "CC#", "Interp"};
+    return kF[juce::jlimit(0, 2, field)];
 }
 
 struct AutoLayout {
     juce::Rectangle<float> slotBand, fieldBand, lane, detail;
     float slotW = 10.0f, fieldW = 10.0f, cellW = 10.0f;
     int   n = 1;
+    int   fieldsToShow = 2;   // 3 sur la LANE (Interp en plus), 2 sur un P-lock
+    /// Rect de la cellule `cell` de la bande : 0 = LANE, 1..8 = slots 0..7.
+    juce::Rectangle<float> slotCell(int cell) const {
+        return { slotBand.getX() + static_cast<float>(cell) * slotW,
+                 slotBand.getY(), slotW, slotBand.getHeight() };
+    }
+    /// Cellule sous l'abscisse `px` -> numero de slot (PatternScreenModel::kAutoLaneSlot ou 0..7).
+    int slotAtX(float px) const {
+        const int cell = juce::jlimit(0, kAutoNumSlots,
+                                      static_cast<int>((px - slotBand.getX()) / slotW));
+        return cell - 1;   // cellule 0 = LANE
+    }
 };
 
 inline AutoLayout computeAutoLayout(const PatternScreenModel& m, juce::Rectangle<float> body) {
@@ -346,8 +360,10 @@ inline AutoLayout computeAutoLayout(const PatternScreenModel& m, juce::Rectangle
     L.lane      = b;
     const int r = (m.numRows > 0) ? juce::jlimit(0, m.numRows - 1, m.selectedRow) : 0;
     L.n      = (m.numRows > 0) ? juce::jlimit(1, 64, m.rows[static_cast<size_t>(r)].numSteps) : 1;
-    L.slotW  = L.slotBand.getWidth() / static_cast<float>(kAutoNumSlots);
-    L.fieldW = L.fieldBand.getWidth() / static_cast<float>(kAutoNumFields);
+    // kAutoNumSlots + 1 : la cellule LANE occupe la premiere place.
+    L.slotW  = L.slotBand.getWidth() / static_cast<float>(kAutoNumSlots + 1);
+    L.fieldsToShow = (m.autoSlot == PatternScreenModel::kAutoLaneSlot) ? 3 : 2;
+    L.fieldW = L.fieldBand.getWidth() / static_cast<float>(L.fieldsToShow);
     L.cellW  = L.lane.getWidth() / static_cast<float>(L.n);
     return L;
 }

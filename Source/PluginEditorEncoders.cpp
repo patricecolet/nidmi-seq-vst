@@ -104,12 +104,14 @@ void NidmiSeqAudioProcessorEditor::syncValueEncoderFromParam() {
         valueEncoderLabel_.setText(DeviceProfile::byIndex(idx).name(), juce::dontSendNotification);
         return;
     }
-    // Lignes d'action : rien a tourner, tout se joue au push. On neutralise
-    // l'encodeur plutot que de le laisser sur la valeur de la ligne precedente.
+    // Lignes d'action : rien a tourner, tout se joue au push de PARAM. On neutralise
+    // l'encodeur Valeur plutot que de le laisser sur la valeur de la ligne
+    // precedente — et son etiquette ne dit plus « Push », qui pointait vers la
+    // mauvaise molette. Le bouton porte desormais le nom de l'action.
     if (oledParamIndex_ == kGlobalRowResetMappings || oledParamIndex_ == kGlobalRowResetValues) {
         valueEncoder_.setRange(0.0, 1.0, 1.0);
         valueEncoder_.setValue(0.0, juce::dontSendNotification);
-        valueEncoderLabel_.setText("Push", juce::dontSendNotification);
+        valueEncoderLabel_.setText(juce::CharPointer_UTF8("\xe2\x80\x94"), juce::dontSendNotification);
         return;
     }
     auto&       ap    = proc_.apvts();
@@ -305,8 +307,14 @@ void NidmiSeqAudioProcessorEditor::onNavEncoderChanged() {
             const int ss = juce::jlimit(0, an - 1, (int) std::lround(navEncoder_.getValue()));
             if (ss != selectedStep_) { selectedStep_ = ss; applyEncoderConfigForState(); }
         } else {
-            const int sl = juce::jlimit(0, 7, (int) std::lround(navEncoder_.getValue()));
-            if (sl != autoSlot_) { autoSlot_ = sl; applyEncoderConfigForState(); }
+            // Borne basse PatternScreenModel::kAutoLaneSlot : la molette traverse la cellule LANE.
+            const int sl = juce::jlimit(PatternScreenModel::kAutoLaneSlot, 7, (int) std::lround(navEncoder_.getValue()));
+            if (sl != autoSlot_) {
+                autoSlot_ = sl;
+                if (autoSlot_ != PatternScreenModel::kAutoLaneSlot) autoField_ = juce::jlimit(0, 1, autoField_);
+                applyEncoderConfigForState();
+                configurePushButtons();
+            }
         }
     } else if (screenPage_ == PatternScreenModel::Page::Song) {
         // Enc2 = curseur de slot de chaîne (0..len ; len = ligne « + » d'ajout).
@@ -422,6 +430,15 @@ void NidmiSeqAudioProcessorEditor::onValueEncoderChanged() {
     }
     if (screenPage_ == PatternScreenModel::Page::Auto) {
         const int v = (int) std::lround(valueEncoder_.getValue());
+        if (autoSlot_ == PatternScreenModel::kAutoLaneSlot) {
+            // LANE : la valeur d'un pas EST la note du pas (une row d'automation
+            // range la valeur du controleur dans StepData.note), le CC# et le mode
+            // d'interpolation sont des reglages de ROW.
+            if      (autoField_ == 0) postLaneValueAt(selectedStep_, v);
+            else if (autoField_ == 1) postLaneCcNumber(v);
+            else                      postLaneInterp(v);
+            return;
+        }
         if (autoField_ == 0)
             postAutoValueAt(selectedStep_, v);
         else
@@ -586,7 +603,38 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
         const int   nr  = juce::jmax(1, static_cast<int>(pat.numRows));
         const int   ar  = juce::jlimit(0, nr - 1, selectedRow_);
         const int   an  = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(ar)].numSteps));
-        if (autoField_ == 0) {
+        if (autoSlot_ == PatternScreenModel::kAutoLaneSlot) {
+            const auto& lrow = pat.rows[static_cast<size_t>(ar)];
+            const int   ss   = juce::jlimit(0, an - 1, selectedStep_);
+            const auto& sd   = lrow.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss));
+            navEncoderLabel_.setText((autoField_ == 0) ? ("Pas " + juce::String(ss + 1))
+                                                       : juce::String("Lane"),
+                                     juce::dontSendNotification);
+            if (autoField_ == 0) {
+                const int v = sd.enabled ? static_cast<int>(sd.note & 0x7F) : 0;
+                valueEncoderLabel_.setText("Val " + juce::String(v), juce::dontSendNotification);
+                navEncoder_.setRange(0.0, static_cast<double>(juce::jmax(1, an - 1)), 1.0);
+                navEncoder_.setValue(static_cast<double>(ss), juce::dontSendNotification);
+                valueEncoder_.setRange(0.0, 127.0, 1.0);
+                valueEncoder_.setValue(static_cast<double>(v), juce::dontSendNotification);
+            } else if (autoField_ == 1) {
+                const int cc = static_cast<int>(lrow.ccNumber);
+                valueEncoderLabel_.setText(
+                    DeviceProfile::byIndex(proc_.deviceProfileIndex()).label(cc),
+                    juce::dontSendNotification);
+                navEncoder_.setRange(static_cast<double>(PatternScreenModel::kAutoLaneSlot), 7.0, 1.0);
+                navEncoder_.setValue(static_cast<double>(autoSlot_), juce::dontSendNotification);
+                valueEncoder_.setRange(0.0, 127.0, 1.0);
+                valueEncoder_.setValue(static_cast<double>(cc), juce::dontSendNotification);
+            } else {
+                const int mode = static_cast<int>(lrow.ccInterp);
+                valueEncoderLabel_.setText(ccInterpName(mode), juce::dontSendNotification);
+                navEncoder_.setRange(static_cast<double>(PatternScreenModel::kAutoLaneSlot), 7.0, 1.0);
+                navEncoder_.setValue(static_cast<double>(autoSlot_), juce::dontSendNotification);
+                valueEncoder_.setRange(0.0, 2.0, 1.0);
+                valueEncoder_.setValue(static_cast<double>(mode), juce::dontSendNotification);
+            }
+        } else if (autoField_ == 0) {
             const int   ss = juce::jlimit(0, an - 1, selectedStep_);
             const auto& lk = pat.rows[static_cast<size_t>(ar)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(ss))
                                  .ccLocks[static_cast<size_t>(juce::jlimit(0, 7, autoSlot_))];
@@ -602,8 +650,8 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             valueEncoderLabel_.setText(
                 DeviceProfile::byIndex(proc_.deviceProfileIndex()).label(effectiveAutoCc()),
                 juce::dontSendNotification);
-            navEncoder_.setRange(0.0, 7.0, 1.0);
-            navEncoder_.setValue(static_cast<double>(juce::jlimit(0, 7, autoSlot_)), juce::dontSendNotification);
+            navEncoder_.setRange(static_cast<double>(PatternScreenModel::kAutoLaneSlot), 7.0, 1.0);
+            navEncoder_.setValue(static_cast<double>(juce::jlimit(PatternScreenModel::kAutoLaneSlot, 7, autoSlot_)), juce::dontSendNotification);
             valueEncoder_.setRange(0.0, 127.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(effectiveAutoCc()), juce::dontSendNotification);
         }
@@ -729,17 +777,59 @@ void NidmiSeqAudioProcessorEditor::configurePushButtons() {
         hide(3);                                       // Enc4 = zoom octaves
         return;
     }
-    // Auto / Global / Song : pushBtn cachés.
+    if (screenPage_ == PatternScreenModel::Page::Auto) {
+        // Le type de la row se reglait UNIQUEMENT sur GLOB : il fallait quitter la
+        // page des controleurs pour declarer qu'une row en etait une. Le push de
+        // Param le fait ici, la ou on regarde la lane.
+        const auto& apat = proc_.engine().pattern();
+        const int   anr  = juce::jmax(1, static_cast<int>(apat.numRows));
+        const int   aar  = juce::jlimit(0, anr - 1, selectedRow_);
+        const bool  aIsCC = (apat.rows[static_cast<size_t>(aar)].kind == RowKind::CC);
+        if (autoSlot_ == PatternScreenModel::kAutoLaneSlot)
+            setAction(0, aIsCC ? juce::String("Row") + arrow + "Note"
+                               : juce::String("Row") + arrow + "CC", true);
+        else
+            hide(0);
+        hide(1); hide(2); hide(3);
+        return;
+    }
+    if (screenPage_ == PatternScreenModel::Page::Global) {
+        // Les lignes d'action affichent « push » dans la colonne valeur, mais rien
+        // ne disait POUSSER QUOI : la page n'etait pas cablee ici, donc aucun bouton
+        // n'etait etiquete. Le push est celui de Param (Enc1), la molette avec
+        // laquelle on vient de choisir la ligne — la main ne bouge pas.
+        const bool isAction = (oledParamIndex_ == kGlobalRowResetMappings
+                            || oledParamIndex_ == kGlobalRowResetValues);
+        if (isAction)
+            setAction(0, (oledParamIndex_ == kGlobalRowResetMappings) ? "Reset map"
+                                                                     : "Reset val", true);
+        else
+            hide(0);
+        hide(1); hide(2); hide(3);
+        return;
+    }
+    // Auto / Song : pushBtn cachés.
     for (int i = 0; i < 4; ++i) hide(i);
 }
 
 void NidmiSeqAudioProcessorEditor::onPushButton(int idx) {
     // Routage du push d'encodeur par Vue. Les actions (drill-in sub) rafraîchissent
     // elles-mêmes l'UI et sortent tôt ; les bascules tombent dans le refresh commun.
-    // Page GLOBAL : le push de l'encodeur Valeur declenche l'action de la ligne
-    // sous le curseur. Les deux resets sont volontairement separes — effacer ses
-    // assignations de controleur n'a rien a voir avec reinitialiser le son.
-    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Global && idx == 1) {
+    // Page AUTO : le push de PARAM bascule le TYPE de la row (Note <-> CC), sur la
+    // cellule LANE. Avant, ce reglage n'existait que sur GLOB.
+    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Auto && idx == 0
+        && autoSlot_ == PatternScreenModel::kAutoLaneSlot) {
+        toggleRowKind();
+        return;
+    }
+
+    // Page GLOBAL : le push de PARAM (Enc1) declenche l'action de la ligne sous le
+    // curseur. Param et pas Valeur : c'est la molette avec laquelle on vient de
+    // choisir la ligne, la main n'a pas a traverser jusqu'a l'autre encodeur — et
+    // sur une ligne d'action il n'y a justement aucune valeur a tourner.
+    // Les deux resets restent volontairement separes : effacer ses assignations de
+    // controleur n'a rien a voir avec reinitialiser le son.
+    if (!inSub_ && screenPage_ == PatternScreenModel::Page::Global && idx == 0) {
         if (oledParamIndex_ == kGlobalRowResetMappings) {
             proc_.resetLearnMappings();
             buildScreenModel();

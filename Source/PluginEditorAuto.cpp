@@ -164,3 +164,66 @@ void NidmiSeqAudioProcessorEditor::launchExportFlow() {
         });
     });
 }
+
+// --- Cellule LANE : la row entiere comme automation ------------------------
+//
+// Une lane range la valeur du controleur dans StepData.note — le meme champ qui
+// porte une hauteur sur une row de notes. Ecrire une valeur, c'est donc poser un
+// pas ; d'ou SetStep et non SetStepCCLock.
+
+void NidmiSeqAudioProcessorEditor::postLaneValueAt(int step, int value) {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0) return;
+    const int ar = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const auto& row = pat.rows[static_cast<size_t>(ar)];
+    const int an = juce::jlimit(1, 64, static_cast<int>(row.numSteps));
+    if (step < 0 || step >= an) return;
+    const auto& sd = row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(step));
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetStep;
+    c.a  = static_cast<uint8_t>(ar);
+    c.b  = static_cast<uint8_t>(step);
+    c.c  = static_cast<uint8_t>(juce::jlimit(0, 127, value));   // note = VALEUR du controleur
+    c.d  = sd.velocity > 0 ? sd.velocity : 100;                  // preserve, sinon le pas serait muet
+    c.e  = sd.gate > 0 ? sd.gate : 80;
+    c.f  = static_cast<uint8_t>(editBar_);
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::postLaneCcNumber(int ccNumber) {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0) return;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetRowCCNumber;
+    c.a  = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_));
+    c.b  = static_cast<uint8_t>(juce::jlimit(0, 127, ccNumber));
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::postLaneInterp(int mode) {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0) return;
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetRowCCInterp;
+    c.a  = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_));
+    c.b  = static_cast<uint8_t>(juce::jlimit(0, 2, mode));
+    proc_.controller().postCommand(c);
+    buildScreenModel();
+}
+
+void NidmiSeqAudioProcessorEditor::toggleRowKind() {
+    const auto& pat = proc_.engine().pattern();
+    if (pat.numRows == 0) return;
+    const int  ar   = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_);
+    const bool isCC = (pat.rows[static_cast<size_t>(ar)].kind == RowKind::CC);
+    SequencerCommand c;
+    c.id = SequencerCommandId::SetRowKind;
+    c.a  = static_cast<uint8_t>(ar);
+    c.b  = static_cast<uint8_t>(isCC ? RowKind::Note : RowKind::CC);
+    proc_.controller().postCommand(c);
+    applyEncoderConfigForState();
+    configurePushButtons();
+    buildScreenModel();
+}

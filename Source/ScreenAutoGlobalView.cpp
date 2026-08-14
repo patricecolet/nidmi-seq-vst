@@ -1,5 +1,6 @@
 #include "HardwareStyleComponents.h"
 #include "HardwareStyleInternal.h"
+#include "EditorHelpers.h"   // ccInterpName : la LANE nomme son mode de lissage
 
 void PatternScreen::paintStubPage(juce::Graphics& g, const juce::String& title,
                                   const juce::String& subtitle) {
@@ -18,10 +19,31 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
     const int r = (model_.numRows > 0) ? juce::jlimit(0, model_.numRows - 1, model_.selectedRow) : 0;
     const int playhead = (model_.numRows > 0) ? model_.rows[static_cast<size_t>(r)].playhead : -1;
 
-    // Bande des 8 slots de P-lock (CC# si actif).
+    // Cellule LANE, en TETE : la row elle-meme comme automation. Une row kind==CC
+    // n'apparaissait nulle part sur cette page — il fallait aller sur GLOB pour
+    // seulement savoir qu'elle en etait une.
+    {
+        const auto inner = L.slotCell(0).reduced(2.0f, 1.0f);
+        const bool on    = (model_.autoSlot == PatternScreenModel::kAutoLaneSlot);
+        g.setColour(on ? kHeaderText : kCellOff);
+        g.fillRoundedRectangle(inner, 3.0f);
+        // Contour ambre quand la lane enregistre : le geste part la, pas ailleurs.
+        if (model_.laneIsCC && model_.recArmed) {
+            g.setColour(kPlayhead);
+            g.drawRoundedRectangle(inner.reduced(0.5f), 3.0f, 1.6f);
+        }
+        g.setColour(on ? kScreenBg : (model_.laneIsCC ? kRowLabel : kCellGrid));
+        g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle(on ? "Bold" : "")));
+        juce::String t = model_.laneIsCC
+                           ? (model_.laneLabel.isNotEmpty() ? model_.laneLabel
+                                                            : ("CC" + juce::String(model_.laneCc)))
+                           : juce::String("Lane");
+        g.drawText(t, inner, juce::Justification::centred);
+    }
+
+    // Bande des 8 slots de P-lock (CC# si actif), decalee d'une cellule.
     for (int i = 0; i < kAutoNumSlots; ++i) {
-        juce::Rectangle<float> chip(L.slotBand.getX() + static_cast<float>(i) * L.slotW,
-                                    L.slotBand.getY(), L.slotW, L.slotBand.getHeight());
+        const auto chip  = L.slotCell(i + 1);
         const auto inner = chip.reduced(2.0f, 1.0f);
         const bool on    = (i == model_.autoSlot);
         const bool used  = (model_.autoSlotCc[i] >= 0);
@@ -39,8 +61,8 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
         g.drawText(slotText, inner, juce::Justification::centred);
     }
 
-    // Sélecteur de champ (Valeur / CC#).
-    for (int f = 0; f < kAutoNumFields; ++f) {
+    // Sélecteur de champ (Valeur / CC# / Interp sur la LANE).
+    for (int f = 0; f < L.fieldsToShow; ++f) {
         juce::Rectangle<float> chip(L.fieldBand.getX() + static_cast<float>(f) * L.fieldW,
                                     L.fieldBand.getY(), L.fieldW, L.fieldBand.getHeight());
         const auto inner = chip.reduced(2.0f, 1.0f);
@@ -77,6 +99,76 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
         g.drawLine(x, L.lane.getY(), x, L.lane.getBottom(), 0.3f);
     }
 
+    // COURBE d'interpolation — uniquement sur la LANE, et seulement si elle lisse.
+    //
+    // C'etait le trou : le mode se reglait sans qu'on voie jamais son effet. La
+    // courbe tracee est celle que le moteur emet vraiment (smoothstep pour Smooth,
+    // droite pour Linear). En mode Step il n'y a rien a montrer — les barres SONT
+    // deja la reponse, ajouter des paliers ne dirait rien de plus.
+    if (model_.autoSlot == PatternScreenModel::kAutoLaneSlot && model_.laneIsCC && model_.laneInterp != 0) {
+        juce::Path path;
+        bool  started = false;
+        int   prev    = -1;
+        auto  yOf = [&](int v) { return L.lane.getBottom() - L.lane.getHeight() * (v / 127.0f); };
+        for (int s = 0; s < L.n; ++s) {
+            const int v = model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, s))];
+            if (v < 0) continue;
+            const float xc = L.lane.getX() + (static_cast<float>(s) + 0.5f) * L.cellW;
+            const float yc = yOf(v);
+            if (!started) { path.startNewSubPath(xc, yc); started = true; prev = s; continue; }
+            const float x0 = L.lane.getX() + (static_cast<float>(prev) + 0.5f) * L.cellW;
+            const float y0 = yOf(model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, prev))]);
+            if (model_.laneInterp == 1) {
+                path.lineTo(xc, yc);
+            } else {
+                constexpr int kSeg = 12;
+                for (int i = 1; i <= kSeg; ++i) {
+                    const float t = static_cast<float>(i) / static_cast<float>(kSeg);
+                    const float e = t * t * (3.0f - 2.0f * t);   // smoothstep, comme le moteur
+                    path.lineTo(x0 + (xc - x0) * t, y0 + (yc - y0) * e);
+                }
+            }
+            prev = s;
+        }
+        if (started) {
+            g.setColour(kPlayhead.withAlpha(0.9f));
+            g.strokePath(path, juce::PathStrokeType(1.8f));
+        }
+
+        // Segment de BOUCLAGE : le moteur cherche le pas suivant en (step + k) % N,
+        // donc il interpole du dernier pas actif vers le premier, par-dessus la
+        // barre de mesure. S'arreter au dernier pas laissait croire a un palier
+        // final qui n'existe pas. On dessine ce segment deux fois — sa sortie a
+        // droite et son entree a gauche — en clippant sur la lane.
+        int firstIdx = -1, lastIdx = -1;
+        for (int s = 0; s < L.n; ++s)
+            if (model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, s))] >= 0) {
+                if (firstIdx < 0) firstIdx = s;
+                lastIdx = s;
+            }
+        if (firstIdx >= 0 && lastIdx > firstIdx) {
+            const float y0 = yOf(model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, lastIdx))]);
+            const float y1 = yOf(model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, firstIdx))]);
+            const float xa = L.lane.getX() + (static_cast<float>(lastIdx) + 0.5f) * L.cellW;
+            const float xb = L.lane.getX() + (static_cast<float>(firstIdx + L.n) + 0.5f) * L.cellW;
+            juce::Path wrap;
+            wrap.startNewSubPath(xa, y0);
+            constexpr int kSeg = 16;
+            for (int i = 1; i <= kSeg; ++i) {
+                const float t = static_cast<float>(i) / static_cast<float>(kSeg);
+                const float e = (model_.laneInterp == 1) ? t : t * t * (3.0f - 2.0f * t);
+                wrap.lineTo(xa + (xb - xa) * t, y0 + (y1 - y0) * e);
+            }
+            juce::Graphics::ScopedSaveState clip(g);
+            g.reduceClipRegion(L.lane.toNearestInt());
+            g.setColour(kPlayhead.withAlpha(0.45f));   // plus discret : il enjambe la mesure
+            g.strokePath(wrap, juce::PathStrokeType(1.4f));
+            wrap.applyTransform(juce::AffineTransform::translation(
+                -static_cast<float>(L.n) * L.cellW, 0.0f));   // son entree, au tour suivant
+            g.strokePath(wrap, juce::PathStrokeType(1.4f));
+        }
+    }
+
     // Indicateur de fenêtre de page (16 pas que les touches éditent).
     if (model_.keyPageStart >= 0) {
         const int   start = juce::jlimit(0, L.n - 1, model_.keyPageStart);
@@ -91,8 +183,14 @@ void PatternScreen::paintAutoPage(juce::Graphics& g) {
 
     // Ligne de détail.
     const int sv = model_.autoValue[static_cast<size_t>(juce::jlimit(0, 63, model_.selectedStep))];
-    juce::String detail = "Slot " + juce::String(model_.autoSlot + 1)
-                        + "  CC" + juce::String(model_.autoCc)
+    const bool onLane = (model_.autoSlot == PatternScreenModel::kAutoLaneSlot);
+    juce::String detail = (onLane ? juce::String("Lane")
+                                  : ("Slot " + juce::String(model_.autoSlot + 1)))
+                        + (onLane && !model_.laneIsCC
+                             ? juce::String("  row en Note - push Enc1 pour en faire une lane")
+                             : ("  CC" + juce::String(model_.autoCc)
+                                + (onLane ? ("  " + juce::String(ccInterpName(model_.laneInterp)))
+                                          : juce::String())))
                         + "   pas " + juce::String(model_.selectedStep + 1) + "/" + juce::String(L.n)
                         + "   val " + (sv >= 0 ? juce::String(sv) : juce::String("-"));
     g.setColour(kRowLabel);

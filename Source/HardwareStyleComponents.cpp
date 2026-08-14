@@ -339,12 +339,11 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
     if (model_.page == PatternScreenModel::Page::Auto) {
         const AutoLayout L = computeAutoLayout(model_, bodyArea_);
         if (L.slotBand.contains(x, y)) {
-            int i = static_cast<int>((x - L.slotBand.getX()) / L.slotW);
-            i = juce::jlimit(0, kAutoNumSlots - 1, i);
-            if (onAutoSlot) onAutoSlot(i);
+            // slotAtX gere le decalage de la cellule LANE (renvoie PatternScreenModel::kAutoLaneSlot).
+            if (onAutoSlot) onAutoSlot(L.slotAtX(x));
         } else if (L.fieldBand.contains(x, y)) {
             int f = static_cast<int>((x - L.fieldBand.getX()) / L.fieldW);
-            f = juce::jlimit(0, kAutoNumFields - 1, f);
+            f = juce::jlimit(0, L.fieldsToShow - 1, f);
             if (onAutoField) onAutoField(f);
         } else if (L.lane.contains(x, y)) {
             int s = static_cast<int>((x - L.lane.getX()) / L.cellW);

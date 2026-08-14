@@ -34,6 +34,7 @@ struct PatternScreenModel {
         int           ccNumber      = 74;    // destination si isCC
         juce::String  ccLabel;              // nom du CC selon le profil actif, vide si aucun
         juce::String  ccShort;              // idem, forme courte pour la zone d'info (96 px)
+        int           ccInterp     = 0;     // 0=Step 1=Linear 2=Smooth — dessiné par la vue AUTOMATION
     };
 
     // Aperçu d'un subpattern (tuplet imbriqué) pour l'affichage niché + l'édition.
@@ -152,12 +153,32 @@ struct PatternScreenModel {
     bool followMasterTonality   = true;
     int  harmonySharedMode      = 1;   // mode harmonique partagé par toutes les rows (-1 = mixte)
 
-    // Page AUTO (P-locks CC de la row sélectionnée).
-    int autoSlot     = 0;     // slot de P-lock actif (0..7)
-    int autoField    = 0;     // 0=Valeur (par pas) 1=CC#
-    int autoCc       = 74;    // numéro de CC du slot actif (affichage)
+    // Cellule LANE de la bande AUTO : la lane d'automation de la row elle-même,
+    // posée en TÊTE des 8 slots de P-lock. `autoSlot == PatternScreenModel::kAutoLaneSlot` la désigne.
+    //
+    // Sans elle, une row `kind == CC` n'était visible NULLE PART : AUTO ne montrait
+    // que les P-locks, et il fallait passer par GLOB pour seulement savoir qu'une
+    // row en était une.
+    static constexpr int kAutoLaneSlot = -1;
+
+    // Page AUTO — LA page des contrôleurs de la row sélectionnée.
+    //
+    // Deux mécanismes y cohabitent, et la bande de slots les met côte à côte :
+    //   - la LANE (autoSlot == -1) : la row entière est une automation (kind==CC),
+    //     avec son propre N et une interpolation entre les pas ;
+    //   - les 8 P-LOCKS (autoSlot 0..7) : des valeurs ponctuelles accrochées à un
+    //     pas, sur n'importe quelle row — rien à interpoler entre deux.
+    //
+    // ROLL ne dessine plus de contrôleurs : ROLL = hauteurs, AUTO = contrôleurs.
+    int autoSlot     = 0;     // -1 = LANE de la row, 0..7 = slot de P-lock
+    int autoField    = 0;     // 0=Valeur (par pas) 1=CC# 2=Interp (LANE seulement)
+    int autoCc       = 74;    // numéro de CC de la cible active (affichage)
     int autoSlotCc[8] = {-1, -1, -1, -1, -1, -1, -1, -1};  // CC# par slot (-1 = inactif)
-    int autoValue[64];        // valeur du slot actif par pas (-1 = pas de lock)
+    int autoValue[64];        // valeur de la cible active par pas (-1 = rien à ce pas)
+    bool laneIsCC    = false; // la row sélectionnée est-elle une lane d'automation ?
+    int  laneCc      = 74;    // destination de la lane
+    int  laneInterp  = 0;     // 0=Step 1=Linear 2=Smooth
+    juce::String laneLabel;   // nom court du CC selon le profil, vide si aucun
 
     // Page SONG (chaîne / arrangement de la part polyrythmique).
     struct SongSlotView { int op = 0; int p1 = 0; int p2 = 0; };
@@ -215,6 +236,11 @@ private:
     /// mesure plus bas dans la meme hierarchie.
     void paintPitchLanes(juce::Graphics& g, juce::Rectangle<float> plot,
                          int topNote, int visibleLanes, float laneH);
+    /// Vue AUTOMATION : remplace le piano-roll quand la row sélectionnée est une
+    /// lane CC. Barres par pas + courbe d'interpolation réelle, pour que le geste
+    /// enregistré et le mode de lissage soient visibles.
+    void paintAutomationLane(juce::Graphics& g, const struct PrLayout& L,
+                             const PatternScreenModel::Row& row);
     void paintHarmonyPage(juce::Graphics& g);
     void paintMeasureBand(juce::Graphics& g);   // bandeau de mesures (PATTERN/HARMONIE)
     void paintAutoPage(juce::Graphics& g);

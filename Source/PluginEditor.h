@@ -222,6 +222,14 @@ private:
     void postAutoValueAt(int step, int value);    // écrit/maj un P-lock CC
     void postAutoCcNumber(int ccNumber);          // change le CC# du slot actif
 
+    // Cellule LANE de la page AUTO : la row entière comme automation. Distinct des
+    // P-locks — ici on édite la VALEUR d'un pas de la lane, sa destination et son
+    // mode d'interpolation, qui sont des réglages de ROW.
+    void postLaneValueAt(int step, int value);
+    void postLaneCcNumber(int ccNumber);
+    void postLaneInterp(int mode);
+    void toggleRowKind();                         // Note <-> CC, depuis AUTO
+
     // Après une rotation d'encodeur, le timer suspend la re-synchro des encodeurs pendant
     // quelques frames : la commande d'édition transite par la FIFO (drainée sur le thread
     // audio) et le moteur ne reflète la nouvelle valeur qu'au bloc suivant. Sans ce délai,

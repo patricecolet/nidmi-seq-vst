@@ -250,6 +250,19 @@ interop.
   `kScreenBg` is (10,12,10): darkening an out-of-scale lane by 34 % black bought
   3.7 of luminance contrast where the chord tint had 24 — the scale was drawn and
   invisible. Scale/chord now ride two independent axes (neutral grey / green).
+- **AUTO is THE controller page; ROLL is pitch only.** Two mechanisms sit side by
+  side in AUTO's slot band: the leftmost **LANE** cell (`autoSlot == kAutoLaneSlot`,
+  i.e. -1) is the row itself as an automation (`RowKind::CC`, own N, interpolation),
+  then the 8 **P-lock** slots (per-step values on any row, nothing to interpolate
+  between). Rendering CC rows in ROLL as well was tried and reverted — ROLL and AUTO
+  are both the detail view of the selected row, so it made AUTO redundant.
+  The row's Note/CC type is toggled from AUTO (push Param) — it used to require a
+  detour through GLOB.
+- **The interpolation curve drawn in AUTO must match `emitInterpolatedCC`**,
+  including the **loop wrap**: the engine looks for the next enabled step with
+  `(step + k) % N`, so it interpolates from the last step back to the first across
+  the bar line. Stopping the curve at the last step implied a final plateau that
+  does not exist.
 - `ChainVM` (song mode) **is wired**: `SetSongMode` command, `advanceChainAtPatternLoop()` at the pattern loop edge (or at cadence resolution when the pattern has a chord progression), serialised in `PatternValueTree`, covered by the core tests (219 pass). Toggle lives on the SONG page, key index 4. What is still deferred to V2 is **simultaneous multi-pattern playback** — only one pattern plays at a time.
 - Default MIDI channel is **one per row** (row 0 → ch 1, … row 15 → ch 16), set in the `Pattern` constructor. `PatternRow`'s own default is 0, so without it every row spoke on channel 1 — useless for a multitrack sequencer driving several machines.
 

@@ -252,6 +252,7 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         dst.ccNumber    = static_cast<int>(row.ccNumber);
         dst.ccLabel     = dst.isCC ? prof.label(dst.ccNumber)      : juce::String();
         dst.ccShort     = dst.isCC ? prof.shortLabel(dst.ccNumber) : juce::String();
+        dst.ccInterp    = static_cast<int>(row.ccInterp);
         // Row soumise à l'harmonie : harmonie active globale ET mode != Chromatic.
         const bool bound = harmActive && row.harmonyModeAt(static_cast<uint8_t>(editBar_)) != RowHarmonyMode::Chromatic;
         dst.harmonyBound = bound;
@@ -395,9 +396,10 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         kv.durationBeats = ks.durationBeats;
     }
 
-    // Page AUTO : P-locks CC de la row sélectionnée, slot actif.
-    m.autoSlot  = juce::jlimit(0, 7, autoSlot_);
-    m.autoField = juce::jlimit(0, 1, autoField_);
+    // Page AUTO : LANE de la row + P-locks. autoSlot_ == PatternScreenModel::kAutoLaneSlot (-1) désigne
+    // la lane, 0..7 un slot de P-lock.
+    m.autoSlot  = juce::jlimit(PatternScreenModel::kAutoLaneSlot, 7, autoSlot_);
+    m.autoField = juce::jlimit(0, (m.autoSlot == PatternScreenModel::kAutoLaneSlot) ? 2 : 1, autoField_);
     if (m.numRows > 0) {
         const int   ar    = juce::jlimit(0, m.numRows - 1, selectedRow_);
         const auto& arow  = pat.rows[static_cast<size_t>(ar)];
@@ -411,13 +413,31 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             m.autoSlotCc[i]    = cc;
             m.ccSlotLabel[i]   = (cc >= 0) ? prof.shortLabel(cc) : juce::String();
         }
-        int activeCc = -1;
-        for (int s = 0; s < an; ++s) {
-            const auto& lk = arow.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).ccLocks[static_cast<size_t>(m.autoSlot)];
-            m.autoValue[s] = (lk.ccNumber != 0xFF) ? static_cast<int>(lk.value) : -1;
-            if (activeCc < 0 && lk.ccNumber != 0xFF) activeCc = lk.ccNumber;
+        // Etat de la LANE, affiche meme quand on regarde un P-lock : la cellule de
+        // tete doit dire si la row EST une automation.
+        m.laneIsCC   = (arow.kind == RowKind::CC);
+        m.laneCc     = static_cast<int>(arow.ccNumber);
+        m.laneInterp = static_cast<int>(arow.ccInterp);
+        m.laneLabel  = m.laneIsCC ? prof.shortLabel(m.laneCc) : juce::String();
+
+        if (m.autoSlot == PatternScreenModel::kAutoLaneSlot) {
+            // Valeurs de la LANE : sur une row d'automation, StepData.note PORTE la
+            // valeur du controleur. Un pas inactif reste a -1, donc non dessine —
+            // « CC a 0 » et « rien a ce pas » doivent rester distinguables.
+            for (int s = 0; s < an; ++s) {
+                const auto& sd = arow.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s));
+                m.autoValue[s] = (m.laneIsCC && sd.enabled) ? static_cast<int>(sd.note & 0x7F) : -1;
+            }
+            m.autoCc = m.laneCc;
+        } else {
+            int activeCc = -1;
+            for (int s = 0; s < an; ++s) {
+                const auto& lk = arow.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).ccLocks[static_cast<size_t>(m.autoSlot)];
+                m.autoValue[s] = (lk.ccNumber != 0xFF) ? static_cast<int>(lk.value) : -1;
+                if (activeCc < 0 && lk.ccNumber != 0xFF) activeCc = lk.ccNumber;
+            }
+            m.autoCc = (activeCc >= 0) ? activeCc : autoCcDefault_;
         }
-        m.autoCc = (activeCc >= 0) ? activeCc : autoCcDefault_;
     }
 
     screen_.setModel(m);

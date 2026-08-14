@@ -37,7 +37,15 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     };
 
     recBtn_.setButtonText("Rec");
-    recBtn_.onClick = [this] { recArmed_ = !recArmed_; };
+    recBtn_.onClick = [this] {
+        recArmed_ = !recArmed_;
+        // Un seul REC pour deux captures qui ne se genent pas : les touches
+        // ecrivent des notes pas a pas, les CC entrants se deposent dans les lanes
+        // d'automation. Le drapeau doit traverser jusqu'au thread audio, seul
+        // endroit ou l'on voit arriver le MIDI.
+        proc_.setCCRecordArmed(recArmed_);
+        buildScreenModel();
+    };
 
     // Boutons de FAMILLE de vue (façon Elektron) : accès direct + re-appui = sous-vue suivante.
     editionBtn_.setButtonText("Edit");
@@ -210,12 +218,16 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         buildScreenModel();
     };
     screen_.onAutoSlot = [this](int slot) {
-        autoSlot_ = juce::jlimit(0, 7, slot);
+        autoSlot_ = juce::jlimit(PatternScreenModel::kAutoLaneSlot, 7, slot);   // -1 = LANE de la row
+        // Le champ Interp n'existe que sur la LANE : en quittant celle-ci, on
+        // retombe sur Valeur plutot que de laisser un champ sans objet.
+        if (autoSlot_ != PatternScreenModel::kAutoLaneSlot) autoField_ = juce::jlimit(0, 1, autoField_);
         applyEncoderConfigForState();
+        configurePushButtons();
         buildScreenModel();
     };
     screen_.onAutoField = [this](int field) {
-        autoField_ = juce::jlimit(0, 1, field);
+        autoField_ = juce::jlimit(0, (autoSlot_ == PatternScreenModel::kAutoLaneSlot) ? 2 : 1, field);
         applyEncoderConfigForState();
         buildScreenModel();
     };
