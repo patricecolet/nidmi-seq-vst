@@ -161,16 +161,24 @@ void PatternScreen::paintSubRoll(juce::Graphics& g) {
     // noires, reperes Do et La). Le sub n'affichait que les do : on descendait
     // d'un niveau et la gamme disparaissait.
     paintPitchLanes(g, plot, topNote, visible, laneH);
-    // Ligne d'ancrage (mode relatif) = la note du pas hôte.
+    // Ligne d'ancrage (mode relatif) = note hote RESOLUE, celle sur laquelle le
+    // moteur ancre reellement le sub. Quand l'harmonie deplace cette note, le
+    // libelle porte le mode de la row : sans ca on voit l'ancre bouger toute seule
+    // en changeant d'accord, sans savoir qui la deplace.
     if (sv.relative) {
         const int lane = topNote - model_.subHostNote;
         if (lane >= 0 && lane < visible) {
+            const int  hr = juce::jlimit(0, juce::jmax(0, model_.numRows - 1), model_.subHostRow);
+            const auto& hrow = model_.rows[static_cast<size_t>(hr)];
+            juce::String tag = "ancre " + midiNoteShort(model_.subHostNote);
+            if (hrow.harmonyBound)
+                tag += juce::String(juce::CharPointer_UTF8(" \xc2\xb7 ")) + harmonyModeShort(hrow.harmonyMode);
             const float y = plot.getY() + static_cast<float>(lane) * laneH + laneH * 0.5f;
             g.setColour(kPlayhead);
             g.drawLine(plot.getX(), y, plot.getRight(), y, 1.4f);
             g.setFont(juce::Font(juce::FontOptions().withHeight(9.0f)));
-            g.drawText("ancre " + midiNoteShort(model_.subHostNote),
-                       juce::Rectangle<float>(plot.getX() + 2.0f, y - laneH, 70.0f, laneH),
+            g.drawText(tag,
+                       juce::Rectangle<float>(plot.getX() + 2.0f, y - laneH, 90.0f, laneH),
                        juce::Justification::centredLeft);
         }
     }

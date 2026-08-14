@@ -192,6 +192,18 @@ private:
     int  keyCursor_     = 0;       // marqueur de tonalité édité (0..len, len = marqueur d'ajout)
     void setKeyField(int field, int value);   // field 0=root 1=scale 2=dur (en temps)
 
+    /// Résolution harmonique d'une note, POINT UNIQUE.
+    ///
+    /// buildScreenModel (note affichée) et subHostNote() (ancre d'un sub relatif, qui
+    /// sert à calculer l'offset stocké) doivent donner exactement le même résultat que
+    /// le moteur. Trois recompositions indépendantes de « tonalité effective + accord
+    /// courant + mode de la row » finissaient forcément par diverger — c'est très
+    /// précisément ce qui était arrivé aux deux déclencheurs du core.
+    ///
+    /// `mode` est un RowHarmonyMode (int pour ne pas tirer StepTypes.h dans ce header).
+    int  resolvePlayedNote(int rawNote, int mode) const;
+    bool harmonyActive() const;   // bouton Harm global
+
     // Bascules push d'encodeur pour les autres vues (remplacent les anciens combos ⇧Enc).
     bool patternValSpan_ = false;   // PATTERN Enc2 : rotation édite Span au lieu de N
     bool veloGate_       = false;   // PATTERN Enc3 : rotation édite Gate au lieu de Vélo

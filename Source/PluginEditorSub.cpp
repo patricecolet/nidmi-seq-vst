@@ -127,13 +127,55 @@ void NidmiSeqAudioProcessorEditor::exitSub() {
     buildScreenModel();
 }
 
+bool NidmiSeqAudioProcessorEditor::harmonyActive() const {
+    return proc_.engine().pattern().harmony.harmonyEnabled;
+}
+
+// Resolution harmonique d'une note — LE point unique.
+//
+// effectiveHarmony() est prive cote core, root/scale sont donc recomposes ici : la
+// lane de tonalite prime des qu'elle a un marqueur, exactement comme currentKey().
+// Une seule copie de cette recomposition dans tout l'editeur.
+int NidmiSeqAudioProcessorEditor::resolvePlayedNote(int rawNote, int mode) const {
+    const auto& pat = proc_.engine().pattern();
+    const auto& ph  = pat.harmony;
+    const auto  m   = static_cast<RowHarmonyMode>(mode);
+    if (!ph.harmonyEnabled || m == RowHarmonyMode::Chromatic)
+        return rawNote;
+
+    const auto& ps = proc_.engine().projectSettings();
+    int root  = ph.followMasterTonality ? static_cast<int>(ps.masterRootPc)
+                                        : static_cast<int>(ph.rootPc);
+    int scale = ph.followMasterTonality ? static_cast<int>(ps.masterScaleId)
+                                        : static_cast<int>(ph.scaleId);
+    if (pat.keyProgression.len > 0) {
+        root  = static_cast<int>(pat.keyProgression.current().rootPc);
+        scale = static_cast<int>(pat.keyProgression.current().scaleId);
+    }
+    return static_cast<int>(harmony::resolveDegreeToMidi(
+        static_cast<uint8_t>(juce::jlimit(0, 127, rawNote)), m,
+        pat.chordProgression.current(),
+        ph.followProgression && pat.chordProgression.len > 0,
+        static_cast<uint8_t>(scale), static_cast<uint8_t>(root)));
+}
+
+// Note hote RESOLUE : celle que le moteur utilise reellement comme ancre d'un sub
+// relatif (triggerRowStep passe la note resolue a startSubPattern).
+//
+// Elle renvoyait la note STOCKEE. Sous harmonie, l'offset enregistre en cliquant une
+// hauteur dans un sub relatif valait donc « pas cliquee − hote STOCKEE », alors que
+// la lecture joue « hote RESOLUE + offset » : la note atterrissait ailleurs que la ou
+// on venait de la poser, decalee de l'ecart harmonique.
 int NidmiSeqAudioProcessorEditor::subHostNote() const {
     const auto& pat = proc_.engine().pattern();
     if (pat.numRows == 0) return 60;
     const int r = juce::jlimit(0, static_cast<int>(pat.numRows) - 1, subHostRow_);
-    const int n = juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(r)].numSteps));
+    const auto& row = pat.rows[static_cast<size_t>(r)];
+    const int n = juce::jlimit(1, 64, static_cast<int>(row.numSteps));
     const int s = juce::jlimit(0, n - 1, subHostStep_);
-    return pat.rows[static_cast<size_t>(r)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).note;
+    return resolvePlayedNote(
+        static_cast<int>(row.step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(s)).note),
+        static_cast<int>(row.harmonyModeAt(static_cast<uint8_t>(editBar_))));
 }
 
 void NidmiSeqAudioProcessorEditor::postSubStepPitch(int subStepIndex, int absolutePitch) {

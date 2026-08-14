@@ -222,24 +222,11 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         }
     }
 
-    // Filtre harmonique : tonalité effective (même logique que la section HARMONIE plus bas,
-    // calculée ici en amont car la boucle rows en a besoin pour résoudre la note jouée).
-    // effectiveHarmony() est privé côté core → on recompose root/scale manuellement.
-    const auto& psHarm   = proc_.engine().projectSettings();
-    const auto& phHarm   = pat.harmony;
-    int         effRootB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterRootPc)
-                                                       : static_cast<int>(phHarm.rootPc);
-    int         effScaleB = phHarm.followMasterTonality ? static_cast<int>(psHarm.masterScaleId)
-                                                        : static_cast<int>(phHarm.scaleId);
-    // Lane de tonalité : si elle a des marqueurs, la clé courante (marqueur en lecture, ou
-    // slot 0 à l'arrêt) remplace la tonalité maître pour la résolution affichée.
-    if (pat.keyProgression.len > 0) {
-        effRootB  = static_cast<int>(pat.keyProgression.current().rootPc);
-        effScaleB = static_cast<int>(pat.keyProgression.current().scaleId);
-    }
-    const bool  harmActive = phHarm.harmonyEnabled;
-    const bool  progActive = phHarm.followProgression && pat.chordProgression.len > 0;
-    const ChordSlot currentChord = pat.chordProgression.current();
+    // Filtre harmonique : la résolution passe par resolvePlayedNote(), le MÊME point
+    // que celui dont se sert subHostNote() pour calculer l'offset stocké d'un sub
+    // relatif. La tonalité effective et l'accord courant étaient recomposés ici à la
+    // main ; une seconde copie ailleurs aurait fini par diverger.
+    const bool harmActive = harmonyActive();
 
     // Durée d'un mesure en µs : mêmes formules que le core (barDurationUs_).
     // numerator/denominator = taille de mesure (indépendante de numSteps = divisions).
@@ -279,9 +266,9 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
                                                        : static_cast<signed char>(sd.subPatIdx);
             dst.span[static_cast<size_t>(s)]     = static_cast<unsigned char>(juce::jlimit(1, 64, static_cast<int>(sd.span)));
             if (bound) {
-                const uint8_t pn = harmony::resolveDegreeToMidi(
-                    sd.note, row.harmonyModeAt(static_cast<uint8_t>(editBar_)), currentChord, progActive,
-                    static_cast<uint8_t>(effScaleB), static_cast<uint8_t>(effRootB));
+                const uint8_t pn = static_cast<uint8_t>(resolvePlayedNote(
+                    static_cast<int>(sd.note),
+                    static_cast<int>(row.harmonyModeAt(static_cast<uint8_t>(editBar_)))));
                 dst.playedNote[static_cast<size_t>(s)] = pn;
                 dst.snapped[static_cast<size_t>(s)]    = (pn != sd.note);
             } else {
@@ -321,8 +308,15 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
         const int hn = (m.numRows > 0)
             ? juce::jlimit(1, 64, static_cast<int>(pat.rows[static_cast<size_t>(hr)].numSteps)) : 1;
         const int hs = juce::jlimit(0, hn - 1, subHostStep_);
-        m.subHostNote = (m.numRows > 0)
-            ? static_cast<int>(pat.rows[static_cast<size_t>(hr)].step(static_cast<uint8_t>(editBar_), static_cast<uint8_t>(hs)).note) : 60;
+        // Ancre = note hote RESOLUE, la meme que celle dont se sert le moteur
+        // (triggerRowStep passe la note resolue a startSubPattern). On lisait ici
+        // la note STOCKEE : sous harmonie, la ligne d'ancre et toutes les hauteurs
+        // du sub-roll relatif etaient affichees a cote de ce qui sonne. dst.playedNote
+        // porte deja exactement cette resolution — resolveDegreeToMidi avec le mode
+        // de la row et la cle courante — il suffisait de la reutiliser.
+        m.subHostNote = (m.numRows > 0 && hs < 64)
+            ? static_cast<int>(m.rows[static_cast<size_t>(hr)].playedNote[static_cast<size_t>(hs)])
+            : 60;
     }
     if (inSub_ && m.subEditIdx >= 0) {
         const int sn = juce::jmax(1, m.subs[static_cast<size_t>(m.subEditIdx)].numSteps);
