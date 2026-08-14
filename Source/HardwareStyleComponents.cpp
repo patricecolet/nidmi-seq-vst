@@ -313,13 +313,24 @@ void PatternScreen::mouseDown(const juce::MouseEvent& e) {
 
     // HARMONIE : clic = sélection de slot (bande de slots).
     if (model_.page == PatternScreenModel::Page::Harmony) {
-        const HarmLayout L = computeHarmLayout(model_, bodyArea_);
+        // gridArea(), PAS bodyArea_ : paintHarmonyPage dessine sous le bandeau de
+        // mesures. Le test de clic partait du haut de bodyArea_, donc en multi-mesures
+        // toutes les bandes etaient decalees de la hauteur du bandeau — on cliquait sur
+        // la tonalite et on selectionnait un accord. Meme geometrie des deux cotes.
+        const HarmLayout L = computeHarmLayout(model_, gridArea());
         if (L.slotBand.contains(x, y)) {
             // Les cases n'ont plus la meme largeur (elles portent la duree) :
             // diviser par un pas constant designerait le mauvais slot.
             const int i = L.slots.atX(x);
             if (i >= 0 && onHarmonySlot)
                 onHarmonySlot(i);
+        } else if (L.keyBand.contains(x, y)) {
+            // La bande de TONALITE n'etait pas cliquable du tout : on ne pouvait
+            // designer un marqueur qu'a l'encodeur, alors qu'il est dessine juste
+            // au-dessus des accords, qui eux repondent au clic.
+            const int i = L.keys.atX(x);
+            if (i >= 0 && onKeySlot)
+                onKeySlot(i);
         }
         return;
     }

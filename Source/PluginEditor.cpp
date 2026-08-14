@@ -192,9 +192,21 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         updateKeysForPage();   // rafraîchit les labels R1:A… (mode par mesure)
         buildScreenModel();
     };
+    // Cliquer une case porte AUSSI le focus sur sa bande. Sans ca on designe un
+    // marqueur de tonalite et les encodeurs continuent d'editer les accords —
+    // le curseur bouge, les molettes agissent ailleurs.
     screen_.onHarmonySlot = [this](int slot) {
         harmonyCursor_ = juce::jlimit(0, 31, slot);
+        harmonyFocus_  = HarmonyFocus::Chords;
         applyEncoderConfigForState();
+        updateKeysForPage();
+        buildScreenModel();
+    };
+    screen_.onKeySlot = [this](int slot) {
+        keyCursor_    = juce::jlimit(0, 15, slot);
+        harmonyFocus_ = HarmonyFocus::Tonality;
+        applyEncoderConfigForState();
+        updateKeysForPage();
         buildScreenModel();
     };
     screen_.onAutoSlot = [this](int slot) {

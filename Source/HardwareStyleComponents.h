@@ -189,7 +189,8 @@ public:
     std::function<void(int tabIndex)>            onTabSelected;
     std::function<void(int row, int step, int note)> onNoteSet;       // PIANO ROLL : pose une hauteur
     std::function<void(int step, int value)>         onRollLaneValue; // PIANO ROLL : vélo via la lane
-    std::function<void(int slotIdx)>             onHarmonySlot;   // HARMONIE : sélection de slot
+    std::function<void(int slotIdx)>             onHarmonySlot;   // HARMONIE : sélection de slot d'accord
+    std::function<void(int slotIdx)>             onKeySlot;       // HARMONIE : sélection d'un marqueur de tonalité
     std::function<void(int slotIdx)>             onAutoSlot;      // AUTO : slot de P-lock actif
     std::function<void(int field)>               onAutoField;     // AUTO : champ (Valeur/CC#)
     std::function<void(int step, int value)>     onAutoValueSet;  // AUTO : valeur d'un pas (clic lane)
