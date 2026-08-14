@@ -294,7 +294,67 @@ bouton cycle sur ROLL, AUTO et HARMONIE (§6).
 `MUTE`. Le mixage règle le cas de `MUTE`, la page PROJET celui d'`EXPORT` : le huitième
 revient à `VUE`.
 
-### 5.4 Autres propositions
+### 5.4 Enregistrement des notes entrantes *(décidé le 2026-08-14, non implémenté)*
+
+**Le séquenceur doit pouvoir enregistrer les notes entrantes.** Il ne le peut pas
+aujourd'hui : `processBlock` ne capture que les Control Change, et le
+`midiMessages.clear()` jette tout le reste — les notes entrantes n'atteignent jamais le
+moteur. Le step-record du clavier à l'écran fonctionne parce qu'il passe par l'éditeur,
+pas par le flux MIDI.
+
+#### Ce qui rend la quantisation difficile ici, et nulle part ailleurs
+
+Quantiser sur une grille irrégulière n'est pas le problème : on divise la mesure par le
+N de la row et on arrondit, qu'il vaille 16, 12 ou 5. Déduire `span` et `gate` de la
+durée jouée ne l'est pas non plus.
+
+Le problème est que **la grille est modifiable après coup**. Le N d'une row se règle en
+tournant une molette, en pleine lecture — le moteur parle de *re-subdivision live*. Une
+interprétation capturée dans une grille y est donc **figée** : on joue quelque chose de
+juste sur une row en 16, on passe la row en 12 pour essayer, et le jeu est détruit sans
+retour. Dans un séquenceur ordinaire ce cas n'existe pas, la grille ne bouge jamais.
+Ici, c'est une fonction centrale.
+
+S'ajoute que **le joueur ne sent pas forcément la grille de la row** : sur une row en 5,
+un jeu en doubles-croches tombe systématiquement à côté. La quantisation ne corrige pas,
+elle détruit.
+
+#### La solution retenue : micro-décalage par pas, quantisation en option
+
+Un **`int8_t` de plus dans `StepData`** : l'écart entre l'instant joué et le pas où la
+note a été rangée. La capture le stocke toujours ; la lecture l'applique, donc
+l'interprétation garde son grain.
+
+**La quantisation devient une option** : activée, elle remet l'écart à zéro et la note
+tombe pile sur la grille ; désactivée, l'écart est conservé et on rejoue ce qui a été
+joué. Un seul champ, deux comportements, aucun mode caché.
+
+*Précédent dans le modèle* : `swingEnable` est déjà un décalage temporel par pas — en
+version booléenne. Le micro-décalage en est la forme continue.
+
+*Coût mémoire*, vérifié : `StepData` fait 24 octets et n'a aucun rembourrage (tous ses
+champs sont d'un octet). Le passage à 25 coûte **8 Kio par pattern**
+(16 rows × 8 mesures × 64 pas), soit **136 Kio** pour le pattern actif et la banque de
+16 — contre ~3,3 Mio déjà occupés par les pas. Négligeable, et cette zone vit en PSRAM
+(`CAHIER §11.2`).
+
+*Ce que ça ne sauve pas* : changer le N après la capture reste destructeur. Aucune
+solution ne l'évite sans stocker le temps réel, ce qui serait une refonte du modèle —
+`StepData` n'a aucun champ de temps, un index de pas porte une note.
+
+#### Ce qui reste à trancher
+
+- **Quelle row reçoit les notes.** La row sélectionnée est simple et prévisible ;
+  router par `PatternRow.channel` permettrait d'enregistrer plusieurs pistes d'un seul
+  geste, sans rien ajouter au modèle. Les deux se défendent.
+- **Peut-on enregistrer dans un sous-pattern ?** Refuser rend le problème tractable — un
+  sous-pattern est un acte d'édition délibéré, pas quelque chose qu'on improvise.
+- **Où vit l'option de quantisation** : projet, row, ou par prise.
+- **Les notes entrantes sont-elles retransmises en sortie ?** Un séquenceur qui les
+  renvoie double-déclenche. L'usage veut qu'elles servent à la saisie sans être
+  retransmises.
+
+### 5.5 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
@@ -324,7 +384,9 @@ revient à `VUE`.
 6. **Ce que `VUE` cycle** sur ROLL, AUTO et HARMONIE. Seul PATTERN est adossé à un
    mécanisme existant. À trancher **d'un bloc**, mixage compris (§5.3), plutôt qu'un
    mode à la fois.
-7. **La polyrythmie n'est plus le principe d'organisation de PATTERN.** Elle reste un
+7. **L'enregistrement des notes entrantes** (§5.4) : quelle row recoit, sous-patterns
+   ou non, ou vit l'option de quantisation, et si les notes entrantes ressortent.
+8. **La polyrythmie n'est plus le principe d'organisation de PATTERN.** Elle reste un
    outil local — un charley en 3 contre 4 n'a rien d'exotique — mais la vue s'organise
    désormais autour de *l'état de chaque row*. Conséquence : `CAHIER_DES_CHARGES_V1.md`
    §12 pose l'identité *« cœur de valeur = tuplets / polyrythmie + harmonie »*. Cette
