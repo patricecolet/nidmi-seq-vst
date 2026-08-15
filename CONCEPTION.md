@@ -42,8 +42,8 @@ les musiciens.
 |---|---|---|
 | **hauteur** | fr. (angl. *pitch*) | La note. « Note » désigne l'événement entier, « hauteur » sa seule fréquence. |
 | **vélocité** | fr. | La force de frappe, 0 à 127. Abrégée **vélo** à l'écran, faute de place. |
-| **gate** | angl., conservé | La fraction du pas pendant laquelle la note sonne. 100 % = legato. « Porte » serait un contresens. |
-| **span** | angl., **à trancher** | Le nombre de pas qu'un pas occupe : une note longue. *Étendue* ou *portée* conviendraient — « portée » est déjà pris par la notation musicale. |
+| **durée** | fr. | Le temps pendant lequel la note est tenue, **en pas et fractions de pas**. Une durée qui atteint le pas suivant fait se recouvrir les deux notes, ce dont le synthé tire un legato. Remplace *span* et *gate* à l'écran. |
+| ~~gate~~ · ~~span~~ | angl. | **Termes internes**, plus exposés à l'utilisateur. Le moteur en dérive la paire depuis la durée : `span` = le nombre de pas couverts — qui masque les pas suivants et sur lequel un sous-pattern s'étale — `gate` = la fraction restante. La conversion existe déjà (`quartersToSpan`, `quartersToGate`). |
 | **accent** | identique | Le pas est renforcé. |
 | **swing** | angl., conservé | Le pas est décalé pour créer le balancement ternaire. |
 | **micro-décalage** | fr. | L'écart entre l'instant joué et le pas où la note s'est rangée. C'est lui qui donne son **grain** à une interprétation enregistrée. |
@@ -103,9 +103,9 @@ les musiciens.
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Neuf termes portent la mention **à trancher** : `span`, `lane`, `P-lock`, `learn`,
+- Six termes portent encore la mention **à trancher** : `lane`, `P-lock`, `learn`,
   `slot`, `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon.
+  renomme à sa façon. *(`span` est réglé : voir **durée**.)*
 
 ---
 
@@ -376,7 +376,7 @@ Ce que « mixage » veut dire sur un séquenceur **MIDI-only**, sans rien invent
 | **Volume** | pas un champ : **CC 7**, par canal |
 | **Panoramique** | pas un champ : **CC 10**, par canal |
 
-Volume et panoramique retombent donc sur la même réponse que le glide (§5.4) : des **CC
+Volume et panoramique retombent donc sur la même réponse que le glide (§5.5) : des **CC
 connus, nommés par le profil d'appareil**. Aucun paramètre nouveau, aucun moteur à
 toucher. Une vue de mixage est surtout **une lecture de ce qui existe déjà**, plus le
 mute — ce qui la rend étonnamment bon marché.
@@ -403,7 +403,39 @@ bouton cycle sur ROLL, AUTO et HARMONIE (§6).
 `MUTE`. Le mixage règle le cas de `MUTE`, la page PROJET celui d'`EXPORT` : le huitième
 revient à `VUE`.
 
-### 5.4 Enregistrement des notes entrantes *(décidé le 2026-08-14, non implémenté)*
+### 5.4 L'articulation comme intention *(idée de Patrice, 2026-08-15 — après release)*
+
+**Un séquenceur devrait gérer l'articulation, et aucun ne le fait.** Le reproche est
+juste, et la cause est nommable : **les séquenceurs stockent l'approximation au lieu de
+l'intention**. On ne note pas *staccato*, on note *gate 40 %*. La traduction est faite
+une fois pour toutes à la saisie, puis perdue — change de synthé, elle n'est plus bonne,
+mais il ne reste que le pourcentage.
+
+C'est le même raisonnement que le micro-décalage du §5.5 : garder ce qui a été voulu
+plutôt que sa version déjà traduite.
+
+Les logiciels de partition ne s'en sortent pas mieux. MuseScore applique **une seule
+traduction pour tous les instruments** — staccato → 50 % de la valeur, accent →
+vélocité majorée — alors que le staccato est un coup d'archet ici, un relâché de touche
+là, une enveloppe ailleurs. D'où ce rendu mécanique qu'on reconnaît aussitôt.
+
+**Ce que NiDMI a et que les autres n'ont pas : le profil d'appareil.** Il nomme déjà les
+CC d'un synthé ; il pourrait porter la **traduction de l'articulation** pour cet
+appareil — de combien raccourcir, de combien pousser la vélocité, quel CC toucher s'il
+expose son enveloppe.
+
+Le pas stockerait une **intention** — *tenuto*, *staccato*, *marcato*, *legato* — et le
+profil la réaliserait. Même mécanisme que le glide en CC 5/65 et le mixage en CC 7/10 :
+une notion musicale, une traduction qui appartient à l'appareil. Change de synthé, la
+même séquence se rejoue juste.
+
+*Limite honnête* : sur du MIDI les leviers restent la durée, la vélocité, le
+recouvrement et les CC. On n'invente pas une articulation qui n'existe pas. **Le gain
+n'est pas d'avoir de nouveaux leviers, c'est de ne pas jeter l'intention.**
+
+*Différé* : à reprendre après une première release, dont on est loin.
+
+### 5.5 Enregistrement des notes entrantes *(décidé le 2026-08-14, non implémenté)*
 
 **Le séquenceur doit pouvoir enregistrer les notes entrantes.** Il ne le peut pas
 aujourd'hui : `processBlock` ne capture que les Control Change, et le
@@ -463,7 +495,7 @@ solution ne l'évite sans stocker le temps réel, ce qui serait une refonte du m
   renvoie double-déclenche. L'usage veut qu'elles servent à la saisie sans être
   retransmises.
 
-### 5.5 Autres propositions
+### 5.6 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
