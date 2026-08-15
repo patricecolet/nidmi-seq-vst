@@ -553,7 +553,48 @@ changement de modèle du moteur, pas un aménagement d'interface.
 s'interpoler entre les pas qui en portent une. `emitInterpolatedCC` sait déjà le faire.
 C'est précisément là que la machine dépasse Elektron au lieu d'en hériter la limite.
 
-### 5.7 Autres propositions
+### 5.7 Bibliothèque de cadences *(idée de Patrice, 2026-08-15)*
+
+**Précision de vocabulaire d'abord** : une cadence n'est pas une suite d'accords, c'est
+**la formule qui conclut une phrase** — la ponctuation, pas le texte. Parfaite (V → I à
+l'état fondamental), imparfaite (la même affaiblie par un renversement), demi-cadence
+(s'arrête sur V, une question), plagale (IV → I, celle de l'amen), rompue (V → VI, la
+chute qu'on n'attendait pas).
+
+`progression` reste donc le mot juste pour la suite d'accords du pattern.
+
+**Mais la cadence est utile comme raccourci de composition.** Une petite bibliothèque
+qu'on dépose dans la progression au lieu de poser les degrés un par un : un II-V-I, une
+cadence rompue, une demi-cadence — et les accords s'écrivent avec leurs degrés.
+
+Deux points d'ancrage existent déjà :
+
+- `VISION §5.1ter` prévoit une *« future bibliothèque d'harmonies / progressions
+  assignables »* : les cadences en sont le contenu naturel ;
+- le **générateur** (§5.1) répartit des paramètres par niveau ; au niveau de la
+  progression, ce qu'il y a à répartir, ce sont précisément des cadences.
+
+C'est cohérent avec l'identité de la machine, qui pense déjà en degrés, en qualités et
+en Da Capo : une notion que le musicien connaît, et que la machine lui rend.
+
+### 5.8 Construire une progression géométriquement *(idée de Patrice, 2026-08-15 — à explorer)*
+
+Une autre façon d'écrire une progression que de choisir des degrés un par un :
+**se déplacer dans un espace** où la proximité vaut parenté harmonique.
+
+Trois représentations connues, notées ici pour ancrer l'idée — rien n'est conçu :
+
+- **le cercle des quintes** — circulaire, les voisins sont les tonalités parentes ;
+- **le Tonnetz** (réseau d'Euler-Riemann) — un maillage où chaque triade est un triangle,
+  et où deux triangles voisins partagent deux notes. On y avance par transformations
+  minimales plutôt qu'en nommant des accords ;
+- **les orbifolds de Tymoczko** — l'espace des accords où la distance *est* la conduite
+  des voix.
+
+Le Tonnetz est le plus proche d'une machine à encodeurs : deux axes, deux molettes,
+et chaque cran est un enchaînement à voix conjointes. **À explorer**, pas à décider.
+
+### 5.9 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
