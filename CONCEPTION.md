@@ -83,6 +83,7 @@ les musiciens.
 
 | Retenu | Origine | Ce que c'est |
 |---|---|---|
+| **avance de progression** | fr. (`advanceProgOnEnd`) | Quand un sous-pattern **finit de jouer**, il fait avancer la progression d'accords d'un slot. Musicalement : **l'ornement décide du rythme harmonique** — un tuplet long fait durer l'accord, un tuplet court le fait tourner plus vite. Déclencheur **orthogonal à l'horloge** : le compteur de temps continue, seul le slot courant change par anticipation. Existe aussi au niveau du pattern (`advanceProgOnSubPatternEnd`) ; les deux s'ajoutent par un OU. |
 | **chaîne** | fr. (angl. *chain*) | La suite d'instructions qui enchaîne les patterns. |
 | ~~slot~~ | angl. | **Abandonné**, comme *lane* et *P-lock* : le mot recouvrait deux natures et n'était nécessaire pour aucune. Un élément d'une suite porte le nom de la chose — **accord**, **instruction**. Une des huit automations d'une row se nomme par sa **destination** (« l'automation du CC 74 ») ; un numéro suffit tant qu'elle est vide. |
 | **mode Pattern / Song** | angl., conservé | Le pattern boucle, ou la chaîne avance. |
