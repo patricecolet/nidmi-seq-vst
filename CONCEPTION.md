@@ -11,29 +11,101 @@
 
 ---
 
-## 1. Vocabulaire
+## 1. Glossaire
 
-Le vocabulaire de ce projet est technique et rien ne le définissait. Il est employé
-partout ailleurs comme s'il allait de soi.
+Le vocabulaire de la machine est technique, mêlé d'anglais, et rien ne le définissait.
+Ce glossaire sert **deux publics** : l'utilisateur qui lit le manuel, et nous qui
+écrivons le code — un seul mot par notion, pour ne plus en inventer en chemin.
 
-| Terme | Définition |
-|---|---|
-| **Row** | Une piste. Elle divise la mesure en **N** pas, indépendamment des autres — c'est ce qui rend la polyrythmie naturelle. |
-| **N** | Le nombre de pas d'une row dans une mesure. Deux rows à N différents divergent puis se réalignent au premier temps. |
-| **Pas** | Une case d'une row. Porte une hauteur, une vélocité, une articulation. |
-| **Sous-pas** | Un pas peut contenir un **sous-pattern** : sa propre subdivision, jouée dans la durée du pas hôte. C'est le tuplet imbriqué. |
-| **Grain** | Le niveau auquel on travaille : row, pas, ou sous-pas. Le Curseur navigue au grain courant. |
-| **Contexte** | Ce qui s'ouvre quand on pousse une molette : les réglages de profondeur de l'objet ou de l'attribut qu'elle porte. |
-| **Span** | Le nombre de pas qu'un pas occupe. Un span de 3 fait une note longue et masque les deux pas suivants — leur contenu est conservé, simplement pas joué. |
-| **Gate** | La proportion du pas pendant laquelle la note sonne. 100 % = legato, 10 % = staccato. Différent du span : le span dit *combien de pas*, le gate dit *quelle fraction*. |
-| **Lane** | Une row entière consacrée à un contrôleur (`kind = CC`) plutôt qu'à des notes. Ses valeurs sont reliées entre les pas par une **interpolation**. |
-| **P-lock** | Une valeur de contrôleur accrochée à **un seul pas**, sur n'importe quelle row, jusqu'à huit par pas. Rien à interpoler entre deux : c'est ponctuel. |
-| **Interpolation** | Comment une lane relie deux pas : `Pas` (saut), `Linéaire` (rampe), `Douce` (courbe en S). |
-| **Ancre relative** | Un sous-pattern en mode relatif joue des **intervalles** par rapport à la note du pas qui le déclenche, au lieu de hauteurs absolues. Transposer le pas transpose le sous-pattern. |
-| **Mode harmonique** | Comment la note écrite est transformée par l'harmonie courante. `A` = degré dans la gamme mère, `B1` = degré rerouté par l'accord courant, `B2` = notes de l'accord, `Chromatique` = brut. **Réglé par mesure**, pas par row. |
-| **Progression** | La suite d'accords du pattern. Chaque slot dure un nombre de **temps**, indépendamment du nombre de mesures. |
-| **Lane de tonalité** | Une suite de marqueurs tonique + gamme, qui permet de moduler dans le temps. |
-| **Chaîne** | L'arrangement : une suite d'instructions (jouer un pattern, répéter, D.S., Coda, Fine). |
+La colonne *retenu* fixe le mot employé partout : à l'écran, dans le manuel, dans les
+commits. Quand l'anglais reste, c'est qu'aucun équivalent français n'est en usage chez
+les musiciens.
+
+### 1.1 La séquence
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **pattern** | anglais, conservé | Une séquence complète : ses rows, son harmonie, ses réglages. On en garde plusieurs dans une **banque**. |
+| **row** | anglais, conservé | Une piste. « Rangée » traîne encore à un endroit de l'écran — **à uniformiser**. |
+| **pas** | fr. (angl. *step*) | Une case d'une row. Jamais « step », sauf dans `step-record`. |
+| **N** | — | Le nombre de pas d'une row dans une mesure. Deux rows à N différents divergent puis se réalignent au premier temps. |
+| **mesure** | fr. (angl. *bar*) | Une row porte son contenu par mesure, jusqu'à huit. |
+| **page** | fr. | Fenêtre de 16 pas, quand une row en compte plus. |
+| **sous-pattern** | fr. + angl. | Le contenu qu'un pas peut abriter : sa propre subdivision, jouée dans la durée du pas hôte. C'est le tuplet imbriqué. |
+| **sous-pas** | fr. | Un pas d'un sous-pattern. |
+| **tuplet** | angl., conservé | Une division qui ne tombe pas sur la grille binaire — triolet, quintolet. Le terme français « n-olet » n'a pas d'usage. |
+| **polyrythmie** | fr. | Plusieurs rows à N différents jouant ensemble. Un outil, pas le principe d'organisation. |
+
+### 1.2 Ce que porte un pas
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **hauteur** | fr. (angl. *pitch*) | La note. « Note » désigne l'événement entier, « hauteur » sa seule fréquence. |
+| **vélocité** | fr. | La force de frappe, 0 à 127. Abrégée **vélo** à l'écran, faute de place. |
+| **gate** | angl., conservé | La fraction du pas pendant laquelle la note sonne. 100 % = legato. « Porte » serait un contresens. |
+| **span** | angl., **à trancher** | Le nombre de pas qu'un pas occupe : une note longue. *Étendue* ou *portée* conviendraient — « portée » est déjà pris par la notation musicale. |
+| **accent** | identique | Le pas est renforcé. |
+| **swing** | angl., conservé | Le pas est décalé pour créer le balancement ternaire. |
+| **micro-décalage** | fr. | L'écart entre l'instant joué et le pas où la note s'est rangée. C'est lui qui donne son **grain** à une interprétation enregistrée. |
+
+> **« Grain »** ne désigne plus qu'une chose : le relief d'une interprétation. Il a
+> servi un temps à nommer un niveau de navigation — cet emploi est abandonné.
+
+### 1.3 Les contrôleurs
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **CC** | angl. *control change* | Un message MIDI qui règle un paramètre du synthé. Toujours « CC », jamais « contrôleur continu ». |
+| **lane** | angl., **à trancher** | Une row entière consacrée à un CC au lieu de notes. *Piste de contrôleur* est clair mais long. |
+| **P-lock** | jargon Elektron, **à trancher** | Une valeur de CC accrochée à **un seul pas**, sur n'importe quelle row, jusqu'à huit par pas. |
+| **destination** | fr. | Le numéro de CC visé. Une row sans destination joue des notes ; avec, c'est une lane. |
+| **interpolation** | fr. | Comment une lane relie deux pas : *Pas*, *Linéaire*, *Douce*. |
+| **débit CC** | fr. | Le plafond de messages par seconde, tous CC confondus. Le MIDI DIN sature vers 1000. |
+| **profil d'appareil** | fr. | Une table qui **nomme** les CC d'un synthé — « VCF Cutoff » au lieu de « CC 74 ». Purement cosmétique. |
+| **learn** | angl., **à trancher** | Associer un potard entrant à un paramètre. *Apprentissage* est correct mais personne ne le dit. |
+
+### 1.4 L'harmonie
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **tonalité** | fr. | Tonique + gamme. Peut changer dans le temps via la **lane de tonalité**. |
+| **degré** | fr. | Le rang d'un accord dans la gamme, en chiffres romains. |
+| **qualité** | fr. | Majeur, mineur, diminué, augmenté, sus2, sus4. |
+| **extensions** | fr. | Les notes ajoutées à l'accord — septième, neuvième. |
+| **basse** | fr. | Décalage de la note grave : renversements, accords slash. |
+| **progression** | fr. | La suite d'accords du pattern. Chaque slot dure un nombre de **temps**. |
+| **mode harmonique** | fr. | Comment la note écrite est transformée. *Délié*, *A*, *B1*, *B2*, *Chromatique*. Réglé **par mesure**. |
+| **voicing** | angl., conservé | Comment un accord se dispose. Aucun équivalent français en usage. *(proposé, non implémenté)* |
+
+### 1.5 L'arrangement
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **chaîne** | fr. (angl. *chain*) | La suite d'instructions qui enchaîne les patterns. |
+| **slot** | angl., **à trancher** | Une case de la chaîne ou de la progression. *Emplacement* est long, *case* est ambigu avec les pas. |
+| **mode Pattern / Song** | angl., conservé | Le pattern boucle, ou la chaîne avance. |
+| **Segno · D.S. · Coda · D.C. · Fine** | italien, conservé | La notation de renvoi des partitions. C'est la langue de l'arrangement dans NiDMI, et elle se lit déjà par les musiciens. |
+
+### 1.6 La machine
+
+| Retenu | Origine | Ce que c'est |
+|---|---|---|
+| **molette** | fr. (angl. *encoder*) | Un des six encodeurs. « Encodeur » pour la pièce, « molette » pour le geste. |
+| **push** | angl., **à trancher** | L'appui sur une molette. *Appui* fonctionne et se dit. |
+| **contexte** | fr. | Ce qui s'ouvre au push : les réglages de profondeur de ce que la molette porte. |
+| **vue** | fr. | Ce qu'on regarde : PATTERN, ROLL, AUTO, HARMONIE, GLOB, SONG. |
+| **famille** | fr. | Le groupe de vues d'un bouton : ROW, HARMONY, PROJET. |
+| **tête de lecture** | fr. (angl. *playhead*) | Le pas en cours de lecture. |
+| **step-record** | angl., **à trancher** | Poser les notes pas à pas, transport arrêté. *Enregistrement pas à pas* est clair mais long. |
+| **quantisation** | fr. | Ramener une note jouée sur la grille. **Optionnelle** : désactivée, le micro-décalage est conservé. |
+
+### 1.7 Incohérences relevées, à corriger
+
+- **`Row` et `Rangées`** coexistent dans les libellés d'écran.
+- **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
+- Neuf termes portent la mention **à trancher** : `span`, `lane`, `P-lock`, `learn`,
+  `slot`, `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
+  renomme à sa façon.
 
 ---
 
@@ -112,9 +184,10 @@ Et une règle de forme, qui vaut pour tout le reste du document :
 > contrôleur, et `Valeur` éditait déjà la bonne chose. La friction n'existait que pour
 > les P-locks, enterrés dans un contexte au lieu d'être un niveau.
 >
-> Effet de bord : le contexte du grain *pas* se vide de la modulation et ne garde que la
-> profondeur **temporelle**, le sous-pattern. Les deux natures que le pas portait
-> ensemble se sont séparées d'elles-mêmes.
+> **Périmé depuis le passage à six encodeurs** : ce raisonnement portait sur un niveau
+> « P-lock » atteint par le Curseur. Avec une molette `Pas` dédiée dont le push fait
+> entrer dans le sous-pattern, les P-locks n'ont plus d'adresse — c'est une régression
+> ouverte, consignée au §6.
 
 ### Les huit boutons
 
@@ -159,7 +232,7 @@ auditable d'un coup d'œil.
 est la source principale de l'arbitraire.
 
 `ccNumber` et `ccInterp` sont des champs de `PatternRow` : leur adresse est
-`Curseur ▸ push` au grain row, **et elle ne change pas selon la page**. Sans quoi la
+`Row ▸ push`, **et elle ne change pas selon la page**. Sans quoi la
 règle « la vue ne change que ce qu'on voit » serait morte.
 
 ### 3.3 La fréquence décide de la couche, et le compte force la main
@@ -182,7 +255,7 @@ choix de goût, c'est une place qui manque.
   suffit à dire ce qu'est la row — pas de destination, elle joue des notes ; une
   destination, c'est une lane. Un booléen de moins, un terme de moins au glossaire, un
   encodeur libéré.
-- **Destination et Interpolation ne vivent pas sur AUTO** mais au grain row, puisque
+- **Destination et Interpolation ne vivent pas sur AUTO** mais sur la molette `Row`, puisque
   `PatternRow` les porte. Conséquence inconfortable et assumée : **il ne reste plus rien
   de réel sous la molette Valeur**.
 - **Les lignes par row de GLOB n'étaient pas le défaut** que le relevé d'ergonomie
@@ -198,14 +271,18 @@ du document relève du §4.
 
 | Champ | Structure | Porté par |
 |---|---|---|
-| `numSteps` `kind` `ccNumber` `ccInterp` `channel` `muted` | `PatternRow` | Curseur ▸ grain row |
-| `harmonyMode[bar]` — **par mesure** | `PatternRow` | Curseur ▸ grain row |
+| `numSteps` `ccNumber` `ccInterp` | `PatternRow` | `Row` ▸ push |
+| `harmonyMode[bar]` — **par mesure** | `PatternRow` | `Row` ▸ push |
+| `channel` | `PatternRow` | page PROJET |
+| `muted` | `PatternRow` | **sans adresse** — voir §5.3 |
 | `note` `velocity` `gate` `enabled` `span` `accent` `swingEnable` | `StepData` | couche de base, Vélo ▸ push, Gate ▸ push |
-| `subPatIdx` `ccLocks[8]` | `StepData` | Curseur ▸ grain pas |
-| `numSteps` `duration` `relativeToHost` `advanceProgOnEnd` | `SubPattern` | Curseur ▸ grain sous-pas |
+| `subPatIdx` | `StepData` | s'établit en entrant : `Pas` ▸ push |
+| `ccLocks[8]` | `StepData` | **sans adresse depuis les 6 encodeurs** — voir §6 |
+| `numSteps` `relativeToHost` | `SubPattern` | dans le sous-pattern |
+| `duration` `advanceProgOnEnd` | `SubPattern` | **sans adresse** |
 | `degree` `quality` (6) `extensions` `bassOffset` `durationBeats` | `ChordSlot` | HARMONIE |
 | `rootPc` `scaleId` `durationBeats` | `KeySlot` | HARMONIE, lane tonalité |
-| `harmonyEnabled` `followMasterTonality` `followProgression` `advanceProgOnSubPatternEnd` | `PatternHarmonySettings` | Curseur ▸ grain lane |
+| `harmonyEnabled` `followMasterTonality` `followProgression` `advanceProgOnSubPatternEnd` | `PatternHarmonySettings` | `Lane` ▸ push |
 | `op` `param1` `param2` | `ChainSlot` | SONG |
 | `bpm` `timeSignature` `ccRateBudget` `songMode` `activePatternIndex` | `SequencerEngine` | Master ▸ push, SONG ▸ push |
 
@@ -232,16 +309,16 @@ devient la manière dont cet attribut se répartit.
 
 | Pousser | La profondeur répartit |
 |---|---|
-| **Curseur**, au grain courant | quels pas sont actifs — densité, euclidien, rotation |
+| **Row** ou **Pas** | quels pas sont actifs — densité, euclidien, rotation |
 | **Valeur** | les hauteurs — ambitus, marche, aléa, contrainte de gamme |
 | **Vélo** | les vélocités — aléa, courbe, accentuation |
 | **Gate** | les durées — legato/staccato, aléa |
 
 Deux conséquences qui plaident pour cette forme :
 
-- **« Pour chaque niveau » vient gratuitement.** Le grain du Curseur choisit déjà le
-  niveau : répartir au grain row remplit la row, au grain pas remplit le sous-pattern
-  du pas, au grain lane remplit la progression.
+- **« Pour chaque niveau » vient gratuitement.** La molette poussée choisit déjà le
+  niveau : `Row` remplit la row, `Pas` remplit le sous-pattern du pas, `Lane` remplit
+  la progression.
 - **Aucun geste nouveau à apprendre.** Générer, c'est tourner une profondeur.
 
 **Le point à trancher — génération vive ou semée.**
@@ -431,9 +508,12 @@ solution ne l'évite sans stocker le temps réel, ce qui serait une refonte du m
 - `CAHIER_DES_CHARGES_V1.md` §10.2 décrit des **encodeurs contextuels** dont « le sens
   dépend de la Vue active ». La grammaire du §2 pose l'inverse. Le cahier est
   **supersédé** sur ce point.
-- `VISION_ERGO_HARMONIE.md` §2.3 place le changement de **grain** sur le push du
-  Curseur. Le push servant ici à ouvrir un contexte, le grain part sur ⇧+noires, avec
-  le reste de la navigation de structure.
+- `VISION_ERGO_HARMONIE.md` §2.3 place le changement de niveau sur le push du Curseur.
+  Deux molettes de navigation dédiées le remplacent, et le push de `Pas` fait entrer
+  dans le sous-pattern. **Le mot « grain » ne désigne plus un niveau de navigation** ;
+  il est réservé à son sens musical, le relief d'une interprétation (§5.4).
+- `VISION_ERGO_HARMONIE.md` §2.4 — *« toute richesse future passe par le PUSH, JAMAIS
+  par un nouvel encodeur »* — est révisé par le sixième encodeur.
 - **Le bouton `VUE` revient, avec un autre métier.** Le cahier d'origine
   (§11.3) listait *Play · Stop · Rec · Vue · Export* ; `VUE` y servait à changer de
   page. Ce rôle appartient désormais aux trois boutons de famille. `VUE` reprend le
