@@ -93,7 +93,7 @@ les musiciens.
 | Retenu | Origine | Ce que c'est |
 |---|---|---|
 | **molette** | fr. (angl. *encoder*) | Un des six encodeurs. « Encodeur » pour la pièce, « molette » pour le geste. |
-| **push** | angl., **à trancher** | L'appui sur une molette. *Appui* fonctionne et se dit. |
+| **pousser** · **appui** | fr. | Le geste sur une molette : *pousser la molette Pas*, *l'appui sur Hauteur ouvre son contexte*. La pièce est un **encodeur à poussoir**. |
 | **contexte** | fr. | Ce qui s'ouvre au push : les réglages de profondeur de ce que la molette porte. |
 | **vue** | fr. | Ce qu'on regarde : PATTERN, ROLL, AUTO, HARMONIE, GLOB, SONG. |
 | **famille** | fr. | Le groupe de vues d'un bouton : ROW, HARMONY, PROJET. |
@@ -105,8 +105,8 @@ les musiciens.
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Deux termes portent encore la mention **à trancher** : `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation** ; `P-lock` et `slot` supprimés.)*
+- Un terme porte encore la mention **à trancher** : `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
+  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation** ; `push` → **pousser / appui** ; `P-lock` et `slot` supprimés.)*
 
 ---
 
@@ -233,7 +233,7 @@ auditable d'un coup d'œil.
 est la source principale de l'arbitraire.
 
 `ccNumber` et `ccInterp` sont des champs de `PatternRow` : leur adresse est
-`Row ▸ push`, **et elle ne change pas selon la page**. Sans quoi la
+`Row ▸ appui`, **et elle ne change pas selon la page**. Sans quoi la
 règle « la vue ne change que ce qu'on voit » serait morte.
 
 ### 3.3 La fréquence décide de la couche, et le compte force la main
@@ -272,20 +272,20 @@ du document relève du §4.
 
 | Champ | Structure | Porté par |
 |---|---|---|
-| `numSteps` `ccNumber` `ccInterp` | `PatternRow` | `Row` ▸ push |
-| `harmonyMode[bar]` — **par mesure** | `PatternRow` | `Row` ▸ push |
+| `numSteps` `ccNumber` `ccInterp` | `PatternRow` | `Row` ▸ appui |
+| `harmonyMode[bar]` — **par mesure** | `PatternRow` | `Row` ▸ appui |
 | `channel` | `PatternRow` | page PROJET |
 | `muted` | `PatternRow` | **sans adresse** — voir §5.3 |
-| `note` `velocity` `gate` `enabled` `span` `accent` `swingEnable` | `StepData` | couche de base, Vélo ▸ push, Gate ▸ push |
-| `subPatIdx` | `StepData` | s'établit en entrant : `Pas` ▸ push |
+| `note` `velocity` `gate` `enabled` `span` `accent` `swingEnable` | `StepData` | couche de base, Vélo ▸ appui, Gate ▸ appui |
+| `subPatIdx` | `StepData` | s'établit en entrant : `Pas` ▸ appui |
 | `ccLocks[8]` | `StepData` | **sans adresse depuis les 6 encodeurs** — voir §6 |
 | `numSteps` `relativeToHost` | `SubPattern` | dans le sous-pattern |
 | `duration` `advanceProgOnEnd` | `SubPattern` | **sans adresse** |
 | `degree` `quality` (6) `extensions` `bassOffset` `durationBeats` | `ChordSlot` | HARMONIE |
 | `rootPc` `scaleId` `durationBeats` | `KeySlot` | HARMONIE, lane tonalité |
-| `harmonyEnabled` `followMasterTonality` `followProgression` `advanceProgOnSubPatternEnd` | `PatternHarmonySettings` | `Lane` ▸ push |
+| `harmonyEnabled` `followMasterTonality` `followProgression` `advanceProgOnSubPatternEnd` | `PatternHarmonySettings` | `Lane` ▸ appui |
 | `op` `param1` `param2` | `ChainSlot` | SONG |
-| `bpm` `timeSignature` `ccRateBudget` `songMode` `activePatternIndex` | `SequencerEngine` | Master ▸ push, SONG ▸ push |
+| `bpm` `timeSignature` `ccRateBudget` `songMode` `activePatternIndex` | `SequencerEngine` | Master ▸ appui, SONG ▸ appui |
 
 Deux pièges relevés à l'audit, contre-intuitifs :
 
@@ -559,13 +559,13 @@ C'est précisément là que la machine dépasse Elektron au lieu d'en hériter l
 |---|---|---|
 | **Probabilité d'émission** | Vélo, sur une lane CC | 2026-08-14 — retenue. Comble une molette libre : une valeur de contrôleur n'a pas de vélocité. |
 | **Glide** | Interpolation, sur une row de notes | 2026-08-14. Remplit un emplacement mort : `ccInterp` ne s'applique qu'aux lanes, l'encodeur affiche `—` sur une row de notes. **Forme retenue** : pas un paramètre nouveau, mais **CC 5 / CC 65 nommés par le profil d'appareil**. Le portamento est le travail du synthé ; générer le glissando nous-mêmes imposerait du pitch bend, qui est par canal et entre en collision avec le modèle de notes. |
-| **Ancrage · Densité · Disposition** | Valeur ▸ push, row Note | Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. |
-| **Tension du lissage** | Valeur ▸ push, lane CC | `CCInterp` est un enum sans paramètre. Coût faible. |
-| **Aléa · Courbe de vélocité** | Vélo ▸ push | Modulateurs — `VISION §6`. Recouvre en partie le §5.1. |
-| **Ratchet / répétitions** | Gate ▸ push | N'existe nulle part. Touche le déclenchement, donc le moteur. |
-| **Emprunt vs modulation** | Curseur ▸ push, slot d'accord | `VISION §5.2c` — explicitement non tranché. |
-| **Swing global** | Master ▸ push | Le swing réel vit au niveau du sous-pattern. À unifier ou à renommer. |
-| **Boucle de la chaîne** | Curseur ▸ push, SONG | `ChainSlot` n'a que `op`, `param1`, `param2`. |
+| **Ancrage · Densité · Disposition** | Valeur ▸ appui, row Note | Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. |
+| **Tension du lissage** | Valeur ▸ appui, lane CC | `CCInterp` est un enum sans paramètre. Coût faible. |
+| **Aléa · Courbe de vélocité** | Vélo ▸ appui | Modulateurs — `VISION §6`. Recouvre en partie le §5.1. |
+| **Ratchet / répétitions** | Gate ▸ appui | N'existe nulle part. Touche le déclenchement, donc le moteur. |
+| **Emprunt vs modulation** | Curseur ▸ appui, slot d'accord | `VISION §5.2c` — explicitement non tranché. |
+| **Swing global** | Master ▸ appui | Le swing réel vit au niveau du sous-pattern. À unifier ou à renommer. |
+| **Boucle de la chaîne** | Curseur ▸ appui, SONG | `ChainSlot` n'a que `op`, `param1`, `param2`. |
 
 ---
 
