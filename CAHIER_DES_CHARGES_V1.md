@@ -587,7 +587,7 @@ L'écran est **le hub d'édition** : il doit porter toutes les conditions d'une 
 - **HARMONIE (PROG)** — slots de la progression d'accords en bande horizontale (degré + qualité + extensions), slot courant surligné.
 - **AUTO** — lane d'automation : valeurs des P-locks CC par pas pour la row/slot CC sélectionné (histogramme).
 - **GLOBAL** — params projet (BPM, signature, tonalité maître, sync, macros) ; conserve la grille de params à curseur (héritage du layout 8-params).
-- **SONG** — édition du chain / arrangement (V1.5, cf. §12).
+- **SONG** — édition du chain / arrangement. *(Classé V1.5 à l'origine ; requalifié le 2026-08-15 — Patrice le dit **essentiel pour la suite**. La chaîne parle la langue de la partition — Segno, D.S. al Coda, Fine — et c'est un trait d'identité, pas un module d'arrangement générique.)*
 
 **Tuplets imbriqués :** un pas peut héberger un subpattern (son propre N). On entre dans le subpattern et on édite le sous-tuplet avec la même grammaire ; un fil d'Ariane indique le niveau (`Pattern ▸ R3 ▸ P5 ▸ Sub`).
 
@@ -665,7 +665,7 @@ Clavier doit détecter jusqu'à **16 touches simultanées** (saisie rapide, acco
 3. **HARMONIE (PROG)** — slots de la progression harmonique du pattern.
 4. **AUTO** — P-locks CC par pas.
 5. **GLOBAL** — BPM, signature, tonalité maître, sync, macros, config.
-6. **SONG** — édition du chain / arrangement (V1.5).
+6. **SONG** — édition du chain / arrangement. *(Requalifié le 2026-08-15 : essentiel, plus V1.5.)*
 
 Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué). **Implémenté (rév. 2026-05)** : sur PATTERN, pas sélectionné + **noire « Sub »** crée (si besoin) et **entre** dans le sub ; **fil d'Ariane** `R3 ▸ P5 ▸ SUB rel/abs` en barre de titre ; **noire « Back »** remonte, **noire « Mode »** bascule relatif/absolu. **On reste dans le sub en changeant de Vue** : PATTERN = sous-pas on/off (Enc1 = N du sub) ; **PIANO ROLL = hauteurs des sous-pas** (clavier diatonique, Enc1 = hauteur). **Correspondance avec la note hôte** : mode **relatif** = les sous-pas sont des **intervalles ancrés sur la note du pas** (piano-roll à **ligne d'ancrage**), ils transposent avec la mélodie de la row ; mode **absolu** = hauteurs fixes. Le contenu du sub est **visible niché dans la cellule du pas hôte** (mini-grille). Ajouts moteur : **`SetSubPatternSteps`** (N éditable) et **`SetSubPatternRelative`** + mode relatif (ancre = note hôte). Profondeur V1 = 1 niveau.
 
@@ -699,6 +699,8 @@ Plus le **sous-contexte SUB** (édition d'un subpattern, tuplet imbriqué). **Im
 
 ## 12. Roadmap
 
+> ⚠️ **Révisé le 2026-08-15 sur le point du cœur de valeur.** La polyrythmie n'est plus le principe d'organisation : elle reste un **outil local** — un charley en 3 contre 4 n'a rien d'exotique — mais l'usage courant met toutes les rows au même N, et PATTERN s'organise désormais autour de *l'état de chaque row*, notes ou automation. Le cœur de valeur est donc **l'harmonie et les tuplets**, la polyrythmie étant l'un des outils, pas la promesse. Voir `CONCEPTION.md`.
+>
 > **Identité (révision 2026-05) : séquenceur MIDI-only**, hardware bon marché, ergonomie des meilleures machines (Elektron / MPC / Polyend / OP-Z). Cœur de valeur = **tuplets / polyrythmie + harmonie**. MIDI-only → le coût des évolutions est l'**UI/écran**, pas le CPU/RAM (un événement MIDI = quelques octets) : arbitrer l'arrangement/multi-pattern sur le critère ergonomie, pas puissance. **Ne pas glisser vers un clone MPC générique** : toute couche « arrangement » reste phasée et ne doit pas trahir les 3 piliers.
 
 ### V1 (cahier de ce document)

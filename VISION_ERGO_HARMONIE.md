@@ -112,6 +112,14 @@ sub pour changer de row. **Inacceptable.** Règle :
   BASE ; toute richesse future (modulateurs, courbes, voicing, aléa) passe par le
   PUSH de l'encodeur concerné, JAMAIS par un nouvel encodeur.* Le nombre
   d'encodeurs est ainsi borné.
+  > ⚠️ **Révisée le 2026-08-15 — passage à SIX encodeurs.** La règle vaut toujours
+  > pour la *richesse* : modulateurs, courbes, voicing passent par le push. Mais elle
+  > ne peut pas s'appliquer à la **navigation**, qui n'est pas un attribut. Faute d'une
+  > molette dédiée, changer de niveau demandait un raccourci à deux mains pour un geste
+  > qu'on fait sans arrêt en composant. `Row` et `Pas` ont donc chacune la leur, et ne
+  > sont jamais prêtées. L'électronique suit — PCNT, 4 unités par puce sur deux ESP32,
+  > 8 places pour 6 ; c'est la mécanique de façade qui est à recaler. Voir
+  > `CONCEPTION.md` §2.
 - L'**harmonie habite sa vue** (territoire dédié) : elle ne déverse pas de
   logique dans la couche globale.
 
