@@ -496,7 +496,64 @@ solution ne l'évite sans stocker le temps réel, ce qui serait une refonte du m
   renvoie double-déclenche. L'usage veut qu'elles servent à la saisie sans être
   retransmises.
 
-### 5.6 Autres propositions
+### 5.6 L'automation unifiée *(idée de Patrice, 2026-08-15)*
+
+**Une row en automation et un P-lock sont le même mécanisme, rempli différemment.** Une
+row en automation, c'est une valeur de contrôleur sur *chaque* pas, un seul CC,
+interpolée. C'est-à-dire un P-lock rempli partout.
+
+Il suffit que **l'interpolation devienne une propriété du slot** plutôt que de la row :
+
+> Une row porte des notes **et** jusqu'à huit slots d'automation. Chaque slot a sa
+> destination et son mode d'interpolation. Rempli partout, il donne ce qu'on appelait
+> une lane ; rempli sur trois pas, ce qu'on appelait un P-lock.
+
+**Ce que ça supprime**
+
+- **Automatiser ne coûte plus une row.** Aujourd'hui on sacrifie une piste entière pour
+  piloter un paramètre. Une row jouerait ses notes *et* modulerait huit contrôleurs.
+- `RowKind` disparaît du modèle, comme `Type` a disparu de l'écran.
+- Le piège de nommage disparaît : la valeur d'un contrôleur n'est plus rangée dans
+  `StepData.note`.
+- L'aiguillage de ROLL n'a plus lieu d'être — une row a toujours des notes.
+- Et **P-lock** sort du glossaire, comme `lane` et `Type`. Trois termes supprimés par la
+  même idée.
+
+**L'affichage reste un choix par row.** Patrice tient à voir une automation occuper une
+rangée dans PATTERN, au milieu des rows de notes — c'est pratique et il ne faut pas le
+perdre. Mais c'est un besoin d'affichage, donc il se règle par l'affichage : chaque row
+choisit de montrer ses notes ou le contour d'un de ses slots. On y gagne même, puisque
+la row continue de jouer pendant qu'elle affiche son automation, et que plusieurs rows
+peuvent montrer des slots différents.
+
+**Mémoire : l'unification en fait GAGNER**, ce qui est contre-intuitif.
+
+`StepCCLock` fait 2 octets — `ccNumber` et `value` — répétés 8 fois par pas. Or le
+numéro de CC est en réalité une propriété du **slot**, donc de la row : le stocker à
+chaque pas le duplique 8192 fois par pattern. Une fois remonté au niveau de la row, il
+ne reste que la valeur, et `StepCCLock` tombe à 1 octet (0-127, un sentinelle pour
+« absent »).
+
+| | par pas | par pattern | ×17 patterns |
+|---|---|---|---|
+| aujourd'hui | 24 o | 192 Kio | **3,19 Mio** |
+| unifié | 16 o | 128 Kio | **2,13 Mio** |
+
+*(16 rows × 8 mesures × 64 pas = 8192 pas par pattern ; le moteur tient le pattern actif
+plus une banque de 16.)*
+
+Soit **~1 Mio économisé**, un tiers de la mémoire des pas. Le coût ajouté au niveau row
+— 8 slots × {destination, interpolation} = 16 octets par row — pèse 4 Kio en tout.
+
+**Ce que ça coûte vraiment** : une migration. Les rows aujourd'hui en `RowKind::CC` ont
+leurs valeurs dans `StepData.note` et doivent passer dans `ccLocks[0]`. C'est un
+changement de modèle du moteur, pas un aménagement d'interface.
+
+**Piste ouverte au passage** : rien n'empêcherait alors une automation de pas de
+s'interpoler entre les pas qui en portent une. `emitInterpolatedCC` sait déjà le faire.
+C'est précisément là que la machine dépasse Elektron au lieu d'en hériter la limite.
+
+### 5.7 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
