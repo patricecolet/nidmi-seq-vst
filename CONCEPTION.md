@@ -98,15 +98,15 @@ les musiciens.
 | **vue** | fr. | Ce qu'on regarde : PATTERN, ROLL, AUTO, HARMONIE, GLOB, SONG. |
 | **famille** | fr. | Le groupe de vues d'un bouton : ROW, HARMONY, PROJET. |
 | **tête de lecture** | fr. (angl. *playhead*) | Le pas en cours de lecture. |
-| **step-record** | angl., **à trancher** | Poser les notes pas à pas, transport arrêté. *Enregistrement pas à pas* est clair mais long. |
+| **saisie pas à pas** | fr. (angl. *step-record*) | REC à l'arrêt : on **saisit** des notes une à une, la grille donne le temps. À distinguer de l'**enregistrement temps réel** (REC en lecture), qui capte les notes *et* leur timing. « Record » était trompeur : on n'enregistre rien, on écrit. À l'écran : `● pas à pas` et `● temps réel`. |
 | **quantisation** | fr. | Ramener une note jouée sur la grille. **Optionnelle** : désactivée, le micro-décalage est conservé. |
 
 ### 1.7 Incohérences relevées, à corriger
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Un terme porte encore la mention **à trancher** : `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation** ; `push` → **pousser / appui** ; `P-lock` et `slot` supprimés.)*
+- **Plus aucun terme en attente.** Les sept sont réglés : quatre traduits — `span` → durée, `learn` → assignation, `push` → pousser/appui, `step-record` → saisie pas à pas — et trois **supprimés** parce qu'ils nommaient des objets qui n'existaient pas : `lane`, `P-lock`, `slot`. Tant qu'ils ne sont pas fixés, chaque session les
+  renomme à sa façon. 
 
 ---
 
