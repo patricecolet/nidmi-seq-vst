@@ -63,7 +63,7 @@ les musiciens.
 | **interpolation** | fr. | Comment une lane relie deux pas : *Pas*, *Linéaire*, *Douce*. |
 | **débit CC** | fr. | Le plafond de messages par seconde, tous CC confondus. Le MIDI DIN sature vers 1000. |
 | **profil d'appareil** | fr. | Une table qui **nomme** les CC d'un synthé — « VCF Cutoff » au lieu de « CC 74 ». Purement cosmétique. |
-| **learn** | angl., **à trancher** | Associer un potard entrant à un paramètre. *Apprentissage* est correct mais personne ne le dit. |
+| **assignation** | fr. (angl. *learn*) | Associer un potard de ton contrôleur à un paramètre du synthé. Concrètement un **remappage** : le CC entrant est réémis sous le numéro du paramètre. Sans assignation, un CC passe sous son propre numéro. |
 
 ### 1.4 L'harmonie
 
@@ -104,9 +104,9 @@ les musiciens.
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Cinq termes portent encore la mention **à trancher** : `P-lock`, `learn`,
-  `slot`, `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**.)*
+- Trois termes portent encore la mention **à trancher** : `slot`, `push`,
+  `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
+  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation**, `P-lock` → voir §5.6.)*
 
 ---
 
