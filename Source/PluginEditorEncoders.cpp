@@ -593,15 +593,9 @@ void NidmiSeqAudioProcessorEditor::applyEncoderConfigForState() {
             valueEncoder_.setRange(-12.0, 12.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(bass), juce::dontSendNotification);
         } else {
-            // La plage suit le nombre de degres de la gamme mere : on ne propose pas
-            // un VII sur une pentatonique, qui rendrait un II sans le dire.
-            uint8_t kRootPc = 0, kScaleId = 0;
-            proc_.engine().currentKey(kRootPc, kScaleId);
-            const int nDeg = scaleDegreeCount(kScaleId);
-            deg = juce::jlimit(1, nDeg, deg);
             valueEncoderLabel_.setText(juce::String(juce::CharPointer_UTF8("Degr\xc3\xa9 ")) + juce::String(kRoman[juce::jlimit(0, 6, deg - 1)]),
                                        juce::dontSendNotification);
-            valueEncoder_.setRange(1.0, static_cast<double>(nDeg), 1.0);
+            valueEncoder_.setRange(1.0, 7.0, 1.0);
             valueEncoder_.setValue(static_cast<double>(deg), juce::dontSendNotification);
         }
     } else if (screenPage_ == PatternScreenModel::Page::Auto) {

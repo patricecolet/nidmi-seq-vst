@@ -2,8 +2,6 @@
 
 #include <juce_core/juce_core.h>
 
-#include <nidmi_seq/ScaleBank.h>
-
 #include <cmath>
 
 // Helpers FILE-LOCAL partagés entre les unités de compilation de l'éditeur
@@ -74,18 +72,6 @@ inline const char* ccInterpName(int mode) {
 }
 
 inline constexpr const char* kRoman[] = {"I", "II", "III", "IV", "V", "VI", "VII"};
-
-// Nombre de DEGRES qu'offre reellement la gamme mere. Toutes les gammes n'en ont
-// pas sept : les pentatoniques en ont cinq, le blues six, la chromatique douze.
-//
-// Sans cette borne, l'ecran proposait I a VII quelle que soit la gamme, alors que
-// degreePitchClass enroule modulo la longueur : sur une pentatonique, un VI rendait
-// un I et un VII un II — silencieusement. On ne propose pas un degre qui n'existe
-// pas. Plafonne a 7 : au-dela (chromatique), les chiffres romains manquent.
-inline int scaleDegreeCount(uint8_t scaleId) {
-    const int n = static_cast<int>(scalebank::getScale(scaleId).count);
-    return juce::jlimit(1, 7, n);
-}
 
 // « Longueur » unifiée d'une note en QUARTS de (sous-)pas : 1=¼, 4=1 pas, etc.
 // Conversion bidirectionnelle avec le stockage moteur (span entier + gate %).

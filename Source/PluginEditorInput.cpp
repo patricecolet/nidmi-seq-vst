@@ -194,14 +194,7 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
                 return;
             }
             if (index >= 0 && index < 7) {
-                // Blanches = degrés, bornées au nombre qu'offre la gamme mère :
-                // une pentatonique n'a pas de VI ni de VII.
-                {
-                    uint8_t kR = 0, kS = 0;
-                    proc_.engine().currentKey(kR, kS);
-                    if (index < scaleDegreeCount(kS))
-                        setChordField(0, index + 1);
-                }
+                setChordField(0, index + 1);     // blanches 0..6 = degrés I..VII
                 if (recArmed_)                   // REC = step-record d'accords : avance au slot suivant
                     harmonyCursor_ = juce::jlimit(0, 31, harmonyCursor_ + 1);
             } else if (index >= 7 && index <= 12) {
