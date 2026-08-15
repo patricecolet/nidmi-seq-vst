@@ -104,9 +104,21 @@ void NidmiSeqAudioProcessorEditor::buildScreenModel() {
             proc_.engine().currentKey(rootPc, scaleId);   // suit la lane de tonalite
             m.keyRootPc = rootPc % 12;
 
-            const auto& def = scalebank::getScale(scaleId);
-            for (uint8_t i = 0; i < def.count; ++i)
-                m.scaleMask |= 1 << ((rootPc + def.intervals[i]) % 12);
+            // Les notes PERMISES viennent du moteur, pas d'un calcul refait ici :
+            // le masque depend du MODE HARMONIQUE de la row selectionnee, et un
+            // affichage qui recalculerait de son cote finirait par diverger du son.
+            // Avant, le roll peignait toujours la gamme mere quel que soit le mode —
+            // il ne montrait donc jamais ce que le mode autorisait reellement.
+            {
+                const auto& selRow = pat.rows[static_cast<size_t>(
+                    juce::jlimit(0, static_cast<int>(pat.numRows) - 1, selectedRow_))];
+                const ChordSlot& cur = (pat.chordProgression.len > 0)
+                                           ? pat.chordProgression.current()
+                                           : ChordSlot{};
+                m.scaleMask = harmony::allowedPitchClasses(
+                    selRow.harmonyModeAt(static_cast<uint8_t>(editBar_)),
+                    cur, pat.chordProgression.len > 0, scaleId, rootPc);
+            }
 
             if (pat.chordProgression.len > 0) {
                 const auto& ch = pat.chordProgression.current();
