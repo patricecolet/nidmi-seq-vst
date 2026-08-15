@@ -925,18 +925,84 @@ Deux traits à reprendre en priorité :
 - **la profondeur lisible d'un coup d'œil**, au lieu du point dans une case qui est tout
   ce que PATTERN dit d'un sous-pattern aujourd'hui.
 
-### 5.11 Autres propositions
+### 5.11 Le fichier MIDI comme document, et le convertisseur *(Patrice, 2026-08-15)*
+
+**Le rappel d'origine.** Avant le séquenceur, l'envie était de **lire n'importe quel
+fichier MIDI**. Le projet est né de l'idée d'amalgamer le pattern en édition et le
+fichier : le pattern stocké *dans* le `.mid`, avec des méta qui permettent de le
+recharger en RAM à côté d'autres patterns.
+
+**Le cas d'usage qui commande tout le reste** — ouvrir un `.mid`, assigner un profil à
+chaque piste, les synthés et les boîtes à rythmes jouent ; **éditer une piste** sous
+forme de pattern pendant que **les autres continuent**.
+
+#### Ce que la mesure impose
+
+| | |
+|---|---|
+| `Pattern` | **205 Ko** (mesuré) |
+| `PatternRow` | 12,3 Ko × 16 rows = 197 Ko |
+| maxima | 16 rows × 8 mesures × 64 pas × 24 o |
+
+Sur la DRAM interne d'un ESP32, **un seul pattern tient**. Mais ces 205 Ko viennent des
+maxima, pas de l'usage : tout est alloué même vide. À 4 rows × 4 mesures × 32 pas on
+tombe vers 15 Ko — facteur 13, sans toucher au modèle. À trancher avant le portage.
+
+**Un seul pattern en RAM interdit le préchargement**, donc l'enchaînement SONG ferait un
+trou. D'où : en SONG on ne joue pas les patterns depuis leur modèle d'édition, mais
+depuis leur **rendu MIDI streamé** — quelques kilo-octets de tampon. Le modèle n'est
+chargé que pour celui qu'on édite.
+
+#### Le convertisseur est le Standalone
+
+La conversion `.mid` → NiDMI se fait **sur ordinateur, une fois** : un SMF est en
+**ticks**, le pattern en **pas**, et un batteur joué à la main ne tombe pas sur la
+grille. Trancher cette ambiguïté demande un écran et un œil, pas du temps réel.
+
+Ce n'est pas un logiciel de plus : le Standalone a déjà JUCE, le moteur et
+`MidiExporter` en mode `Full`. Manquent `juce::MidiFile::readFrom` (**aucun import
+n'existe** — `MidiFile` n'est utilisé qu'en écriture), le choix de grille par piste, et
+l'écriture des markers.
+
+**Deux niveaux d'écriture, et ce n'est pas un doublon :**
+
+- **Marker Meta `FF 06`** — la structure : début de pattern, N, division. Texte standard,
+  que les DAW **affichent et préservent**, et qu'un humain peut lire.
+- **Sequencer-Specific `FF 7F`** — le détail d'édition (sous-patterns, harmonie,
+  P-locks), déjà écrit par `Mode::Full`. Propriétaire, donc **un DAW peut le jeter** ; on
+  retombe alors sur un fichier jouable et re-capturable.
+
+**Limite assumée** : le boîtier ne sait *capturer en pattern* que ce qui est passé par le
+convertisseur. Un `.mid` quelconque posé sur la carte reste jouable en streaming, mais
+pas éditable. C'est ce qui garde l'analyse de grille hors du temps réel.
+
+#### Ce que le profil doit gagner
+
+Le format actuel (`Profiles/FORMAT.md`, schéma 2) décrit un **panneau de contrôleurs** —
+`cc`, `pos`, `learn`, `pitch`. Pour être assignable à une piste il lui faut :
+
+- **`voices`** — la polyphonie, qui borne la densité du voicing (§2) ;
+- **le lien piste → profil**, qui devient l'acte d'ouverture d'un fichier ;
+- **une carte de notes**, pour les percussions.
+
+Ce dernier point porte loin : sur une piste de batterie les notes sont des
+**instruments**, pas des hauteurs. ROLL doit afficher `Kick`/`Snare` et non `Do4`/`Ré4`,
+et le voicing, la gamme et le mode harmonique n'ont aucun sens dessus. C'est la règle
+déjà appliquée à `voices` sur un mono, étendue : **le profil adapte la vue à l'appareil,
+et ce qui n'a pas de sens n'apparaît pas.**
+
+### 5.12 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
 | **Probabilité d'émission** | Vélo, sur une lane CC | 2026-08-14 — retenue. Comble une molette libre : une valeur de contrôleur n'a pas de vélocité. |
 | **Glide** | Interpolation, sur une row de notes | 2026-08-14. Remplit un emplacement mort : `ccInterp` ne s'applique qu'aux lanes, l'encodeur affiche `—` sur une row de notes. **Forme retenue** : pas un paramètre nouveau, mais **CC 5 / CC 65 nommés par le profil d'appareil**. Le portamento est le travail du synthé ; générer le glissando nous-mêmes imposerait du pitch bend, qui est par canal et entre en collision avec le modèle de notes. |
-| **Ancrage · Densité · Disposition** | Valeur ▸ appui, row Note | Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. |
+| ~~Ancrage · Densité~~ | Valeur ▸ appui, row Note | **Retenues le 2026-08-15** (§2). Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. `Disposition` reste ouverte. |
 | **Tension du lissage** | Valeur ▸ appui, lane CC | `CCInterp` est un enum sans paramètre. Coût faible. |
-| **Aléa · Courbe de vélocité** | Vélo ▸ appui | Modulateurs — `VISION §6`. Recouvre en partie le §5.1. |
+| ~~Aléa~~ · **Courbe de vélocité** | Vélo ▸ appui | **Aléa retenu le 2026-08-15** (§2), en pourcentage et par row. La courbe reste ouverte — modulateurs, `VISION §6`, recouvre en partie le §5.1. |
 | ~~Ratchet~~ | — | **Retirée le 2026-08-15** : c'est un sous-pattern dont les sous-pas répètent le pas hôte. Rien à ajouter. |
 | **Emprunt vs modulation** | Curseur ▸ appui, slot d'accord | `VISION §5.2c` — explicitement non tranché. |
-| **Swing global** | Master ▸ appui | Le swing réel vit au niveau du sous-pattern. À unifier ou à renommer. |
+| ~~Swing global~~ | Master ▸ appui | **Retenu le 2026-08-15** (§2) : `PatternTimingSettings` du pattern, gradué depuis « droit ». Le sub garde son propre `timing`, non exposé — reste à trancher. |
 | **Boucle de la chaîne** | Curseur ▸ appui, SONG | `ChainSlot` n'a que `op`, `param1`, `param2`. |
 
 ---
