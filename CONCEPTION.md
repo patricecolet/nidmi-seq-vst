@@ -895,7 +895,37 @@ diatonique et ne change que la qualité. Un emprunt à fondamentale chromatique 
 La♭ majeur en do — ne l'est pas : `ChordSlot.degree` va de 1 à 7 dans la gamme mère.
 C'est la question laissée ouverte par `VISION §5.2c`, *emprunt contre modulation*.
 
-### 5.10 Autres propositions
+### 5.10 L'arbre rythmique, pour SUIVRE *(idée de Patrice, 2026-08-15 — esthétique à reprendre)*
+
+Référence : `https://www.facebook.com/reel/1346835620943388`, capture gardée hors dépôt
+(`~/Desktop/polythm.jpg` — contenu tiers, non versionné).
+
+Un **arbre de subdivisions** sur fond noir, traits fins : un nœud de rapport (`35:10`)
+qui se divise en une rangée de tuplets (`3 3 3 2 3 3 3 2 …`), chacun redescendant vers un
+second étage (`4 4 4 …`), les niveaux reliés par des fuseaux. Un **chemin coloré** trace
+une voix à travers l'arbre. Une branche `3:1` isolée sur le côté.
+
+**C'est une vue de lecture, pas un éditeur** — et c'est ce qui la rend intéressante.
+Patrice : *« cette vue pourrait permettre de suivre une séquence plus facilement, mais
+pour l'édition on est plutôt pas mal »*. La contrainte est donc posée dès l'idée, ce qui
+évite la faute déjà commise une fois : le mode zoom mis dans PATTERN était un éditeur
+dans la carte, il a été retiré (§2).
+
+Ce qu'elle montrerait et qu'aucune vue actuelle ne montre : **le rapport entre les rows**.
+PATTERN et ROLL aplatissent tout sur un axe régulier ; qu'une row de 12 tourne contre une
+row de 16 ne se lit nulle part. Or c'est le pilier annoncé du projet — un `35:10` est
+exactement ce que deux N différents produisent.
+
+Les nœuds existent déjà dans le modèle : la row et son `numSteps`, le pas, le
+`SubPattern` et son `numSteps`, les sous-pas. Rien à inventer côté données.
+
+Deux traits à reprendre en priorité :
+
+- **le chemin qui s'illumine** pendant la lecture — le suivi, qui est le but ;
+- **la profondeur lisible d'un coup d'œil**, au lieu du point dans une case qui est tout
+  ce que PATTERN dit d'un sous-pattern aujourd'hui.
+
+### 5.11 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
