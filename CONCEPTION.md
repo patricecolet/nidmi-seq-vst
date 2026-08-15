@@ -645,15 +645,28 @@ combien en reste-t-il.*
 | **Gamme de l'accord** | l'accord, **par sa qualité** | 7, mobiles |
 | **Notes de l'accord** | l'accord | 3 ou 4 |
 
-**Une seule modification suffit** : que `B1` construise sa gamme depuis la **qualité** de
-l'accord, comme `B2`. Sur le fa mineur, il donnerait fa mineur — La♭ permis, La naturel
-interdit — et la mélodie suivrait l'emprunt.
+> ✅ **IMPLÉMENTÉ le 2026-08-15** — `nidmi-sequencer-core` `ad8d4e1`, VST `4566fe9`.
 
-**Conséquence contre-intuitive, et qui est juste** : ainsi corrigés, *Tonalité* et
-*Gamme de l'accord* donnent le **même résultat sur tous les accords diatoniques**. Un ré
-mineur en do majeur, c'est ré dorien : exactement les notes de do majeur. Les deux modes
-ne divergent que **là où l'harmonie quitte la tonalité** — emprunt, altération,
-substitution. C'est-à-dire précisément là où le choix a un sens musical.
+**La modification retenue** : `B1` construit sa gamme depuis la **qualité** de l'accord,
+comme `B2`. Sur le fa mineur, il donne fa mineur — La♭ permis, La naturel interdit — et
+la mélodie suit l'emprunt. La **tonicisation est conservée** : chaque accord reste une
+tonique temporaire, ce qui permet à une mélodie de prendre le Fa♯ d'un V en do majeur.
+
+> **Correction d'une erreur de ce registre.** Une première rédaction annonçait que
+> *Tonalité* et *Gamme de l'accord* donneraient le même résultat sur tous les accords
+> diatoniques. **C'est faux** : la qualité ne dit pas *quel* mineur. Un ré mineur en do
+> majeur est **dorien** — Si naturel — et reçoit ici le mineur naturel, Si♭. Distinguer
+> dorien, éolien et phrygien demanderait de croiser le degré et la gamme mère ; ce n'est
+> pas fait, et c'est consigné dans un test.
+>
+> Une tentative de ne changer de gamme *que sur un emprunt* a été écrite puis retirée :
+> elle supprimait la tonicisation et cassait un test existant.
+
+**L'affichage suit la même source.** `harmony::allowedPitchClasses()` expose le masque
+des classes de hauteur permises par un mode ; le piano roll le lit au lieu de recalculer
+la gamme mère de son côté — il ne montrait donc jamais ce que le mode autorisait. Même
+règle que pour la géométrie de dessin et de clic, déjà consignée dans `CLAUDE.md` :
+**deux calculs parallèles finissent toujours par diverger.**
 
 **Limite connue** : cette substitution-ci est représentable parce qu'elle garde un degré
 diatonique et ne change que la qualité. Un emprunt à fondamentale chromatique — un ♭VI,
