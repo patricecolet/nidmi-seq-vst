@@ -39,19 +39,37 @@ partout ailleurs comme s'il allait de soi.
 
 ## 2. La grammaire des encodeurs
 
-**Cinq molettes, un attribut chacune, le même dans toutes les vues.**
+**Six molettes, un attribut chacune, le même dans toutes les vues.**
 
-> **Pousser une molette ouvre le contexte de l'objet courant à ce niveau.** La molette
-> poussée garde son rôle, le Curseur continue de naviguer, et tout le reste est prêté
-> à la profondeur — nommée à l'écran.
+> **Pousser une molette ouvre le contexte de ce qu'elle porte.** La molette poussée
+> garde son rôle, les deux molettes de navigation ne sont jamais prêtées, et les autres
+> portent la profondeur — nommée à l'écran.
 
 | Molette | Tourner | Pousser |
 |---|---|---|
-| 1 · **Curseur** | l'objet courant, au grain choisi | le contexte de cet objet |
-| 2 · **Valeur** | hauteur, ou valeur du contrôleur | ce qui devient de cette valeur |
-| 3 · **Vélo** | vélocité | la répartition des vélocités |
-| 4 · **Gate** | articulation | la durée au sens large |
-| 5 · **Master** | tempo | les réglages de projet |
+| 1 · **Row** | la piste | les réglages de la row |
+| 2 · **Pas** | le pas dans la row | **entre dans le sous-pattern du pas** |
+| 3 · **Valeur** | hauteur, ou valeur du contrôleur | ce que devient cette valeur |
+| 4 · **Vélo** | vélocité | la répartition des vélocités |
+| 5 · **Gate** | articulation | la durée au sens large |
+| 6 · **Master** | tempo | les réglages de projet |
+
+**Deux molettes de navigation plutôt qu'un raccourci.** Le conteneur et l'élément — Row
+et Pas, Lane et Slot sur HARMONIE, Chaîne et Slot sur SONG. Elles restent disponibles
+même quand un contexte est ouvert : on règle la profondeur d'un pas, on passe au
+suivant, sans jamais ressortir.
+
+**Le push de la molette Pas fait entrer dans le pas**, c'est-à-dire dans son
+sous-pattern — et le push suivant en ressort. À l'intérieur, la molette Pas navigue les
+sous-pas et les places libérées portent le N du sub et son ancre. C'est ce qui remplace
+le raccourci clavier qui servait auparavant à changer de niveau.
+
+> **Ce que ça coûte.** La BOM du dépôt hardware était gelée à **5 EC11** et
+> `VISION §2.4` posait que *« toute richesse future passe par le PUSH, JAMAIS par un
+> nouvel encodeur »*. Le sixième encodeur rouvre la BOM et révise cette règle.
+> Côté électronique il n'y a pas d'obstacle — le PCNT offre 4 unités par puce sur deux
+> ESP32, soit 8 places pour 6. **C'est la mécanique de façade qui est à recaler** : pas
+> de 33 mm entre encodeurs, dans une largeur de 320.
 
 Huit règles :
 
@@ -60,8 +78,8 @@ Huit règles :
 2. **Tourner = la valeur.** Sans exception, sans bascule.
 3. **Pousser = ouvrir le contexte** de l'objet courant à ce niveau.
 4. La molette poussée **garde son rôle**.
-5. **Le Curseur n'est jamais prêté.** Quand c'est lui qu'on pousse, une molette de
-   plus se libère — quatre au lieu de trois.
+5. **Les deux molettes de navigation ne sont jamais prêtées.** On se déplace sans
+   quitter un contexte.
 6. Tout le reste porte la profondeur, et l'écran **nomme** le contexte.
 7. **Un seul niveau.** Pousser à nouveau sort. Pas de pile, donc pas de « où suis-je ».
 8. Une **marque permanente** sur les molettes qui ont une profondeur : on ne pousse
@@ -76,13 +94,27 @@ Et une règle de forme, qui vaut pour tout le reste du document :
 
 ### Hiérarchie du Curseur, par vue
 
-| Vue | Niveaux |
-|---|---|
-| PATTERN · ROLL | row → pas → sous-pas |
-| AUTO | row → pas |
-| HARMONIE | lane → slot |
-| SONG | chaîne → slot |
-| GLOB | liste plate, pas de grain |
+| Vue | Conteneur (molette 1) | Élément (molette 2) |
+|---|---|---|
+| PATTERN · ROLL · AUTO | la row | le pas — *push : entre dans le sous-pattern* |
+| HARMONIE | la lane (accords ou tonalité) | le slot |
+| SONG | la chaîne | le slot |
+| GLOB | la row | — |
+
+> **Pourquoi AUTO descend jusqu'au P-lock.** Sans ce niveau, la couche de base éditait
+> `note`, `velocity` et `gate` sur la page des contrôleurs — des paramètres de notes.
+> La tentation était de rendre les molettes dépendantes de la vue, ce qui aurait ruiné
+> la règle 1. Le vrai diagnostic est ailleurs : **ce n'est pas la molette qui est mal
+> réglée, c'est l'objet qui est mal choisi.** Le P-lock devenu objet courant, `Valeur`
+> édite naturellement sa valeur de contrôleur, sans qu'aucune molette ne change de rôle.
+>
+> La preuve que le raisonnement tient : sur une **lane**, l'objet *est* déjà le
+> contrôleur, et `Valeur` éditait déjà la bonne chose. La friction n'existait que pour
+> les P-locks, enterrés dans un contexte au lieu d'être un niveau.
+>
+> Effet de bord : le contexte du grain *pas* se vide de la modulation et ne garde que la
+> profondeur **temporelle**, le sous-pattern. Les deux natures que le pas portait
+> ensemble se sont séparées d'elles-mêmes.
 
 ### Les huit boutons
 
@@ -90,7 +122,7 @@ Et une règle de forme, qui vaut pour tout le reste du document :
 |---|---|
 | `ROW` · `HARMONY` · `PROJET` | **où on va** — re-appui = cycle dans la famille |
 | `VUE` | **comment on regarde** — cycle ce que la vue courante affiche |
-| `SHIFT` | note ↔ fonction des touches noires |
+| `SHIFT` | note ↔ fonction des touches noires — `Page±` `Oct±` `Mes±` `Zoom±` |
 | `PLAY` · `STOP` · `REC` | transport |
 
 `EXPORT` n'a pas de bouton : c'est une action de fin de session, elle vit sur la page
