@@ -2,6 +2,7 @@
   "schema": 2,
   "name": "Kobol Expander",
   "manufacturer": "RSF",
+  "voices": 1,
   "sync": {
     "ccOnEdit": false,
     "dump": "none",

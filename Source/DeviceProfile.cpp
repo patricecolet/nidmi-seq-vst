@@ -16,6 +16,7 @@ static const char* kKobolSeedJson = R"JSON({
   "schema": 2,
   "name": "Kobol Expander",
   "manufacturer": "RSF",
+  "voices": 1,
   "sync": {
     "ccOnEdit": false,
     "dump": "none",
@@ -139,6 +140,11 @@ static bool parseProfile(const juce::var& root, DeviceProfile& out, juce::String
     if (list.empty()) { why = "aucun parametre exploitable"; return false; }
 
     out = DeviceProfile(name, std::move(list));
+
+    // Polyphonie : facultative, defaut 1 (monophonique). Une valeur absurde est
+    // ramenee a 1 plutot que rejetee — un profil ne doit pas devenir invalide parce
+    // qu'il declare mal un champ facultatif.
+    out.setVoices(static_cast<int>(root.getProperty("voices", 1)));
 
     // Capacites de synchronisation : facultatives, defaut « rien a lire ».
     if (const juce::var sy = root.getProperty("sync", {}); sy.isObject()) {

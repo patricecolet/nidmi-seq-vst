@@ -82,6 +82,14 @@ public:
 
     void setSync(DeviceSync s) { sync_ = std::move(s); }
 
+    // POLYPHONIE de l'appareil. C'est elle qui borne la densite du voicing : sur un
+    // mono, densite et ancrage n'ont pas d'objet et ne s'affichent pas. Le moteur ne
+    // peut pas la deviner — il ne connait que sa propre borne, kMaxVoicing.
+    // Defaut 1 : un profil qui ne le declare pas est traite comme monophonique, ce
+    // qui est le comportement historique (une note par pas).
+    void setVoices(int v) { voices_ = v < 1 ? 1 : v; }
+    int  voices() const noexcept { return voices_; }
+
     void setPanel(juce::String image, float aspect, std::vector<DeviceSection> sections) {
         image_ = std::move(image); aspect_ = aspect; sections_ = std::move(sections);
     }
@@ -124,4 +132,5 @@ private:
     float                      aspect_ = 0.0f;
     std::vector<DeviceSection> sections_;
     DeviceSync                 sync_;
+    int                        voices_ = 1;   // polyphonie ; 1 = mono
 };

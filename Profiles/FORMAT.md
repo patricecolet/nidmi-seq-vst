@@ -63,6 +63,7 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | Champ | Rôle |
 |---|---|
 | `name` | **obligatoire.** Identifie le profil ; c'est lui qui est sauvegardé dans le projet, pas un index — ajouter un profil ne doit pas renommer les CC d'un projet existant |
+| `voices` | polyphonie de l'appareil. **Défaut 1** — un profil qui ne le déclare pas est monophonique, ce qui est le comportement historique. Borne la densité du voicing : à une voix, densité et ancrage n'apparaissent pas |
 | `panel.image` | facultatif. Absent → rendu schématique, sans photo |
 | `panel.aspect` | largeur ÷ hauteur du panneau |
 | `panel.sections[].rect` | `[x, y, w, h]` normalisés. Une section = **une page** sur le matériel, **une zone** sur le bureau |
@@ -74,6 +75,18 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | `wired` | le paramètre a-t-il un effet **audible aujourd'hui** ? |
 | `learn` | CC entrant **supplémentaire**. `null` = aucun. Le CC propre du paramètre passe de toute façon à l'identique |
 | `bipolar` | le paramètre va de −64 à +63, remappé en 0–127 en ajoutant 64. L'éditeur doit l'afficher **signé** |
+
+### `voices` décide de ce qui s'affiche
+
+Le moteur émet jusqu'à `kMaxVoicing` notes par pas ; il ne sait pas combien
+l'appareil peut en tenir. C'est le profil qui le sait, et c'est lui qui borne la
+densité — **densité 2 sur un mono ne veut rien dire**.
+
+À une voix, densité et ancrage **n'apparaissent pas du tout** : pas de refus, pas de
+grisé, le contexte n'existe simplement pas sur cette row. C'est la règle « rien n'est
+bloquant », et elle vaudra pour les autres capacités déclarées par le profil — une
+carte de percussion fera disparaître le voicing, la gamme et le mode harmonique, parce
+que sur une boîte à rythmes les notes sont des instruments et non des hauteurs.
 
 ### `wired` n'est pas « décrit dans la table »
 

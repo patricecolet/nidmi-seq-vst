@@ -2,6 +2,7 @@
   "schema": 2,
   "name": "Waldorf M",
   "manufacturer": "Waldorf",
+  "voices": 8,
   "sync": {
     "ccOnEdit": true,
     "dump": "manual",
