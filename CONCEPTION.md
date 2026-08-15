@@ -46,7 +46,7 @@ les musiciens.
 | ~~gate~~ · ~~span~~ | angl. | **Termes internes**, plus exposés à l'utilisateur. Le moteur en dérive la paire depuis la durée : `span` = le nombre de pas couverts — qui masque les pas suivants et sur lequel un sous-pattern s'étale — `gate` = la fraction restante. La conversion existe déjà (`quartersToSpan`, `quartersToGate`). |
 | **accent** | identique | Le pas est renforcé. |
 | **swing** | angl., conservé | Le pas est décalé pour créer le balancement ternaire. |
-| **ratchet** | angl., **proposé** | Répétition rapide d'un même pas : il se déclenche 2, 3 ou 4 fois dans sa durée au lieu d'une. Terme Elektron. **N'existe pas dans le moteur** (§5.10). |
+| ~~ratchet~~ | angl. | **Abandonné comme fonction séparée.** Un ratchet — un pas répété 2, 3 ou 4 fois dans sa durée — est le **cas dégénéré du sous-pattern** : celui dont tous les sous-pas répètent le pas hôte. On l'obtient en entrant dans le pas et en réglant son N. Le sous-pattern fait tout ce que fait un ratchet, et davantage : chaque répétition peut avoir sa hauteur, sa vélocité, sa durée. |
 | **micro-décalage** | fr. | L'écart entre l'instant joué et le pas où la note s'est rangée. C'est lui qui donne son **grain** à une interprétation enregistrée. |
 
 > **« Grain »** ne désigne plus qu'une chose : le relief d'une interprétation. Il a
@@ -750,7 +750,7 @@ C'est la question laissée ouverte par `VISION §5.2c`, *emprunt contre modulati
 | **Ancrage · Densité · Disposition** | Valeur ▸ appui, row Note | Le voicing, 4ᵉ pilier — `VISION §5.2b`. Exige plusieurs `NoteOn` simultanés : **refonte du moteur**, pas un module. |
 | **Tension du lissage** | Valeur ▸ appui, lane CC | `CCInterp` est un enum sans paramètre. Coût faible. |
 | **Aléa · Courbe de vélocité** | Vélo ▸ appui | Modulateurs — `VISION §6`. Recouvre en partie le §5.1. |
-| **Ratchet / répétitions** | Gate ▸ appui | N'existe nulle part. Touche le déclenchement, donc le moteur. |
+| ~~Ratchet~~ | — | **Retirée le 2026-08-15** : c'est un sous-pattern dont les sous-pas répètent le pas hôte. Rien à ajouter. |
 | **Emprunt vs modulation** | Curseur ▸ appui, slot d'accord | `VISION §5.2c` — explicitement non tranché. |
 | **Swing global** | Master ▸ appui | Le swing réel vit au niveau du sous-pattern. À unifier ou à renommer. |
 | **Boucle de la chaîne** | Curseur ▸ appui, SONG | `ChainSlot` n'a que `op`, `param1`, `param2`. |
