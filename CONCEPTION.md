@@ -302,7 +302,7 @@ du document relève du §4.
 | `muted` | `PatternRow` | **sans adresse** — voir §5.3 |
 | `note` `velocity` `gate` `enabled` `span` `accent` `swingEnable` | `StepData` | couche de base, Vélo ▸ appui, Gate ▸ appui |
 | `subPatIdx` | `StepData` | s'établit en entrant : `Pas` ▸ appui |
-| `ccLocks[8]` | `StepData` | **sans adresse depuis les 6 encodeurs** — voir §6 |
+| `ccLocks[8]` | `StepData` | **écart de modèle, pas trou d'adresse** — voir §5.6 |
 | `numSteps` `relativeToHost` | `SubPattern` | dans le sous-pattern |
 | `duration` `advanceProgOnEnd` | `SubPattern` | **sans adresse** |
 | `degree` `quality` (6) `extensions` `bassOffset` `durationBeats` | `ChordSlot` | HARMONIE |
@@ -405,6 +405,24 @@ Volume et panoramique retombent donc sur la même réponse que le glide (§5.5) 
 connus, nommés par le profil d'appareil**. Aucun paramètre nouveau, aucun moteur à
 toucher. Une vue de mixage est surtout **une lecture de ce qui existe déjà**, plus le
 mute — ce qui la rend étonnamment bon marché.
+
+**Ce qu'elle explique, et qui n'est pas une régression.** Les `ccLocks[8]` semblent
+avoir perdu leur adresse depuis que l'appui sur `Pas` sert à entrer dans le
+sous-pattern. **C'en est une lecture fausse** : le code est resté à mi-chemin entre deux
+modèles. Il a encore des P-locks — huit par *pas*, distincts de la lane de la row —
+pendant que la conception a **une automation par row, avec huit slots**. Le glossaire a
+d'ailleurs déjà supprimé le mot.
+
+Ce n'est donc pas une adresse à retrouver, c'est une **migration à faire**. Dans le
+modèle unifié, tout est en place : la row porte la destination et l'interpolation de
+chaque slot, PATTERN les montre par le mode d'affichage, AUTO les édite pas par pas, et
+l'appui sur `Pas` reste libre pour le sous-pattern — la profondeur *temporelle* du pas,
+qui n'a rien à voir avec l'automation, laquelle appartient à la row.
+
+**Une seule question reste ouverte** : qui choisit parmi les huit slots. Sur AUTO,
+`Vélo` et `Gate` sont libres — une valeur de contrôleur n'a ni vélocité ni articulation
+— donc l'une des deux ferait le sélecteur sans rien déloger. **À trancher après la vue
+PATTERN**, pour ne pas mêler les deux chantiers.
 
 **Ce qu'elle répare.** `muted` n'a aujourd'hui **aucune adresse** dans la grammaire : la
 répartition l'avait expédié d'une phrase (« c'est un bouton dédié ») alors qu'il n'y a
