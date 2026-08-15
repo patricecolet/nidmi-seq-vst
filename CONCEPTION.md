@@ -31,7 +31,7 @@ les musiciens.
 | **N** | — | Le nombre de pas d'une row dans une mesure. Deux rows à N différents divergent puis se réalignent au premier temps. |
 | **mesure** | fr. (angl. *bar*) | Une row porte son contenu par mesure, jusqu'à huit. |
 | **page** | fr. | Fenêtre de 16 pas, quand une row en compte plus. |
-| **sous-pattern** | fr. + angl. | Le contenu qu'un pas peut abriter : sa propre subdivision, jouée dans la durée du pas hôte. C'est le tuplet imbriqué. |
+| **sous-pattern** | fr. + angl. | Le contenu qu'un pas peut abriter : sa propre subdivision, jouée dans la durée du pas hôte. C'est le tuplet imbriqué. Deux réglages seulement : son **N** et son **ancre**. Son étalement n'en est pas un — c'est **la durée du pas hôte** qui le commande. `SubPattern.duration` est un vestige de compatibilité, utilisé seulement si le pas n'a pas de durée propre. |
 | **sous-pas** | fr. | Un pas d'un sous-pattern. |
 | **tuplet** | angl., conservé | Une division qui ne tombe pas sur la grille binaire — triolet, quintolet. Le terme français « n-olet » n'a pas d'usage. |
 | **polyrythmie** | fr. | Plusieurs rows à N différents jouant ensemble. Un outil, pas le principe d'organisation. |
@@ -46,6 +46,7 @@ les musiciens.
 | ~~gate~~ · ~~span~~ | angl. | **Termes internes**, plus exposés à l'utilisateur. Le moteur en dérive la paire depuis la durée : `span` = le nombre de pas couverts — qui masque les pas suivants et sur lequel un sous-pattern s'étale — `gate` = la fraction restante. La conversion existe déjà (`quartersToSpan`, `quartersToGate`). |
 | **accent** | identique | Le pas est renforcé. |
 | **swing** | angl., conservé | Le pas est décalé pour créer le balancement ternaire. |
+| **ratchet** | angl., **proposé** | Répétition rapide d'un même pas : il se déclenche 2, 3 ou 4 fois dans sa durée au lieu d'une. Terme Elektron. **N'existe pas dans le moteur** (§5.10). |
 | **micro-décalage** | fr. | L'écart entre l'instant joué et le pas où la note s'est rangée. C'est lui qui donne son **grain** à une interprétation enregistrée. |
 
 > **« Grain »** ne désigne plus qu'une chose : le relief d'une interprétation. Il a
