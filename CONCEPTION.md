@@ -126,6 +126,17 @@ les musiciens.
 |---|---|---|---|---|
 | **N** | **Mode harmo.** | **Interpolation** | **Destination** | *BPM, jamais prêté* |
 
+**Le contexte du sous-pattern** — l'appui sur `Row` quand on est entré dans un pas :
+
+| Pas | Valeur | Vélo | Durée | Master |
+|---|---|---|---|---|
+| **N du sub** | **Ancre** rel./abs. | **Étalement** | **Avance prog.** | *BPM* |
+
+> **Étalement** édite `StepData.span`, pas `SubPattern.duration` — le moteur ne lit que
+> `hostSpan`. Doublon assumé avec la `Durée` du pas hôte : c'est ici qu'on en a besoin,
+> et pour un pas qui porte un sub seule la partie **entière** compte, le sub remplissant
+> ses pas hôtes.
+
 Les autres contextes ne disposent donc que de **deux places** — `Row`, `Pas` et
 `Master` restant à leur poste. C'est une contrainte, et elle est saine : elle force à
 choisir ce qui compte vraiment sous chaque molette.
@@ -136,7 +147,7 @@ choisir ce qui compte vraiment sous chaque molette.
 | 2 · **Pas** | le pas dans la row | **entre dans le sous-pattern du pas** |
 | 3 · **Valeur** | hauteur, ou valeur du contrôleur | ce que devient cette valeur |
 | 4 · **Vélo** | vélocité | la répartition des vélocités |
-| 5 · **Gate** | articulation | la durée au sens large |
+| 5 · **Durée** | la durée de la note, **en pas et fractions de pas** | le swing du pas |
 | 6 · **Master** | tempo | les réglages de projet |
 
 **Deux molettes de navigation plutôt qu'un raccourci.** Le conteneur et l'élément — Row
@@ -244,6 +255,26 @@ Et une règle de forme, qui vaut pour tout le reste du document :
 | `VUE` | **comment on regarde** — cycle ce que la vue courante affiche |
 | `SHIFT` | note ↔ fonction des touches noires — `Page±` `Oct±` `Mes±` `Zoom±` |
 | `PLAY` · `STOP` · `REC` | transport |
+
+### Ce que chaque vue montre, et ce qu'elle édite
+
+**PATTERN est la carte, ROLL est le détail.** La distinction décide de tout le reste.
+
+- **La durée se dessine dans PATTERN** : un pas occupe la largeur qu'il dure. Les pas
+  qu'il recouvre **n'ont pas de segment propre** — ils sont couverts, pas grisés : il n'y
+  a rien à griser sous une barre.
+- **Le curseur peut toujours s'y poser.** Son encadré passe en pointillé, et la ligne
+  d'état explique en toutes lettres : *« pas 6 couvert par le pas 5 — il ne sonnera
+  pas »*. Sans quoi on écrirait des notes qui ne sortent jamais, ce que le moteur fait
+  déjà en silence (`les pas couverts sont MASQUÉS au déclenchement`).
+- **Les sous-pas s'éditent dans ROLL**, qui a déjà les axes qu'il faut — hauteurs sur la
+  grille, vélocités dans une lane en dessous, sous-pas compris. PATTERN se contente de
+  les **montrer**, dans la case de leur pas hôte.
+- **Un mode zoom avait été ajouté à PATTERN puis retiré** : il mettait un éditeur dans la
+  carte, et il était introuvable. Ce que `VISION §2.3` appelait « drill-in comme zoom
+  d'affichage optionnel » se trouve être ROLL, qui existait déjà.
+- **PATTERN aiguille vers ROLL** quand on est entré dans un pas — même forme que
+  l'aiguillage de ROLL sur une row d'automation, le seul refus légitime.
 
 ### Le clavier
 
