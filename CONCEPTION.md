@@ -170,6 +170,19 @@ Onze règles :
     permission de tout redéfinir, c'est la reconnaissance que la profondeur suit l'objet
     qu'on regarde.
 
+> **Premier cas, décidé le 2026-08-15.** Une row affichée en **`Contrôleur`** met
+> **`Destination` et `Interpolation`** sous `Valeur ▸ appui`. La même molette, sur une
+> row en `Pas`, ouvre le voicing.
+>
+> C'est un **doublon assumé** : ces deux champs appartiennent à `PatternRow`, donc leur
+> adresse systématique reste `Row ▸ appui` (§3.1). Le mode ne déplace rien — il
+> *rapproche*. Quand on travaille sur un contrôleur, sa destination et son lissage sont
+> ce qu'on règle le plus, et les chercher dans le contexte de la row serait un détour.
+>
+> La logique se transporte : `Valeur ▸ appui` veut toujours dire *« ce que devient cette
+> valeur »*. Sur une note, comment elle se déploie en accord ; sur un contrôleur, où elle
+> va et comment elle relie les pas.
+
 Et une règle de forme, qui vaut pour tout le reste du document :
 
 > **Rien n'est bloquant.** À un refus, on substitue un comportement par défaut
