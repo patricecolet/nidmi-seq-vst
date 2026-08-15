@@ -377,8 +377,24 @@ Deux notes qui vont ensemble :
   choisir un défaut. Le mode *Pas* doit rester bon pour qui ne touchera jamais au
   réglage.
 
-**Accès** : le bouton `VUE` (§2), obtenu en descendant `EXPORT` sur la page PROJET.
-Re-appui = cycle ; `⇧ + VUE` = sens inverse. Ce que `VUE` cycle sur ROLL, AUTO et
+**Le choix est PAR ROW** *(décidé le 2026-08-15)*. Patrice tient à voir une automation
+occuper une rangée au milieu des rows de notes — donc l'affichage se règle row par row,
+pas globalement.
+
+> **`VUE` change l'affichage de la row sélectionnée. `Row` choisit laquelle.**
+> **`⇧ + VUE` applique le même mode à toutes les rows**, pour retrouver la vue
+> d'ensemble — comparer les accents de toutes les pistes d'un coup reste utile. Aucun
+> contrôle nouveau : le modificateur existe déjà.
+
+**Rangé dans `PatternRow`**, donc **sauvegardé avec le projet** : on rouvre, les rows
+sont affichées comme on les avait laissées. Un affichage qu'il faut refaire à chaque
+session est un affichage qu'on n'utilise pas.
+
+**Quelle automation une row montre-t-elle en mode `Contrôleur` ?** La première qu'elle
+porte. Choisir parmi les huit est la question du sélecteur, gardée pour après la vue
+PATTERN (§5.6).
+
+**Accès** : le bouton `VUE` (§2), obtenu en descendant `EXPORT` sur la page PROJET. Ce que `VUE` cycle sur ROLL, AUTO et
 HARMONIE **reste à définir** — seul le cas de PATTERN s'appuie sur un mécanisme
 existant.
 
