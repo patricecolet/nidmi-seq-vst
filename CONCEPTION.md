@@ -618,7 +618,49 @@ Trois représentations connues, notées ici pour ancrer l'idée — rien n'est c
 Le Tonnetz est le plus proche d'une machine à encodeurs : deux axes, deux molettes,
 et chaque cran est un enchaînement à voix conjointes. **À explorer**, pas à décider.
 
-### 5.9 Autres propositions
+### 5.9 Les trois modes harmoniques, rendus distincts *(2026-08-15)*
+
+Les modes `A` / `B1` / `B2` sont trop abstraits pour être compris, et surtout **`B1` ne
+tient pas** : identique à `A` sur le degré I, presque une autre tonalité sur le VII, et
+il contredit la qualité de l'accord qu'il prétend suivre.
+
+**La cause, dans le code** : `B1` ne lit que le *degré*, jamais la *qualité*.
+
+```cpp
+effRoot = degreePitchClass(currentChord.degree, scaleId, rootPc);
+return snapMidiNote(storedNote, scaleId, effRoot);   // scaleId = celui du MORCEAU
+```
+
+Sur un fa mineur emprunté en do majeur — la substitution plagale, cadence Fm → Do —
+`B1` applique **fa majeur** : il autorise le La naturel contre le La♭ de l'accord.
+Le frottement qu'on cherchait à éviter. `B2`, lui, reçoit bien `currentChord.quality`.
+
+**L'axe qui rend les modes distincts** : *qu'est-ce qui décide des notes permises, et
+combien en reste-t-il.*
+
+| Retenu | Décidé par | Notes |
+|---|---|---|
+| **Chromatique** | rien | 12 |
+| **Tonalité** | la gamme du morceau | 7, fixes |
+| **Gamme de l'accord** | l'accord, **par sa qualité** | 7, mobiles |
+| **Notes de l'accord** | l'accord | 3 ou 4 |
+
+**Une seule modification suffit** : que `B1` construise sa gamme depuis la **qualité** de
+l'accord, comme `B2`. Sur le fa mineur, il donnerait fa mineur — La♭ permis, La naturel
+interdit — et la mélodie suivrait l'emprunt.
+
+**Conséquence contre-intuitive, et qui est juste** : ainsi corrigés, *Tonalité* et
+*Gamme de l'accord* donnent le **même résultat sur tous les accords diatoniques**. Un ré
+mineur en do majeur, c'est ré dorien : exactement les notes de do majeur. Les deux modes
+ne divergent que **là où l'harmonie quitte la tonalité** — emprunt, altération,
+substitution. C'est-à-dire précisément là où le choix a un sens musical.
+
+**Limite connue** : cette substitution-ci est représentable parce qu'elle garde un degré
+diatonique et ne change que la qualité. Un emprunt à fondamentale chromatique — un ♭VI,
+La♭ majeur en do — ne l'est pas : `ChordSlot.degree` va de 1 à 7 dans la gamme mère.
+C'est la question laissée ouverte par `VISION §5.2c`, *emprunt contre modulation*.
+
+### 5.10 Autres propositions
 
 | Proposition | Emplacement visé | Origine · état |
 |---|---|---|
