@@ -199,6 +199,30 @@ Et une règle de forme, qui vaut pour tout le reste du document :
 | `SHIFT` | note ↔ fonction des touches noires — `Page±` `Oct±` `Mes±` `Zoom±` |
 | `PLAY` · `STOP` · `REC` | transport |
 
+### Le clavier
+
+27 touches, 16 blanches et 11 noires, disposées en piano. **Une seule règle décide de ce
+qu'elles font**, et ce n'est pas la vue :
+
+> **En saisie pas à pas, les blanches montrent et choisissent les pas. Sinon, elles
+> jouent.**
+
+C'est `REC` qui commande, pas la page. Les pas remplis se lisent donc **sur les touches,
+sous les doigts**, sans quitter l'écran des yeux — ce qu'on veut précisément au moment
+où l'on écrit. Et c'est le fonctionnement des machines Elektron : rien de nouveau à
+apprendre.
+
+`SHIFT` bascule les **noires** en fonctions — `Page±`, `Oct±`, `Mes±`, `Zoom±`.
+
+*Ce que ça remplace* : une exception par vue — blanches = pas dans PATTERN, notes dans
+ROLL — qu'il fallait connaître page par page.
+
+*Ce que ça coûte, et qui s'assume* : dans PATTERN, `REC` désarmé, taper une blanche joue
+la note au lieu de basculer le pas. Il faut armer `REC` pour éditer la grille au clavier.
+Cohérent : **le clavier édite quand on est en écriture, il joue sinon.**
+
+---
+
 `EXPORT` n'a pas de bouton : c'est une action de fin de session, elle vit sur la page
 PROJET à côté de *Charger / Enregistrer*. C'est le critère de fréquence du §3 appliqué
 à la surface matérielle — huit boutons figés, donc tout ajout est un échange.
