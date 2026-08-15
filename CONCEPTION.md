@@ -121,9 +121,13 @@ les musiciens.
 
 **Le contexte de la row**, dans l'ordre des molettes :
 
-| Pas | Valeur | Vélo | Gate | Master |
+| Pas | Valeur | Vélo | Durée | Master |
 |---|---|---|---|---|
-| **N** | **Mode harmo.** | **Interpolation** | **Destination** | libre |
+| **N** | **Mode harmo.** | **Interpolation** | **Destination** | *BPM, jamais prêté* |
+
+Les autres contextes ne disposent donc que de **deux places** — `Row`, `Pas` et
+`Master` restant à leur poste. C'est une contrainte, et elle est saine : elle force à
+choisir ce qui compte vraiment sous chaque molette.
 
 | Molette | Tourner | Pousser |
 |---|---|---|
@@ -158,7 +162,9 @@ Onze règles :
 2. **Tourner = la valeur.** Sans exception, sans bascule.
 3. **Pousser = ouvrir le contexte** de l'objet courant à ce niveau.
 4. La molette poussée **garde son rôle**.
-5. **Les deux molettes de navigation ne sont jamais prêtées** — sauf `Pas` dans le
+5. **`Row` et `Master` ne sont jamais prêtées.** `Row` parce qu'on doit pouvoir se
+   déplacer sans quitter un contexte ; `Master` parce que le BPM reste sous la main en
+   permanence (`VISION §3`). `Pas` ne l'est pas non plus — sauf dans le
    contexte de la row, où elle porte le **N** : le nombre de pas est l'axe des pas, il
    doit tomber sous l'encodeur qui les navigue. La navigation n'est pas perdue pour
    autant, `Row` étant la molette poussée, qui garde son rôle.
