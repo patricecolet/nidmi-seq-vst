@@ -130,16 +130,83 @@ les musiciens.
 
 | Pas | Valeur | Vélo | Durée | Master |
 |---|---|---|---|---|
-| **N du sub** | **Ancre** rel./abs. | **Étalement** | **Avance prog.** | *BPM* |
+| **N du sub** | **Ancre** rel./abs. | **Étalement** | **Sous-pattern** actif/bypass | *BPM* |
 
 > **Étalement** édite `StepData.span`, pas `SubPattern.duration` — le moteur ne lit que
 > `hostSpan`. Doublon assumé avec la `Durée` du pas hôte : c'est ici qu'on en a besoin,
 > et pour un pas qui porte un sub seule la partie **entière** compte, le sub remplissant
 > ses pas hôtes.
 
+**Un sous-pattern se tait, il ne s'efface pas.** La bascule sous `Durée` est un **bypass** :
+le contenu et le slot de pool restent, le pas rejoue sa note simple, réactiver retrouve le
+sub à l'identique. C'est le geste de composition — comparer avec et sans roulement — et
+c'est le seul que le contexte porte.
+
+**Ce qui détruit, c'est d'éteindre la note**, comme sur une Elektron : le trig emporte son
+sous-pattern, et le slot revient au pool. Un seul geste destructeur, déjà connu, aucun à
+apprendre.
+
+> **Pourquoi `Avance prog.` a cédé la place.** Critère de fréquence (§3.3) : on bascule un
+> sub en composant, on règle une avance de progression une fois. Et le réglage n'est pas
+> perdu — `PatternHarmonySettings.advanceProgOnSubPatternEnd` vit déjà au niveau du pattern,
+> dans le contexte de la lane harmonique.
+
+> **Deux dettes ouvertes, côté moteur.** `SubPattern` **n'a pas de champ de bypass** : il
+> est à ajouter. Et `freeSubPattern` détache *tous* les pas qui pointent sur le slot — or
+> un sub peut être **aliasé** par plusieurs pas (la copie de mesure et la copie de row le
+> font exprès). Éteindre une note ne doit donc libérer qu'après avoir compté les
+> références, sinon le trig d'un pas emporte le sous-pattern d'un autre.
+
+**Un sous-pas est un `StepData` comme un autre.** Il en a donc tous les attributs, et
+ils sont tous atteignables : hauteur, vélocité, **durée**, **accent**, **swing**. Trois
+conséquences réglées le 2026-08-15 :
+
+- **La durée d'un sous-pas va jusqu'à la fin du sous-pattern**, comme celle d'un pas va
+  jusqu'à la fin de sa row — même champs (`span` + `gate`), mêmes helpers. Elle était
+  bornée à un sous-pas.
+- **Accent et swing visent le sous-pas**, molettes et clavier. Ils atteignaient le pas
+  *hôte* : dans un sub, `Vélo ▸ appui` accentuait le mauvais objet.
+- **Un sous-pas tenu recouvre les suivants**, qui n'ont plus de segment propre — la règle
+  des pas couverts de PATTERN, appliquée un cran plus bas. Le curseur peut s'y poser, en
+  creux, et la ligne d'état le dit.
+
 Les autres contextes ne disposent donc que de **deux places** — `Row`, `Pas` et
 `Master` restant à leur poste. C'est une contrainte, et elle est saine : elle force à
 choisir ce qui compte vraiment sous chaque molette.
+
+**Les trois autres contextes, décidés le 2026-08-15 :**
+
+| Molette poussée | Ce qu'on y trouve |
+|---|---|
+| **Valeur** (row en `Pas`) | **Ancrage** du voicing · **Densité** |
+| **Vélo** | **Accent** · **Aléa vélo** |
+| **Durée** | **Swing** |
+| **Master** | **Swing** du pattern · Signature · Débit CC |
+
+**Le voicing fait jouer l'accord, pas une note.** Une row émet aujourd'hui une seule
+note par pas (`resolveDegreeToMidi`) ; l'accord est déjà connu par la progression
+(`ChordSlot`). La **densité** dit combien de notes en sortent, l'**ancrage** où se place
+celle qu'on a écrite — sommet, basse ou centre. Sans ancrage explicite l'accord se
+construit toujours du même côté : une mélodie s'enterre sous ses propres harmonies.
+
+> **Le voicing dépend du profil d'appareil.** La densité est bornée par la polyphonie de
+> la destination : sur un mono, densité et ancrage **n'apparaissent pas** — pas de refus,
+> le contexte n'existe pas. `Profiles/FORMAT.md` (schéma 2) ne porte **aucun champ de
+> voix** : il en faut un.
+
+**L'aléa de vélocité est un pourcentage, pas des unités MIDI.** `±40` absolu sur un pas à
+15 le fait tomber à zéro : la note disparaît, c'est le rythme qui change et plus la
+nuance. En relatif les vélocités écrites survivent. Par row — on humanise une piste, et
+c'est un octet contre un kilo-octet réparti sur tous les `StepData`. `accent` garde le
+travail ponctuel : les deux se cumulent au lieu de se concurrencer.
+
+**Le swing se gradue depuis « droit ».** Une seule molette pour trois champs :
+`50 %` = ce pas ne swingue pas, au-delà il swingue au taux courant (66 ≈ le triolet).
+Pas de booléen sec suivi d'un taux rangé ailleurs. Le taux vit au niveau du pattern
+(`PatternTimingSettings.swingPositionPercent`) et reste donc **partagé** — un taux par
+pas coûterait un octet par `StepData`. Deux conséquences réglées à l'usage : depuis un
+pas, le premier cran fait **rejoindre** le swing courant au lieu de le redéfinir, et
+éteindre garde le taux en mémoire.
 
 | Molette | Tourner | Pousser |
 |---|---|---|
@@ -150,10 +217,47 @@ choisir ce qui compte vraiment sous chaque molette.
 | 5 · **Durée** | la durée de la note, **en pas et fractions de pas** | le swing du pas |
 | 6 · **Master** | tempo | les réglages de projet |
 
+### SHIFT cadre et navigue — il quitte le clavier
+
+`SHIFT` tenu, trois molettes changent de métier. **La molette qui navigue un axe est
+celle qui le cadre :**
+
+| ⇧ + molette | Rôle |
+|---|---|
+| **Row** | **Mesure** — Row navigue les pistes, ⇧Row navigue le temps |
+| **Pas** | **Zoom H** — combien de pas à l'écran, centrés sur le curseur |
+| **Valeur** | **Zoom V** — combien d'octaves visibles |
+
+Les cases détournées passent en **ambre**, comme une molette prêtée, et la ligne d'état
+l'annonce : un modificateur invisible est un modificateur qu'on n'utilise pas — c'est
+précisément ce qu'on reprochait à `SHIFT` + noires.
+
+**L'octave ne se règle plus : elle se déduit.** La fenêtre suit la note qu'on édite. Un
+réglage vertical de moins, et on ne peut plus perdre ses notes hors de l'écran.
+
+> **Ce que ça vide.** `Oct±` était un doublon, `Zoom±` est passé sur la molette, et
+> `Page±` n'a plus d'objet — un zoom centré sur le curseur *est* la pagination. Il ne
+> reste **aucune fonction** sur les touches noires : `SHIFT` est passé du clavier aux
+> molettes. Il garde son rôle sur les boutons (`⇧ + VUE`).
+>
+> **Prix assumé** : c'est une bascule, et la règle 2 dit *« tourner = la valeur, sans
+> bascule »*. Le cadrage n'est pas une valeur du morceau, ce qui la sauve — de justesse.
+
+> **Reste ouvert** : `Mes±` a disparu de la surface avec le reste, mais les mesures
+> existent dans le moteur (`numBars`, `harmonyMode[bar]`, `steps[bar][step]`). ⇧Row les
+> navigue désormais, et le **mode harmonique est bien par mesure**. Le reste du modèle
+> par mesure n'est pas dans la simulation.
+
 **Deux molettes de navigation plutôt qu'un raccourci.** Le conteneur et l'élément — Row
 et Pas, Lane et Slot sur HARMONIE, Chaîne et Slot sur SONG. Elles restent disponibles
 même quand un contexte est ouvert : on règle la profondeur d'un pas, on passe au
 suivant, sans jamais ressortir.
+
+**Entrer, c'est aller là où ça s'édite.** Le push de `Pas` bascule sur **ROLL**, qui
+montre le sous-pattern en grand ; ressortir ramène à la vue d'où l'on venait. Sans ça on
+était « entré » tout en restant devant la carte, le sub réduit à trois pixels dans sa
+case — entré sans rien pouvoir faire. L'aiguillage écrit ne suffisait pas : c'est le
+geste qui doit emmener.
 
 **Le push de la molette Pas fait entrer dans le pas**, c'est-à-dire dans son
 sous-pattern — et le push suivant en ressort. À l'intérieur, la molette Pas navigue les
@@ -283,6 +387,13 @@ qu'elles font**, et ce n'est pas la vue :
 
 > **En saisie pas à pas, les blanches montrent et choisissent les pas. Sinon, elles
 > jouent.**
+
+**Et elles éditent ce que la grille montre** — à la Elektron. En mode `Accent` la touche
+pose un accent, en mode `Swing` elle fait swinguer le pas, en mode `Pas` elle l'active.
+Les touches allumées montrent la même chose que la grille, puisque ce sont elles qui
+l'écrivent. Sans ça, `Accent` et `Swing` n'étaient **que des affichages** : rien ne
+permettait d'écrire ce qu'ils montraient. Vaut aussi à l'intérieur d'un sous-pattern,
+où la touche vise le sous-pas.
 
 C'est `REC` qui commande, pas la page. Les pas remplis se lisent donc **sur les touches,
 sous les doigts**, sans quitter l'écran des yeux — ce qu'on veut précisément au moment

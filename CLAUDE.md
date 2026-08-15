@@ -257,6 +257,15 @@ interop.
   exist in three copies (engine, `buildScreenModel`, `subHostNote()`), and the
   third didn't resolve at all: a pitch clicked in a relative sub was stored with
   the wrong offset and played somewhere else.
+- **One object, one renderer — a mode must never fork the drawing path.** The wider
+  form of the geometry rule below, and the one that keeps coming back. In the design
+  simulation, entering a step made the selected row fall into a *second* branch that
+  drew one equal-width cell per step: `span` ignored, covered steps ignored, playhead
+  gone — the duration stopped being visible at the exact moment you were editing it.
+  The fix is never to re-implement the layout in the second branch (that makes a third
+  geometry); it is to delete the branch and let the mode change only what goes *inside*
+  the shapes. Grep test: if a rendering branch is selected on a *state* flag rather than
+  on the kind of object being drawn, it is the bug.
 - **Paint and hit-test must share one geometry.** Bitten twice: the sub-roll
   recomputed `withTrimmedLeft(26.0f)` separately for clicks (now `kPitchGutterW`),
   and the HARMONIE page hit-tested on `bodyArea_` while painting on `gridArea()`
