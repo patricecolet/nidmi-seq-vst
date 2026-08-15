@@ -83,8 +83,9 @@ les musiciens.
 | Retenu | Origine | Ce que c'est |
 |---|---|---|
 | **chaîne** | fr. (angl. *chain*) | La suite d'instructions qui enchaîne les patterns. |
-| **slot** | angl., **à trancher** | Une case de la chaîne ou de la progression. *Emplacement* est long, *case* est ambigu avec les pas. |
+| ~~slot~~ | angl. | **Abandonné**, comme *lane* et *P-lock* : le mot recouvrait deux natures et n'était nécessaire pour aucune. Un élément d'une suite porte le nom de la chose — **accord**, **instruction**. Une des huit automations d'une row se nomme par sa **destination** (« l'automation du CC 74 ») ; un numéro suffit tant qu'elle est vide. |
 | **mode Pattern / Song** | angl., conservé | Le pattern boucle, ou la chaîne avance. |
+| **instruction** | fr. | Une étape de la chaîne : jouer un pattern, répéter, renvoyer. |
 | **Segno · D.S. · Coda · D.C. · Fine** | italien, conservé | La notation de renvoi des partitions. C'est la langue de l'arrangement dans NiDMI, et elle se lit déjà par les musiciens. |
 
 ### 1.6 La machine
@@ -104,9 +105,8 @@ les musiciens.
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Trois termes portent encore la mention **à trancher** : `slot`, `push`,
-  `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation**, `P-lock` → voir §5.6.)*
+- Deux termes portent encore la mention **à trancher** : `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
+  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**, `learn` → **assignation** ; `P-lock` et `slot` supprimés.)*
 
 ---
 
