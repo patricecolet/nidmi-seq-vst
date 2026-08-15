@@ -118,6 +118,12 @@ les musiciens.
 > garde son rôle, les deux molettes de navigation ne sont jamais prêtées, et les autres
 > portent la profondeur — nommée à l'écran.
 
+**Le contexte de la row**, dans l'ordre des molettes :
+
+| Pas | Valeur | Vélo | Gate | Master |
+|---|---|---|---|---|
+| **N** | **Mode harmo.** | **Interpolation** | **Destination** | libre |
+
 | Molette | Tourner | Pousser |
 |---|---|---|
 | 1 · **Row** | la piste | les réglages de la row |
@@ -151,8 +157,10 @@ Onze règles :
 2. **Tourner = la valeur.** Sans exception, sans bascule.
 3. **Pousser = ouvrir le contexte** de l'objet courant à ce niveau.
 4. La molette poussée **garde son rôle**.
-5. **Les deux molettes de navigation ne sont jamais prêtées.** On se déplace sans
-   quitter un contexte.
+5. **Les deux molettes de navigation ne sont jamais prêtées** — sauf `Pas` dans le
+   contexte de la row, où elle porte le **N** : le nombre de pas est l'axe des pas, il
+   doit tomber sous l'encodeur qui les navigue. La navigation n'est pas perdue pour
+   autant, `Row` étant la molette poussée, qui garde son rôle.
 6. Tout le reste porte la profondeur, et l'écran **nomme** le contexte.
 7. **Un seul niveau.** Pousser à nouveau sort. Pas de pile, donc pas de « où suis-je ».
 8. **Une molette prêtée ne porte pas son contexte.** Pendant qu'elle affiche *Mode
