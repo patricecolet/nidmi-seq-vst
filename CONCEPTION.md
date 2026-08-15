@@ -144,7 +144,7 @@ le raccourci clavier qui servait auparavant à changer de niveau.
 > ESP32, soit 8 places pour 6. **C'est la mécanique de façade qui est à recaler** : pas
 > de 33 mm entre encodeurs, dans une largeur de 320.
 
-Huit règles :
+Onze règles :
 
 1. Un attribut par molette, le même dans toutes les vues. La vue change ce qu'on
    **voit**, jamais ce que la main fait.
@@ -155,8 +155,20 @@ Huit règles :
    quitter un contexte.
 6. Tout le reste porte la profondeur, et l'écran **nomme** le contexte.
 7. **Un seul niveau.** Pousser à nouveau sort. Pas de pile, donc pas de « où suis-je ».
-8. Une **marque permanente** sur les molettes qui ont une profondeur : on ne pousse
-   jamais pour voir.
+8. **Une molette prêtée ne porte pas son contexte.** Pendant qu'elle affiche *Mode
+   harmonique*, elle n'est plus Vélo : l'appui ne doit donc pas ouvrir le contexte de
+   Vélo. Une molette porte le contexte de **ce qu'elle affiche**, jamais de ce qu'elle
+   est. Aujourd'hui aucun paramètre prêté n'a de profondeur, donc l'appui ne fait rien
+   — et le bouton l'annonce plutôt que d'agir de travers.
+9. **Depuis un contexte ouvert**, seuls deux appuis répondent : celui de la molette
+   poussée, qui ressort, et celui de `Row`, qui bascule vers le contexte de la row.
+10. Une **marque permanente** sur les molettes qui ont une profondeur : on ne pousse
+    jamais pour voir.
+11. **Les contextes peuvent différer selon le mode d'affichage de la row** — travailler
+    en `Contrôleur` ne demande pas les mêmes profondeurs que travailler en `Pas`. Ils
+    doivent rester **analogues**, pour que la logique se transporte : ce n'est pas une
+    permission de tout redéfinir, c'est la reconnaissance que la profondeur suit l'objet
+    qu'on regarde.
 
 Et une règle de forme, qui vaut pour tout le reste du document :
 
