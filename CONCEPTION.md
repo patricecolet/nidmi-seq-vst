@@ -56,7 +56,8 @@ les musiciens.
 | Retenu | Origine | Ce que c'est |
 |---|---|---|
 | **CC** | angl. *control change* | Un message MIDI qui règle un paramètre du synthé. Toujours « CC », jamais « contrôleur continu ». |
-| **lane** | angl., **à trancher** | Une row entière consacrée à un CC au lieu de notes. *Piste de contrôleur* est clair mais long. |
+| **automation** | fr. | Le fait, pour une row, de piloter un CC au lieu de jouer des notes. **Pas un objet : un état.** Donner une destination à une row la met en automation. |
+| ~~lane~~ | angl. | **Abandonné.** Une lane n'était pas une sorte de row, c'était une row avec une destination — le mot nommait un objet qui n'existe pas. « Voie », sa traduction exacte, est l'homophone de « voix ». |
 | **P-lock** | jargon Elektron, **à trancher** | Une valeur de CC accrochée à **un seul pas**, sur n'importe quelle row, jusqu'à huit par pas. |
 | **destination** | fr. | Le numéro de CC visé. Une row sans destination joue des notes ; avec, c'est une lane. |
 | **interpolation** | fr. | Comment une lane relie deux pas : *Pas*, *Linéaire*, *Douce*. |
@@ -103,9 +104,9 @@ les musiciens.
 
 - **`Row` et `Rangées`** coexistent dans les libellés d'écran.
 - **`Interp`, `Lineaire`, `Duree`, `Repet`** — abréviations et accents manquants, hérités de la contrainte d'écran. À revoir avec le manuel.
-- Six termes portent encore la mention **à trancher** : `lane`, `P-lock`, `learn`,
+- Cinq termes portent encore la mention **à trancher** : `P-lock`, `learn`,
   `slot`, `push`, `step-record`. Tant qu'ils ne sont pas fixés, chaque session les
-  renomme à sa façon. *(`span` est réglé : voir **durée**.)*
+  renomme à sa façon. *(`span` → **durée**, `lane` → **automation**.)*
 
 ---
 
@@ -340,7 +341,7 @@ vient de Traktor et Blender, où l'on enregistre des dispositions d'interface.
 
 Le mécanisme **existe déjà** : `padMode` fait encoder aux cases de PATTERN les *pas*,
 les *accents* ou le *swing*. On y ajoute **Contrôleur** : chaque row montre alors le
-contour de ce qu'elle module — la lane son profil, une row de notes son P-lock. PATTERN
+contour de ce qu'elle module — la row en automation son profil, une row de notes son P-lock. PATTERN
 devient une table de mixage.
 
 Deux notes qui vont ensemble :
