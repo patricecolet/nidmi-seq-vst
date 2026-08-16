@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <nidmi_seq/EncoderModel.h>
+
 #include "HardwareStyleComponents.h"
 
 class NidmiSeqAudioProcessor;
@@ -83,6 +85,29 @@ private:
 
     void launchExportFlow();
     void shiftKeyboardOctave(int delta);
+
+    // ---- GRAMMAIRE À SIX MOLETTES (CONCEPTION.md §2) ------------------------
+    // Six molettes, un attribut chacune, le même dans toutes les vues : la vue change
+    // ce qu'on VOIT, jamais ce que la main fait. Ce que chaque molette porte, et ce
+    // que fait son appui, vient d'`encoders::describe/turn/push` — le modèle vit dans
+    // le core, sans JUCE, pour que le plugin et le firmware ne puissent pas diverger.
+    //
+    // Remplace les encodeurs contextuels dont le rôle changeait selon la page
+    // (`applyEncoderConfigForState`), que CONCEPTION §7 déclare supersédés.
+    encoders::State  encState_;
+    juce::Slider     gEnc_[encoders::kCount];
+    juce::Label      gLab_[encoders::kCount];
+    juce::TextButton gPush_[encoders::kCount];
+    double           gLast_[encoders::kCount] = {};   // encodeurs traités en RELATIF
+
+    void setupGrammarEncoders();          // création + callbacks
+    void layoutGrammarEncoders(juce::Rectangle<int> left, juce::Rectangle<int> right);
+    void refreshGrammarEncoders();        // relit describe() et repeint les libellés
+    void onGrammarTurn(int slot);
+    void onGrammarPush(int slot);
+    void sendAction(const encoders::Action& a);   // poste dans le fifo
+    /// Polyphonie de la destination de la row courante, lue dans le profil.
+    int  voicesOfCurrentRow() const;
 
     /// Encodeur 1 : choix du paramètre éditable (affiché sur l’OLED).
     juce::Slider navEncoder_;

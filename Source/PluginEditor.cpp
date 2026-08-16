@@ -143,6 +143,11 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
         s.setScrollWheelEnabled(false);
     };
 
+    // GRAMMAIRE À SIX MOLETTES : elle remplace les encodeurs contextuels ci-dessous,
+    // qui restent instanciés mais MASQUÉS le temps du retrait — deux pilotes visibles
+    // pour le même moteur seraient exactement le double rendu qu'on paie cher.
+    setupGrammarEncoders();
+
     setupEncoder(navEncoder_);
     navEncoder_.onDragStart    = [this] { applyEncoderConfigForState(); };  // cale le rôle selon la Vue/Shift
     navEncoder_.onValueChange = [this] { onNavEncoderChanged(); };
@@ -344,17 +349,22 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     // Ordre d’empilement : arrière-plan → premier plan (transport au-dessus).
     addAndMakeVisible(piano_);
     addAndMakeVisible(screen_);
-    addAndMakeVisible(navEncoderLabel_);
-    addAndMakeVisible(navEncoder_);
-    addAndMakeVisible(valueEncoderLabel_);
-    addAndMakeVisible(valueEncoder_);
-    addAndMakeVisible(veloEncoderLabel_);
-    addAndMakeVisible(veloEncoder_);
-    addAndMakeVisible(zoomEncoderLabel_);
-    addAndMakeVisible(zoomEncoder_);
-    addAndMakeVisible(masterEncoderLabel_);
-    addAndMakeVisible(masterEncoder_);
-    addAndMakeVisible(masterPushBtn_);
+    // Les cinq encodeurs CONTEXTUELS sont supersédés par la grammaire à six molettes
+    // (CONCEPTION §7). Ils restent instanciés — beaucoup de code les référence encore —
+    // mais INVISIBLES : deux pilotes du même moteur à l'écran seraient exactement le
+    // double rendu qui a coûté cher. Le retrait complet suivra, en une passe à part.
+    for (juce::Component* dead : { (juce::Component*)&navEncoder_,
+                                   (juce::Component*)&navEncoderLabel_,
+                                   (juce::Component*)&valueEncoder_,
+                                   (juce::Component*)&valueEncoderLabel_,
+                                   (juce::Component*)&veloEncoder_,
+                                   (juce::Component*)&veloEncoderLabel_,
+                                   (juce::Component*)&zoomEncoder_,
+                                   (juce::Component*)&zoomEncoderLabel_,
+                                   (juce::Component*)&masterEncoder_,
+                                   (juce::Component*)&masterEncoderLabel_,
+                                   (juce::Component*)&masterPushBtn_ })
+        addChildComponent(dead);
     addAndMakeVisible(playBtn_);
     addAndMakeVisible(stopBtn_);
     addAndMakeVisible(recBtn_);
@@ -366,7 +376,7 @@ NidmiSeqAudioProcessorEditor::NidmiSeqAudioProcessorEditor(NidmiSeqAudioProcesso
     addAndMakeVisible(muteBtn_);
     addAndMakeVisible(harmBtn_);
     for (int i = 0; i < 4; ++i)
-        addAndMakeVisible(pushBtn_[i]);
+        addChildComponent(pushBtn_[i]);   // idem : supersédés par gPush_[]
 
     applyEncoderConfigForState();
     configurePushButtons();
@@ -476,13 +486,12 @@ void NidmiSeqAudioProcessorEditor::resized() {
         };
         const int halfH = block.getHeight() / 2;
 
-        auto leftCol = block.removeFromLeft(sideW);
-        placeKnob(leftCol.removeFromTop(halfH), valueEncoderLabel_, valueEncoder_, pushBtn_[1]);
-        placeKnob(leftCol, veloEncoderLabel_, veloEncoder_, pushBtn_[2]);
-
+        // Six molettes a role fixe : Row / Pas / Valeur a gauche, Velo / Duree /
+        // Master a droite. L'ecran reste au centre, comme sur le boitier.
+        auto leftCol  = block.removeFromLeft(sideW);
         auto rightCol = block.removeFromRight(sideW);
-        placeKnob(rightCol.removeFromTop(halfH), navEncoderLabel_, navEncoder_, pushBtn_[0]);
-        placeKnob(rightCol, zoomEncoderLabel_, zoomEncoder_, pushBtn_[3]);
+        layoutGrammarEncoders(leftCol, rightCol);
+        juce::ignoreUnused(placeKnob, halfH);
 
         screen_.setBounds(block.reduced(6, 2));
     }
@@ -511,6 +520,9 @@ void NidmiSeqAudioProcessorEditor::resized() {
 
 void NidmiSeqAudioProcessorEditor::timerCallback() {
     refreshPianoKeysFromEngine();
+    // Les commandes partent par le fifo : l'effet n'est visible qu'au tour suivant.
+    // On relit donc l'etat a chaque frame plutot que de deviner ce qu'il est devenu.
+    refreshGrammarEncoders();
 
     const bool midiClk =
         proc_.apvts().getRawParameterValue("useMidiClock") != nullptr &&
