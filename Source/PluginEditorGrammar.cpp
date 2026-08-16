@@ -22,6 +22,12 @@ namespace {
 /// relatif — la plage est large, on lit le déplacement, et on recale au centre.
 constexpr double kEncCenter = 5000.0;
 constexpr double kEncSpan   = 10000.0;
+/// Un EC11 émet des CRANS, pas une position. Il faut donc convertir le glissement en
+/// crans, et un seul cran doit valoir UNE unité : sans ça la molette Row sautait de
+/// R1 à R4 d'un frémissement, et toutes les autres valeurs bondissaient autant.
+// 900 px couvrent la plage de 10000, soit ~11 unités par pixel : 60 unités
+// donnent un cran tous les ~5,5 px, ce qui se sent sans partir en vrille.
+constexpr double kUnitsPerDetent = 60.0;
 
 /// Ces couleurs sont posées sur le PANNEAU du plugin, pas sur l'écran simulé. Les
 /// tons sombres de la simulation — pensés pour un fond quasi noir — y disparaissent :
@@ -115,12 +121,16 @@ void NidmiSeqAudioProcessorEditor::setupGrammarEncoders() {
 
 void NidmiSeqAudioProcessorEditor::onGrammarTurn(int slot) {
     auto& k = gEnc_[slot];
-    const double now   = k.getValue();
-    const int    delta = static_cast<int>(now - gLast_[slot]);
-    gLast_[slot] = now;
-    if (delta == 0) return;
+    const double now  = k.getValue();
+    const double diff = now - gLast_[slot];
+    const int    delta = static_cast<int>(diff / kUnitsPerDetent);
+    if (delta == 0) return;                       // pas encore un cran franchi
 
-    // On recale au centre pour ne jamais buter : l'encodeur physique n'a pas de fin.
+    // On ne consomme QUE les crans franchis : le reste demeure, sinon un glissement
+    // lent n'avancerait jamais.
+    gLast_[slot] += delta * kUnitsPerDetent;
+
+    // Recalage au centre pour ne jamais buter : l'encodeur physique n'a pas de fin.
     if (now < kEncCenter * 0.2 || now > kEncCenter * 1.8) {
         k.setValue(kEncCenter, juce::dontSendNotification);
         gLast_[slot] = kEncCenter;
