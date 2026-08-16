@@ -64,7 +64,8 @@ void NidmiSeqAudioProcessorEditor::setupGrammarEncoders() {
         k.onValueChange = [this, i] { onGrammarTurn(i); };
 
         gLab_[i].setJustificationType(juce::Justification::centred);
-        gLab_[i].setFont(juce::FontOptions(11.0f));
+        gLab_[i].setFont(juce::FontOptions(10.0f));
+        gLab_[i].setMinimumHorizontalScale(0.6f);   // « Mode harmo. » doit tenir
 
         gPush_[i].setLookAndFeel(&transportLook_);
         gPush_[i].setToggleable(true);
@@ -112,15 +113,19 @@ void NidmiSeqAudioProcessorEditor::refreshGrammarEncoders() {
     for (int i = 0; i < encoders::kCount; ++i) {
         // Deux lignes : l'attribut, puis sa valeur. Sur le boîtier les EC11 n'ont
         // aucun afficheur — c'est l'écran qui le dira, en face de chaque molette.
-        gLab_[i].setText(juce::String(v[i].name) + "\n" + juce::String(v[i].value),
+        // fromUTF8 obligatoire : le modèle produit de l'UTF-8 (« Gamme mère », « ¼ »),
+        // et juce::String(const char*) le lirait en Latin-1 — d'où les « Ã¨ » à l'écran.
+        gLab_[i].setText(juce::String::fromUTF8(v[i].name) + "\n"
+                             + juce::String::fromUTF8(v[i].value),
                          juce::dontSendNotification);
         gLab_[i].setColour(juce::Label::textColourId, roleColour(v[i].role));
-        gEnc_[i].setTooltip(juce::String(v[i].src));   // le champ édité, pour l'audit
+        gEnc_[i].setTooltip(juce::String::fromUTF8(v[i].src));   // le champ édité
 
         // La marque permanente de la règle 11 : on ne pousse jamais pour voir.
         const bool depth = v[i].hasDepth;
         const bool open  = (encState_.ctx == static_cast<uint8_t>(i));
-        gPush_[i].setButtonText(open ? "sortir" : (depth ? "\xe2\x97\x8f" : "\xe2\x80\x94"));
+        gPush_[i].setButtonText(open ? juce::String("sortir")
+                                     : juce::String(depth ? "+" : "-"));
         gPush_[i].setToggleState(open, juce::dontSendNotification);
         gPush_[i].setEnabled(depth || open);
     }
@@ -131,7 +136,7 @@ void NidmiSeqAudioProcessorEditor::layoutGrammarEncoders(juce::Rectangle<int> le
     // Trois à gauche — Row, Pas, Valeur — trois à droite — Vélo, Durée, Master.
     auto place = [](juce::Rectangle<int> col, juce::Label& lab, juce::Slider& knob,
                     juce::TextButton& push) {
-        lab.setBounds(col.removeFromTop(26));
+        lab.setBounds(col.removeFromTop(30));   // deux lignes de 10 px + interligne
         push.setBounds(col.removeFromBottom(20).reduced(6, 2));
         auto k = col.reduced(2, 1);
         const int d = juce::jmin(k.getWidth(), k.getHeight());
