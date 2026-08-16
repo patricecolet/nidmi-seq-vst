@@ -23,16 +23,20 @@ namespace {
 constexpr double kEncCenter = 5000.0;
 constexpr double kEncSpan   = 10000.0;
 
+/// Ces couleurs sont posées sur le PANNEAU du plugin, pas sur l'écran simulé. Les
+/// tons sombres de la simulation — pensés pour un fond quasi noir — y disparaissent :
+/// c'est le gotcha déjà payé une fois (« ne pas encoder une information vers le bas
+/// depuis un fond quasi noir »). Ici on distingue par la TEINTE, à luminance tenue.
 juce::Colour roleColour(encoders::Role r) {
     using R = encoders::Role;
     switch (r) {
-        case R::Pushed: return juce::Colour(0xffd8f3e2);   // la molette poussée
-        case R::Lent:   return juce::Colour(0xffe0a044);   // prêtée au contexte
-        case R::Free:   return juce::Colour(0xff6b3c38);   // rien à éditer ici
-        case R::Absent: return juce::Colour(0xff5a3330);   // sans objet sur cet objet
+        case R::Pushed: return juce::Colour(0xffffffff);   // la molette poussée
+        case R::Lent:   return juce::Colour(0xfff0a94e);   // prêtée au contexte
+        case R::Free:   return juce::Colour(0xff8b97a2);   // rien à éditer ici
+        case R::Absent: return juce::Colour(0xff8b97a2);   // sans objet sur cet objet
         case R::Own:    break;
     }
-    return juce::Colour(0xff8fd6a6);
+    return juce::Colour(0xffcfd8e0);
 }
 
 }  // namespace
