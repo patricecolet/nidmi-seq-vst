@@ -40,7 +40,6 @@ target_sources(NidmiSeq
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/PluginEditorScreenModel.cpp
-        Source/PluginEditorEncoders.cpp
         Source/PluginEditorGrammar.cpp
         Source/PluginEditorInput.cpp
         Source/PluginEditorHarmony.cpp

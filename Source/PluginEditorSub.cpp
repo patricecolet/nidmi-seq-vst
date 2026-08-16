@@ -17,8 +17,6 @@ void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
         && screenPage_ == PatternScreenModel::Page::Harmony && !inSub_) {
         harmonyFocus_ = (harmonyFocus_ == HarmonyFocus::Chords) ? HarmonyFocus::Tonality
                                                                 : HarmonyFocus::Chords;
-        applyEncoderConfigForState();
-        configurePushButtons();
         updateKeysForPage();
         buildScreenModel();
         return;
@@ -28,8 +26,6 @@ void NidmiSeqAudioProcessorEditor::setScreenPage(int pageIndex) {
     // Mémorise la dernière vue par famille (retour direct quand on re-sélectionne la famille).
     if (pageIndex == 0 || pageIndex == 1 || pageIndex == 3) lastEditView_ = pageIndex;
     else if (pageIndex == 4 || pageIndex == 5)              lastProjView_ = pageIndex;
-    applyEncoderConfigForState();
-    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
@@ -111,18 +107,12 @@ void NidmiSeqAudioProcessorEditor::enterOrCreateSub() {
         }
     }
     inSub_ = true; subHostRow_ = r; subHostStep_ = s; subStep_ = 0;
-    applyEncoderConfigForState();
-    configureVeloEncoder();
-    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
 
 void NidmiSeqAudioProcessorEditor::exitSub() {
     inSub_ = false;
-    applyEncoderConfigForState();
-    configureVeloEncoder();
-    configurePushButtons();
     updateKeysForPage();
     buildScreenModel();
 }
@@ -210,6 +200,5 @@ void NidmiSeqAudioProcessorEditor::toggleSubMode() {
     c.a  = static_cast<uint8_t>(subIdx);
     c.x  = !now;
     proc_.controller().postCommand(c);
-    applyEncoderConfigForState();
     buildScreenModel();
 }

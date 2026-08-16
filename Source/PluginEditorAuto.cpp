@@ -117,7 +117,6 @@ void NidmiSeqAudioProcessorEditor::postAutoCcNumber(int ccNumber) {
             proc_.controller().postCommand(c);
         }
     }
-    applyEncoderConfigForState();
     buildScreenModel();
 }
 
@@ -223,7 +222,5 @@ void NidmiSeqAudioProcessorEditor::toggleRowKind() {
     c.a  = static_cast<uint8_t>(ar);
     c.b  = static_cast<uint8_t>(isCC ? RowKind::Note : RowKind::CC);
     proc_.controller().postCommand(c);
-    applyEncoderConfigForState();
-    configurePushButtons();
     buildScreenModel();
 }

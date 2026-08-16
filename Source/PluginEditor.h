@@ -21,15 +21,10 @@ public:
 private:
     void timerCallback() override;
     void refreshPianoKeysFromEngine();
-    void syncValueEncoderFromParam();
-    void applyValueEncoderToParam();
 
     // Encodeurs contextuels selon la page (cahier §10.2) :
     //  GLOBAL  : Enc2 = curseur param, Enc1 = valeur param.
     //  PATTERN : Enc2 = sélection row, Enc1 = N (tuplet) de la row → re-subdivision live.
-    void onNavEncoderChanged();
-    void onValueEncoderChanged();
-    void applyEncoderConfigForState();
 
     static int  numOledParams();
     static const char* oledParamId(int index);
@@ -67,9 +62,6 @@ private:
     //   0 = Enc1 navEncoder_ (curseur)   3 = Enc4 zoomEncoder_ (zoom)
     //   1 = Enc2 valueEncoder_ (valeur)  2 = Enc3 veloEncoder_  (vélo)
     // (le même i sert pour les colonnes du resized() ci-dessous.)
-    juce::TextButton pushBtn_[4];
-    void configurePushButtons();   // labels + état toggle/led des 4 boutons selon la Vue/état
-    void onPushButton(int idx);    // route le clic du bouton vers l'action/bascule de l'encodeur
 
     std::unique_ptr<juce::FileChooser> fileChooser_;
 
@@ -110,30 +102,16 @@ private:
     int  voicesOfCurrentRow() const;
 
     /// Encodeur 1 : choix du paramètre éditable (affiché sur l’OLED).
-    juce::Slider navEncoder_;
-    juce::Label  navEncoderLabel_;
     /// Encodeur 2 : réglage de la valeur du paramètre sélectionné.
-    juce::Slider valueEncoder_;
-    juce::Label  valueEncoderLabel_;
 
     /// Encodeur 3 (ajout hardware) : vélocité du pas sélectionné (toute Vue).
-    juce::Slider veloEncoder_;
-    juce::Label  veloEncoderLabel_;
     /// Encodeur 4 (ajout hardware) : zoom — vertical (rows) ; Shift = horizontal (pas).
-    juce::Slider zoomEncoder_;
-    juce::Label  zoomEncoderLabel_;
-    double       lastZoomEnc_ = 0.0;   // encodeur Zoom traité en relatif (direction)
 
     // Encodeur MASTER (5e, contextuel) : montant d'accent (mode Accent) / swing % (mode Swing)
     // / tempo BPM (défaut). Distinct des 4 encodeurs de vue.
-    juce::Slider masterEncoder_;
-    juce::Label  masterEncoderLabel_;
     // Push du master (émulé par un bouton) : bascule l'encodeur en SÉLECTION DE PATTERN
     // (tourner = pattern actif de la banque). Prioritaire sur le rôle contextuel (BPM/Accent/Swing).
-    juce::TextButton masterPushBtn_;
     bool         masterPatternMode_ = false;
-    void configureMasterEncoder();     // cale plage/valeur/label selon le contexte
-    void onMasterEncoderChanged();
     juce::String masterHudText_;       // HUD transitoire à l'écran (valeur réglée par le master)
     int          masterHudFrames_ = 0; // nb de frames de timer restantes d'affichage du HUD
 
@@ -141,9 +119,6 @@ private:
     int stepZoom_    = 1;   // PATTERN : facteur de zoom horizontal des pas (1 = mesure entière)
     int rollOctaves_ = 2;   // PIANO ROLL : nb d'octaves visibles (zoom vertical des hauteurs)
 
-    void onVeloEncoderChanged();
-    void onZoomEncoderChanged();
-    void configureVeloEncoder();   // cale Enc3 sur Vélo, ou Gate si Shift (push émulé)
 
     int oledParamIndex_ = 0;
 

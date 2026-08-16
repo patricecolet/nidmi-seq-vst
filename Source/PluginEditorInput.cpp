@@ -88,7 +88,6 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
             c.b  = static_cast<uint8_t>(index);
             proc_.controller().postCommand(c);
         }
-        applyEncoderConfigForState();
         buildScreenModel();
         return;
     }
@@ -213,7 +212,6 @@ void NidmiSeqAudioProcessorEditor::onWhiteKey(int index) {
         default:
             break;
     }
-    applyEncoderConfigForState();
     buildScreenModel();
 }
 
@@ -281,7 +279,6 @@ void NidmiSeqAudioProcessorEditor::songAddSlot() {
     c.a  = static_cast<uint8_t>(len + 1);
     proc_.controller().postCommand(c);
     songCursor_ = len;     // place le curseur sur le slot créé
-    applyEncoderConfigForState();
     buildScreenModel();
 }
 
@@ -305,7 +302,6 @@ void NidmiSeqAudioProcessorEditor::songDeleteSlot() {
     c.a  = static_cast<uint8_t>(len - 1);
     proc_.controller().postCommand(c);
     songCursor_ = juce::jlimit(0, len - 1, cur);
-    applyEncoderConfigForState();
     buildScreenModel();
 }
 
@@ -525,8 +521,8 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
         case PatternScreenModel::Page::Song: {
             // 0/1 = curseur de slot ± ; 2 = ajouter ; 3 = supprimer ; 4 = Song ON/OFF (chaîne vs boucle).
             const int len = static_cast<int>(proc_.engine().chainProgram().len);
-            if (index == 0)      { songCursor_ = juce::jmax(0, songCursor_ - 1); applyEncoderConfigForState(); }
-            else if (index == 1) { songCursor_ = juce::jmin(len, songCursor_ + 1); applyEncoderConfigForState(); }
+            if (index == 0)      { songCursor_ = juce::jmax(0, songCursor_ - 1);  }
+            else if (index == 1) { songCursor_ = juce::jmin(len, songCursor_ + 1);  }
             else if (index == 2) { songAddSlot(); }
             else if (index == 3) { songDeleteSlot(); }
             else if (index == 4) {
@@ -540,6 +536,5 @@ void NidmiSeqAudioProcessorEditor::onBlackKey(int index) {
         default:
             break;
     }
-    applyEncoderConfigForState();
     buildScreenModel();
 }
