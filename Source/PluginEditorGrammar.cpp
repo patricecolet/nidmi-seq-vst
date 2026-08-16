@@ -52,6 +52,37 @@ int NidmiSeqAudioProcessorEditor::voicesOfCurrentRow() const {
     return DeviceProfile::byIndex(idx).voices();
 }
 
+// UNE SEULE SOURCE DE VÉRITÉ pour la sélection. L'éditeur la tient déjà —
+// `selectedRow_`, `selectedStep_`, `inSub_`, `subStep_` — et tout l'écran la lit.
+// `encState_` n'est donc PAS un second état : c'est un véhicule, rempli avant chaque
+// appel au modèle et relu après. Deux curseurs parallèles, c'est le curseur qui bouge
+// d'un côté et la vue qui reste de l'autre.
+void NidmiSeqAudioProcessorEditor::syncStateFromEditor() {
+    const auto& pat = proc_.engine().pattern();
+    encState_.row     = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(pat.numRows) - 1,
+                                                          selectedRow_));
+    encState_.step    = static_cast<uint8_t>(juce::jmax(0, selectedStep_));
+    encState_.bar     = static_cast<uint8_t>(juce::jmax(0, editBar_));
+    encState_.inSub   = inSub_;
+    encState_.subStep = static_cast<uint8_t>(juce::jmax(0, subStep_));
+    encState_.voices  = static_cast<uint8_t>(voicesOfCurrentRow());
+}
+
+void NidmiSeqAudioProcessorEditor::syncEditorFromState() {
+    if (selectedRow_ != encState_.row) {
+        selectedRow_ = encState_.row;
+        inSub_       = false;              // changer de piste sort du sous-pattern
+    }
+    selectedStep_ = encState_.step;
+    subStep_      = encState_.subStep;
+    if (encState_.inSub && !inSub_) {      // on vient d'entrer : mémoriser l'hôte
+        subHostRow_  = encState_.row;
+        subHostStep_ = encState_.step;
+    }
+    inSub_ = encState_.inSub;
+    buildScreenModel();                    // l'écran suit le curseur, toujours
+}
+
 void NidmiSeqAudioProcessorEditor::sendAction(const encoders::Action& a) {
     for (uint8_t i = 0; i < a.count; ++i) proc_.pushCommand(a.cmd[i]);
 }
@@ -95,21 +126,25 @@ void NidmiSeqAudioProcessorEditor::onGrammarTurn(int slot) {
         gLast_[slot] = kEncCenter;
     }
 
-    encState_.voices = static_cast<uint8_t>(voicesOfCurrentRow());
+    syncStateFromEditor();
     sendAction(encoders::turn(proc_.engine(), encState_,
                               static_cast<encoders::Slot>(slot), delta));
+    syncEditorFromState();
     refreshGrammarEncoders();
 }
 
 void NidmiSeqAudioProcessorEditor::onGrammarPush(int slot) {
-    encState_.voices = static_cast<uint8_t>(voicesOfCurrentRow());
+    syncStateFromEditor();
     sendAction(encoders::push(proc_.engine(), encState_,
                               static_cast<encoders::Slot>(slot)));
+    syncEditorFromState();
     refreshGrammarEncoders();
 }
 
 void NidmiSeqAudioProcessorEditor::refreshGrammarEncoders() {
-    encState_.voices = static_cast<uint8_t>(voicesOfCurrentRow());
+    const uint8_t ctx = encState_.ctx;   // le contexte ouvert n'appartient qu'à la grammaire
+    syncStateFromEditor();
+    encState_.ctx = ctx;
 
     encoders::View v[encoders::kCount];
     encoders::describe(proc_.engine(), encState_, v);

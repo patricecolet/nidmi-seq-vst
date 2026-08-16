@@ -95,6 +95,8 @@ private:
     void setupGrammarEncoders();          // création + callbacks
     void layoutGrammarEncoders(juce::Rectangle<int> left, juce::Rectangle<int> right);
     void refreshGrammarEncoders();        // relit describe() et repeint les libellés
+    void syncStateFromEditor();           // curseur de l'éditeur -> encState_
+    void syncEditorFromState();           // encState_ -> curseur de l'éditeur
     void onGrammarTurn(int slot);
     void onGrammarPush(int slot);
     void sendAction(const encoders::Action& a);   // poste dans le fifo
