@@ -82,9 +82,12 @@ public:
 
     void setSync(DeviceSync s) { sync_ = std::move(s); }
 
-    // POLYPHONIE de l'appareil. C'est elle qui borne la densite du voicing : sur un
-    // mono, densite et ancrage n'ont pas d'objet et ne s'affichent pas. Le moteur ne
-    // peut pas la deviner — il ne connait que sa propre borne, kMaxVoicing.
+    // POLYPHONIE TOTALE de l'instrument — pas de la partie. Le profil decrit une
+    // partie (cf. FORMAT.md) : sur un multitimbral, ces voix se REPARTISSENT entre
+    // les rows qui visent l'instrument sur des canaux differents. Ce n'est donc pas
+    // une borne par row, c'est un budget, et la repartition n'est pas modelisee.
+    // Le seul cas exact : voices == 1 veut dire « pas d'accord possible », quelle que
+    // soit la repartition — c'est celui qui fait disparaitre densite et ancrage.
     // Defaut 1 : un profil qui ne le declare pas est traite comme monophonique, ce
     // qui est le comportement historique (une note par pas).
     void setVoices(int v) { voices_ = v < 1 ? 1 : v; }

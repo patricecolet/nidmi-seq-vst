@@ -63,7 +63,7 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | Champ | Rôle |
 |---|---|
 | `name` | **obligatoire.** Identifie le profil ; c'est lui qui est sauvegardé dans le projet, pas un index — ajouter un profil ne doit pas renommer les CC d'un projet existant |
-| `voices` | polyphonie de l'appareil. **Défaut 1** — un profil qui ne le déclare pas est monophonique, ce qui est le comportement historique. Borne la densité du voicing : à une voix, densité et ancrage n'apparaissent pas |
+| `voices` | polyphonie **totale de l'instrument**, pas de la partie. **Défaut 1** — un profil qui ne le déclare pas est traité comme monophonique, le comportement historique. Sur un multitimbral, c'est un budget à répartir entre les rows, pas une borne par row |
 | `panel.image` | facultatif. Absent → rendu schématique, sans photo |
 | `panel.aspect` | largeur ÷ hauteur du panneau |
 | `panel.sections[].rect` | `[x, y, w, h]` normalisés. Une section = **une page** sur le matériel, **une zone** sur le bureau |
@@ -76,17 +76,30 @@ en s'appuyant sur `section` et `pos`. Un seul fichier, deux rendus.
 | `learn` | CC entrant **supplémentaire**. `null` = aucun. Le CC propre du paramètre passe de toute façon à l'identique |
 | `bipolar` | le paramètre va de −64 à +63, remappé en 0–127 en ajoutant 64. L'éditeur doit l'afficher **signé** |
 
-### `voices` décide de ce qui s'affiche
+### `voices` est un budget, pas une borne
 
-Le moteur émet jusqu'à `kMaxVoicing` notes par pas ; il ne sait pas combien
-l'appareil peut en tenir. C'est le profil qui le sait, et c'est lui qui borne la
-densité — **densité 2 sur un mono ne veut rien dire**.
+Le moteur émet jusqu'à `kMaxVoicing` notes par pas et ne sait pas combien l'instrument
+peut en tenir. Le profil le sait — mais **le profil décrit une partie, et `voices`
+compte l'instrument entier**. Les deux ne coïncident que sur un monotimbral.
 
-À une voix, densité et ancrage **n'apparaissent pas du tout** : pas de refus, pas de
-grisé, le contexte n'existe simplement pas sur cette row. C'est la règle « rien n'est
-bloquant », et elle vaudra pour les autres capacités déclarées par le profil — une
-carte de percussion fera disparaître le voicing, la gamme et le mode harmonique, parce
-que sur une boîte à rythmes les notes sont des instruments et non des hauteurs.
+Sur le Waldorf M, 8 voix se répartissent entre 4 parties, donc entre 4 rows sur 4
+canaux : la densité d'une row n'est pas bornée par 8, elle est bornée par **la part que
+cette row reçoit**. Deux rows à densité 4 saturent l'instrument ; à cinq, elles se
+volent des voix et l'appareil coupe les plus anciennes, en silence.
+
+**Ce que le format garantit** : `voices == 1` veut bien dire *cette destination ne peut
+pas faire d'accord*, quelle que soit la répartition. C'est le seul cas où la borne est
+exacte, et c'est celui qui compte pour faire disparaître densité et ancrage — pas de
+refus, pas de grisé, le contexte n'existe simplement pas sur cette row.
+
+**Ce qui n'est pas modélisé** : la répartition elle-même. Le moteur a déjà le motif
+qu'il faudrait — `setCCRateBudget()`, un budget global partagé entre les rows en
+round-robin, né du même constat (16 lanes mesurées à 1616 msg/s contre 1041 pour le
+MIDI DIN). Un budget de voix par instrument suivrait la même forme. À trancher.
+
+La règle vaudra pour les autres capacités déclarées par le profil : une carte de
+percussion fera disparaître le voicing, la gamme et le mode harmonique, parce que sur
+une boîte à rythmes les notes sont des instruments et non des hauteurs.
 
 ### `wired` n'est pas « décrit dans la table »
 
