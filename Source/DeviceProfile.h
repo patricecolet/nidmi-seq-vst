@@ -82,12 +82,10 @@ public:
 
     void setSync(DeviceSync s) { sync_ = std::move(s); }
 
-    // POLYPHONIE TOTALE de l'instrument — pas de la partie. Le profil decrit une
-    // partie (cf. FORMAT.md) : sur un multitimbral, ces voix se REPARTISSENT entre
-    // les rows qui visent l'instrument sur des canaux differents. Ce n'est donc pas
-    // une borne par row, c'est un budget, et la repartition n'est pas modelisee.
-    // Le seul cas exact : voices == 1 veut dire « pas d'accord possible », quelle que
-    // soit la repartition — c'est celui qui fait disparaitre densite et ancrage.
+    // Combien de notes cette destination peut jouer a la fois. Borne la densite du
+    // voicing ; a une voix, densite et ancrage ne s'affichent pas. Sur un
+    // multitimbral les voix se repartissent entre les parties : le chiffre du profil
+    // est celui de l'usage courant, et se change dans le JSON si besoin.
     // Defaut 1 : un profil qui ne le declare pas est traite comme monophonique, ce
     // qui est le comportement historique (une note par pas).
     void setVoices(int v) { voices_ = v < 1 ? 1 : v; }
